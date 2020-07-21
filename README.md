@@ -1,2 +1,2 @@
 # PDS_Backup
-Progetto Programmazione di sistema - backup in c++
+Progetto Programmazione di Sistema - Backup in B++
