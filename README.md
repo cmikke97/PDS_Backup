@@ -1,5 +1,6 @@
 # Project m1: Remote backup (BACKUP)
-Project’s summary
+
+## Project’s summary
 The project aims at building a client-server system that performs an incremental back-up
 of the content of a folder (and all its sub-folders) on the local computer onto a remote
 server. Once launched, the system will operate as a background service keeping the content
@@ -9,13 +10,13 @@ command will be sent across the network in order to replicate the changes on the
 side. In case of transient errors (network portioning or failure of the remote server), the
 system will keep on monitoring the evolution of the local folder and try to sync again as
 soon as the transient error condition vanishes).
-Required Background and Working Environment
+## Required Background and Working Environment
 Knowledge of the C++17 general abstractions and of the C++ Standard Template Library.
 Knowledge of concurrency, synchronization and background processing.
 The system will be developed using third party libraries (e.g., boost.asio) in order to
 support deployment on several platforms.
-Problem Definition
-Overall architecture
+## Problem Definition
+### Overall architecture
 The system consists of two different modules (the client and the server) that interact via a
 TCP socket connection.
 A dialogue takes place along this connection allowing the two parties to understand eachother.
@@ -41,7 +42,7 @@ some time to compute the answer, the protocol should probably operate in asynchr
 mode, i.e., without requiring an immediate response of the server before issuing a new
 request to it.
 
-# Client Side
+## Client Side
 The client side is in charge of continuously monitoring a specific folder that can be specified
 in any reasonable way (command line parameter, configuration file, environment
 variable…) and check that all the contents are in sync with the sever side. To perform this
@@ -51,7 +52,7 @@ a discrepancy is found, the local corresponding entry should be marked as invali
 some arrangements should be taken to transfer the (updated) file to the server. Some
 indications on how to create a file system watcher can be found here
 (https://solarianprogrammer.com/2019/01/13/cpp-17-filesystem-write-file-watchermonitor/)
-# Server Side
+## Server Side
 The server side is responsible of listening on socket connection and accept connection
 requests from clients. The server should be designed in order to manage more than one
 client and have separate backup folders for each of them. When the communication
