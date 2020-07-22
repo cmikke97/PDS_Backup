@@ -98,6 +98,7 @@ rinominazione di una cartella | invio comando ridenominazione cartella
 
 ### messaggi
 * ####struttura
+
 1 byte | 1byte | 1 byte | x bytes |
 --- | --- | --- | ---
 total len | version | type | content
