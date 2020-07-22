@@ -114,7 +114,8 @@ DC | directory create | directory metadata (name, path relative to backup root) 
 DD | directory delete | directory metadata (name, path relative to backup root) | elimina cartella sul server | C | S
 DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
 DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
-CV | change version | latest supported version | comporta un cambiamento di versione nei messaggi inviati dall'alta party all'ultima versione supportata da questo party oppure porta alla fine dell'interazione | S | C
+AV | ask (/agree on) version | latest supported version (on client) | indica al server quale è la massima versione supportata dal client | C | S |
+SV | set version | version to use | il server sceglie la versione minima tra la massima versione supportanta dal client e la massima versione supportata dal server (sceglie quindi la massima versione supportanta da entrambi) e la comunica al client (d'ora in poi sia il client che il server useranno questa versione) | S | C
 PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
 PD | probe directory | dir relative path | verifica se il path ricevuto corrisponde a una cartella esistente e rispondi OK o NO | C | S
 OK | ok | nothing | dipende da quando viene usato | S | C
@@ -124,4 +125,24 @@ ER | error | error code | segnala un errore | S | C
 
 * #### scambio messaggi
   * ##### file create
-![File Create](GitHub_images/file_create.svg)
+  ![File Create](GitHub_images/file_create.svg)
+  * ##### file edit
+  ![File Edit](GitHub_images/file_edit.svg)
+  * ##### file rename
+  ![File Rename](GitHub_images/file_rename.svg)
+  * ##### file delete
+  ![File Delete](GitHub_images/file_delete.svg)
+  * ##### file move
+  ![File Move](GitHub_images/file_move.svg)
+  * ##### dir create
+  ![Dir_Create](GitHub_images/dir_create.svg)
+  * ##### dir delete
+  ![Dir_Delete](GitHub_images/dir_delete.svg)
+  * ##### dir move
+  ![Dir_Move](GitHub_images/dir_move.svg)
+  * ##### dir rename
+  ![Dir_Rename](GitHub_images/dir_rename.svg)
+  * ##### version agreement
+  ![Version_Agreement](GitHub_images/version_agreement.svg)
+  * ##### user authentication
+  ![User_Auth](GitHub_images/user_auth.svg)
