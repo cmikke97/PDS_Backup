@@ -97,8 +97,7 @@ spostamento di una cartella | invio comando spostamento cartella (src + dst)
 rinominazione di una cartella | invio comando ridenominazione cartella
 
 ### messaggi
-* ####struttura
-
+* #### struttura
 1 byte | 1byte | 1 byte | x bytes |
 --- | --- | --- | ---
 total len | version | type | content
