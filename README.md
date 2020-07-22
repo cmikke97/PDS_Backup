@@ -114,11 +114,14 @@ DC | directory create | directory metadata (name, path relative to backup root) 
 DD | directory delete | directory metadata (name, path relative to backup root) | elimina cartella sul server | C | S
 DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
 DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
-CV | change version | latest supported version | comporta un cambiamento di versione nei messaggi inviati dall'alta party all'ultima versione supportata da questo party oppure porta alla fine dell'interazione | C/S | S/C
+CV | change version | latest supported version | comporta un cambiamento di versione nei messaggi inviati dall'alta party all'ultima versione supportata da questo party oppure porta alla fine dell'interazione | S | C
 PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
+PD | probe directory | dir relative path | verifica se il path ricevuto corrisponde a una cartella esistente e rispondi OK o NO | C | S
 OK | ok | nothing | dipende da quando viene usato | S | C
 NO | not ok | nothing | dipende da quando viene usato | S | C
 AU | authenticate user | username + password | verifica username e password (+salt) e autentica lo user | C | S
 ER | error | error code | segnala un errore | S | C
 
 * #### scambio messaggi
+  * ##### file create
+![File Create](GitHub_images/file_create.svg)
