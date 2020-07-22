@@ -66,3 +66,57 @@ side.
 Communication between the client and the server can be based on the Boost ASIO library
 (https://www.boost.org/doc/libs/1_73_0/doc/html/boost_asio.html) or any other
 suitable one.
+
+# Appunti
+
+### da capire
+* cosa si intende per background service (se è un semplice programma con cui non si interagisce o di più.. nel primo
+caso bisogna anche capire se si deve rendere invisibile la finestra di comando del programma o no)
+* se un utente può accedere allo stesso servizio da più macchine differenti.. in tal caso sarebbe da gestire
+il fatto che quando un utente si connette al servizio per la prima volta su una macchina il contenuto della
+cartella da monitorare potrebbe essere diverso (o anche vuoto).. che fare in questo caso? Una possibile soluzione
+potrebbe essere lanciare il programma con un comando specifico che per prima cosa crea la cartella (se non esiste
+già) e scarica tutto ciò che c'è sul server sul client in modo che siano sincronizzati e abbiano lo stesso contenuto;
+successivamente il programma si comporta normalmente.
+* se è possibile per un utente essere connesso al servizio su più macchine differenti contemporaneamente e in tal caso 
+se è da gestire la modifica in una cartella remota (su server) di file.. in tal caso tale modifica sarebbe da propagare
+alle macchine (client) connesse per lo stesso utente (tutto è più semplice se un utente può essere connesso
+al servizio da un unica macchina alla volta)
+
+### modifiche da monitorare sul file system
+tipo di modifica | azione da eseguire (su client)
+------------ | -------------
+creazione di un file | calcolo hash del file (considerando file name, data di ultima modifica, file size) + verifica che il server non abbia già una copia di tale file + invio comando di creazione file (file + hash) 
+modifica di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di modifica file (file + hash)
+rinominazione di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di ridenominazione file (+ new file name  hash)
+eliminazione di un file | verifica che il server abbia una copia di tale file + invio comando di eliminazione file
+spostamento di un file in un altra cartella (monitorata) | (hash non cambia, già calcolato, se serve si può ricalcolare) invio comando spostamento file (src + dst)
+creazione di una cartella | invio comando creazione cartella
+eliminazione di una cartella | invio comando eliminazione cartella (+ recursive o no)
+spostamento di una cartella | invio comando spostamento cartella (src + dst)
+rinominazione di una cartella | invio comando ridenominazione cartella
+
+### messaggi
+* ####struttura
+1 byte | 1byte | 1 byte | x bytes |
+--- | --- | --- | ---
+total len | version | type | content
+
+* #### tipi
+codice | significato | content | effetti | src | dst
+--- | --- | --- | --- | --- | ---
+FC | file create | | | C | S
+FE | file edit | | | C | S
+FR | file rename | | | C | S
+FD | file delete | | | C | S
+FM | file move | | | C | S
+DC | directory create | | | C | S
+DD | directory delete | | | C | S
+DM | directory move | | | C | S
+DR | directory rename | | | C | S
+CV | change version | | | C/S | S/C
+PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o SF | C | S
+OK | ok | nothing | il client non invia altri comandi per questo file | S | C
+SF | send file | | | S | C
+AU | authenticate user | | | C | S
+ER | error | | | S | C
