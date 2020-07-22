@@ -105,18 +105,18 @@ total len | version | type | content
 * #### tipi
 codice | significato | content | effetti | src | dst
 --- | --- | --- | --- | --- | ---
-FC | file create | | | C | S
-FE | file edit | | | C | S
-FR | file rename | | | C | S
-FD | file delete | | | C | S
-FM | file move | | | C | S
-DC | directory create | | | C | S
-DD | directory delete | | | C | S
-DM | directory move | | | C | S
-DR | directory rename | | | C | S
-CV | change version | | | C/S | S/C
-PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o SF | C | S
-OK | ok | nothing | il client non invia altri comandi per questo file | S | C
-SF | send file | | | S | C
-AU | authenticate user | | | C | S
-ER | error | | | S | C
+FC | file create | file metadata (name, path relative to backup root, date, size etc.)+ file + file hash | crea file sul server | C | S
+FE | file edit | file metadata (name, path relative to backup root, date, size etc.) + file + previous file hash + new file hash | sovrascrivi (o cancella e poi scrivi) file esistente sul server (modificandolo) | C | S
+FR | file rename | file metadata (name, path relative to backup root, date, size etc.) + prev file hash + new file hash | rinomina file esistente sul server | C | S
+FD | file delete | file hash | elimina file da server | C | S
+FM | file move | (new) file metadata (name, path relative to backup root, date, size ect.) + file hash | sposta file da una cartella all'altra sul server | C | S
+DC | directory create | directory metadata (name, path relative to backup root) | crea cartella sul server | C | S
+DD | directory delete | directory metadata (name, path relative to backup root) | elimina cartella sul server | C | S
+DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
+DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
+CV | change version | latest supported version | comporta un cambiamento di versione nei messaggi inviati dall'alta party all'ultima versione supportata da questo party oppure porta alla fine dell'interazione | C/S | S/C
+PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
+OK | ok | nothing | dipende da quando viene usato | S | C
+NO | not ok | nothing | dipende da quando viene usato | S | C
+AU | authenticate user | username + password | verifica username e password (+salt) e autentica lo user | C | S
+ER | error | error code | segnala un errore | S | C
