@@ -146,3 +146,15 @@ ER | error | error code | segnala un errore | S | C
   ![Version_Agreement](GitHub_images/version_agreement.svg)
   * ##### user authentication
   ![User_Auth](GitHub_images/user_auth.svg)
+  
+### struttura client
+* 1 main thread in polling (ogni x secondi) sulla directory da monitorare, il quale ad ogni modifica rilevata aggiuge un indicazione
+di tale modifica (specificando il file/directory che ha subito la modifica) in una coda FIFO thread safe
+* 1 thread secondario in attesa passiva sulla coda FIFO thread safe che preleva le modifiche da effettuare dalla coda e le effettua contattando
+il server
+
+### struttura server
+* 1 main thread in attesa passiva sulla accept che immagazzina tutte le connesioni (socket) entranti in una struttura (vettore o coda)
+thread safe.
+* TOT thread secondari (thread pool) che prelevano dalla coda delle connessioni 1 socket ciascuno (per ora) e rispondono alle richieste del client
+relativo a tale socket fino a disconnessione del client.
