@@ -88,13 +88,13 @@ tipo di modifica | azione da eseguire (su client)
 ------------ | -------------
 creazione di un file | calcolo hash del file (considerando file name, data di ultima modifica, file size) + verifica che il server non abbia già una copia di tale file + invio comando di creazione file (file + hash) 
 modifica di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di modifica file (file + hash)
-rinominazione di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di ridenominazione file (+ new file name  hash)
+(NO) rinominazione di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di ridenominazione file (+ new file name  hash)
 eliminazione di un file | verifica che il server abbia una copia di tale file + invio comando di eliminazione file
-spostamento di un file in un altra cartella (monitorata) | (hash non cambia, già calcolato, se serve si può ricalcolare) invio comando spostamento file (src + dst)
+(NO) spostamento di un file in un altra cartella (monitorata) | (hash non cambia, già calcolato, se serve si può ricalcolare) invio comando spostamento file (src + dst)
 creazione di una cartella | invio comando creazione cartella
 eliminazione di una cartella | invio comando eliminazione cartella (+ recursive o no)
-spostamento di una cartella | invio comando spostamento cartella (src + dst)
-rinominazione di una cartella | invio comando ridenominazione cartella
+(NO) spostamento di una cartella | invio comando spostamento cartella (src + dst)
+(NO) rinominazione di una cartella | invio comando ridenominazione cartella
 
 ### messaggi
 * #### struttura
@@ -107,13 +107,13 @@ codice | significato | content | effetti | src | dst
 --- | --- | --- | --- | --- | ---
 FC | file create | file metadata (name, path relative to backup root, date, size etc.)+ file + file hash | crea file sul server | C | S
 FE | file edit | file metadata (name, path relative to backup root, date, size etc.) + file + previous file hash + new file hash | sovrascrivi (o cancella e poi scrivi) file esistente sul server (modificandolo) | C | S
-FR | file rename | file metadata (name, path relative to backup root, date, size etc.) + prev file hash + new file hash | rinomina file esistente sul server | C | S
+(NO) FR | file rename | file metadata (name, path relative to backup root, date, size etc.) + prev file hash + new file hash | rinomina file esistente sul server | C | S
 FD | file delete | file hash | elimina file da server | C | S
-FM | file move | (new) file metadata (name, path relative to backup root, date, size ect.) + file hash | sposta file da una cartella all'altra sul server | C | S
+(NO) FM | file move | (new) file metadata (name, path relative to backup root, date, size ect.) + file hash | sposta file da una cartella all'altra sul server | C | S
 DC | directory create | directory metadata (name, path relative to backup root) | crea cartella sul server | C | S
 DD | directory delete | directory metadata (name, path relative to backup root) | elimina cartella sul server | C | S
-DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
-DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
+(NO) DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
+(NO) DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
 AV | ask (/agree on) version | latest supported version (on client) | indica al server quale è la massima versione supportata dal client | C | S |
 SV | set version | version to use | il server sceglie la versione minima tra la massima versione supportanta dal client e la massima versione supportata dal server (sceglie quindi la massima versione supportanta da entrambi) e la comunica al client (d'ora in poi sia il client che il server useranno questa versione) | S | C
 PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
@@ -128,19 +128,19 @@ ER | error | error code | segnala un errore | S | C
   ![File Create](GitHub_images/file_create.svg)
   * ##### file edit
   ![File Edit](GitHub_images/file_edit.svg)
-  * ##### file rename
+  * ##### (NO) file rename
   ![File Rename](GitHub_images/file_rename.svg)
   * ##### file delete
   ![File Delete](GitHub_images/file_delete.svg)
-  * ##### file move
+  * ##### (NO) file move
   ![File Move](GitHub_images/file_move.svg)
   * ##### dir create
   ![Dir_Create](GitHub_images/dir_create.svg)
   * ##### dir delete
   ![Dir_Delete](GitHub_images/dir_delete.svg)
-  * ##### dir move
+  * ##### (NO) dir move
   ![Dir_Move](GitHub_images/dir_move.svg)
-  * ##### dir rename
+  * ##### (NO) dir rename
   ![Dir_Rename](GitHub_images/dir_rename.svg)
   * ##### version agreement
   ![Version_Agreement](GitHub_images/version_agreement.svg)
