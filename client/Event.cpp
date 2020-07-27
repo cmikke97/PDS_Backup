@@ -8,3 +8,6 @@
 
 Event::Event(Directory_entry& element, FileSystemStatus status) : element(element), status(status) {
 }
+
+Event::Event() : element(), status() {
+}

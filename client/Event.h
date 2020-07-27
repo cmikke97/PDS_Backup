@@ -14,6 +14,7 @@ class Event {
     FileSystemStatus status;
 
 public:
+    Event();
     Event(Directory_entry&  element, FileSystemStatus status);
 
     //TODO implement message composers

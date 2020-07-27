@@ -10,8 +10,7 @@
 #include <filesystem>
 #include <iostream>
 #include <utility>
-#include <openssl/evp.h>
-#include <openssl/sha.h>
+#include "Hash.h"
 
 enum class Directory_entry_TYPE {directory, file,notAType};
 
@@ -37,11 +36,7 @@ private:
     uintmax_t size{};
     Directory_entry_TYPE type;
     std::string last_write_time;
-    //unsigned char hash[EVP_MAX_MD_SIZE];
-
-    /**
-     * TODO have the hash as another field of this class
-     */
+    Hash hash;
 
 public:
     Directory_entry();
@@ -55,11 +50,7 @@ public:
     std::string getLastWriteTime();
     bool is_regular_file();
     bool is_directory();
-
-    /**
-     * TODO implement hash function getter for this class (if the hash was never computed before then compute it, otherwise just return it)
-     */
-
+    Hash getHash();
 };
 
 
