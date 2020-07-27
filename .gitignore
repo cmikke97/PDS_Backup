@@ -1,4 +1,4 @@
-.idea/
+/.idea/
 /client/.idea/
 /client/cmake-build-debug/
 /client/cmake-build-debug-cygwin/
