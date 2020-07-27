@@ -10,8 +10,8 @@
 #include <filesystem>
 #include <iostream>
 #include <utility>
-//#include <openssl/evp.h>
-//#include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
 
 enum class Directory_entry_TYPE {directory, file,notAType};
 
