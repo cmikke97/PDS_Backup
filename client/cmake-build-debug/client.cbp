@@ -80,16 +80,34 @@
 				</MakeCommands>
 			</Target>
 		</Build>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Circular_vector.cpp">
+			<Option target="client"/>
+		</Unit>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Circular_vector.h">
+			<Option target="client"/>
+		</Unit>
 		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Directory_entry.cpp">
 			<Option target="client"/>
 		</Unit>
 		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Directory_entry.h">
 			<Option target="client"/>
 		</Unit>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Event.cpp">
+			<Option target="client"/>
+		</Unit>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Event.h">
+			<Option target="client"/>
+		</Unit>
 		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/FileSystemWatcher.cpp">
 			<Option target="client"/>
 		</Unit>
 		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/FileSystemWatcher.h">
+			<Option target="client"/>
+		</Unit>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Thread_guard.cpp">
+			<Option target="client"/>
+		</Unit>
+		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/Thread_guard.h">
 			<Option target="client"/>
 		</Unit>
 		<Unit filename="/cygdrive/c/Users/michele/CLionProjects/PDS_Backup/client/main.cpp">
