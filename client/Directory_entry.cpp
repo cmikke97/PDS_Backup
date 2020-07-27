@@ -31,6 +31,10 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
     last_write_time = buffer.str();
+
+    std::stringstream temp;
+    temp << path << size << last_write_time;
+    hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
 }
 
 /**
@@ -54,6 +58,10 @@ Directory_entry::Directory_entry(std::string path, std::string name, uintmax_t s
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
     last_write_time = buffer.str();
+
+    std::stringstream temp;
+    temp << path << size << last_write_time;
+    hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
 }
 
 /**
@@ -129,4 +137,15 @@ bool Directory_entry::is_regular_file() {
  */
 bool Directory_entry::is_directory() {
     return type == Directory_entry_TYPE::directory;
+}
+
+/**
+ * get the Hash associated to this directory entry
+ *
+ * @return Hash object associated to this element
+ *
+ * @author Michele Crepaldi s269551
+ */
+Hash Directory_entry::getHash() {
+    return hash;
 }

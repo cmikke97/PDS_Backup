@@ -59,7 +59,7 @@ public:
      */
     bool tryPush(T t){
         std::unique_lock l(m);
-        if(!cvPush.wait_for(l, 0, [this](){return (end+1)%size != start;})) //wait for 0 --> test if the vector is not full
+        if(!cvPush.wait_for(l, std::chrono::milliseconds(0), [this](){return (end+1)%size != start;})) //wait for 0 --> test if the vector is not full
             return false; //if it is full return false (no object can be pushed now)
 
         //otherwise push object and return true
