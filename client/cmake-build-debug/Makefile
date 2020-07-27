@@ -123,6 +123,33 @@ client/fast:
 	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/build
 .PHONY : client/fast
 
+Circular_vector.o: Circular_vector.cpp.o
+
+.PHONY : Circular_vector.o
+
+# target to build an object file
+Circular_vector.cpp.o:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Circular_vector.cpp.o
+.PHONY : Circular_vector.cpp.o
+
+Circular_vector.i: Circular_vector.cpp.i
+
+.PHONY : Circular_vector.i
+
+# target to preprocess a source file
+Circular_vector.cpp.i:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Circular_vector.cpp.i
+.PHONY : Circular_vector.cpp.i
+
+Circular_vector.s: Circular_vector.cpp.s
+
+.PHONY : Circular_vector.s
+
+# target to generate assembly for a file
+Circular_vector.cpp.s:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Circular_vector.cpp.s
+.PHONY : Circular_vector.cpp.s
+
 Directory_entry.o: Directory_entry.cpp.o
 
 .PHONY : Directory_entry.o
@@ -150,6 +177,33 @@ Directory_entry.cpp.s:
 	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Directory_entry.cpp.s
 .PHONY : Directory_entry.cpp.s
 
+Event.o: Event.cpp.o
+
+.PHONY : Event.o
+
+# target to build an object file
+Event.cpp.o:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Event.cpp.o
+.PHONY : Event.cpp.o
+
+Event.i: Event.cpp.i
+
+.PHONY : Event.i
+
+# target to preprocess a source file
+Event.cpp.i:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Event.cpp.i
+.PHONY : Event.cpp.i
+
+Event.s: Event.cpp.s
+
+.PHONY : Event.s
+
+# target to generate assembly for a file
+Event.cpp.s:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Event.cpp.s
+.PHONY : Event.cpp.s
+
 FileSystemWatcher.o: FileSystemWatcher.cpp.o
 
 .PHONY : FileSystemWatcher.o
@@ -176,6 +230,33 @@ FileSystemWatcher.s: FileSystemWatcher.cpp.s
 FileSystemWatcher.cpp.s:
 	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/FileSystemWatcher.cpp.s
 .PHONY : FileSystemWatcher.cpp.s
+
+Thread_guard.o: Thread_guard.cpp.o
+
+.PHONY : Thread_guard.o
+
+# target to build an object file
+Thread_guard.cpp.o:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Thread_guard.cpp.o
+.PHONY : Thread_guard.cpp.o
+
+Thread_guard.i: Thread_guard.cpp.i
+
+.PHONY : Thread_guard.i
+
+# target to preprocess a source file
+Thread_guard.cpp.i:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Thread_guard.cpp.i
+.PHONY : Thread_guard.cpp.i
+
+Thread_guard.s: Thread_guard.cpp.s
+
+.PHONY : Thread_guard.s
+
+# target to generate assembly for a file
+Thread_guard.cpp.s:
+	$(MAKE) -f CMakeFiles/client.dir/build.make CMakeFiles/client.dir/Thread_guard.cpp.s
+.PHONY : Thread_guard.cpp.s
 
 main.o: main.cpp.o
 
@@ -213,12 +294,21 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... client"
 	@echo "... edit_cache"
+	@echo "... Circular_vector.o"
+	@echo "... Circular_vector.i"
+	@echo "... Circular_vector.s"
 	@echo "... Directory_entry.o"
 	@echo "... Directory_entry.i"
 	@echo "... Directory_entry.s"
+	@echo "... Event.o"
+	@echo "... Event.i"
+	@echo "... Event.s"
 	@echo "... FileSystemWatcher.o"
 	@echo "... FileSystemWatcher.i"
 	@echo "... FileSystemWatcher.s"
+	@echo "... Thread_guard.o"
+	@echo "... Thread_guard.i"
+	@echo "... Thread_guard.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"

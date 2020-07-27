@@ -1,1 +1,0 @@
-/usr/bin/c++.exe -g  -Wl,--enable-auto-import CMakeFiles/client.dir/main.cpp.o CMakeFiles/client.dir/FileSystemWatcher.cpp.o CMakeFiles/client.dir/Directory_entry.cpp.o  -o client.exe -Wl,--out-implib,libclient.dll.a -Wl,--major-image-version,0,--minor-image-version,0 

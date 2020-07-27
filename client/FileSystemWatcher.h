@@ -12,6 +12,7 @@
 #include <string>
 #include <functional>
 #include <iostream>
+#include <utility>
 #include "Directory_entry.h"
 
 using namespace std::chrono_literals;
@@ -41,14 +42,7 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    FileSystemWatcher(const std::string& path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{path_to_watch}, delay{delay} {
-        for(auto &file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
-            /**
-             * TODO add a create message to the list of messages to send
-             */
-            // insert the file in paths_ so it will be known in the future
-            paths_[file.path().string()] = Directory_entry(std::filesystem::directory_entry(file));
-        }
+    FileSystemWatcher(std::string  path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
     }
 
     /**
@@ -58,7 +52,7 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    void start(const std::function<void (Directory_entry, FileSystemStatus)> &action) {
+    void start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action) {
         while(running_) {
             // Wait for "delay" milliseconds
             std::this_thread::sleep_for(delay);
@@ -67,8 +61,8 @@ public:
             auto it = paths_.begin();
             while (it != paths_.end()) {
                 if (!std::filesystem::exists(it->first)) {
-                    action(it->second, FileSystemStatus::deleted);
-                    it = paths_.erase(it);
+                    if(action(it->second, FileSystemStatus::deleted)) //if the action was successful then erase the element from paths_; otherwise this element will be removed later
+                        it = paths_.erase(it);
                 }
                 else{
                     it++;
@@ -78,14 +72,13 @@ public:
             for(const auto& file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
                 auto current_file = Directory_entry(file);
 
-                // File creation
-                if(!contains(file.path().string())) {
-                    paths_[current_file.getPath()] = current_file;
-                    action(current_file, FileSystemStatus::created);
-                    // File modification
-                } else if(paths_[current_file.getPath()].getLastWriteTime() != current_file.getLastWriteTime()) {
-                    paths_[current_file.getPath()] = current_file;
-                    action(current_file, FileSystemStatus::modified);
+                if(!contains(file.path().string())) { //file creation
+                    if(action(current_file, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
+                        paths_[current_file.getPath()] = current_file;
+
+                } else if(paths_[current_file.getPath()].getLastWriteTime() != current_file.getLastWriteTime()) { //file modification
+                    if(action(current_file, FileSystemStatus::modified)) //if the action was successful then overwrite the element to paths_; otherwise this element will be overwritten later
+                        paths_[current_file.getPath()] = current_file;
                 }
             }
         }
