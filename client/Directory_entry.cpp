@@ -146,6 +146,28 @@ bool Directory_entry::is_directory() {
  *
  * @author Michele Crepaldi s269551
  */
-Hash Directory_entry::getHash() {
+Hash& Directory_entry::getHash() {
     return hash;
+}
+
+/**
+ * assign previous hash to this element (before edit)
+ *
+ * @param prev hash
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Directory_entry::assignPrevHash(Hash prev) {
+    prevHash = prev;
+}
+
+/**
+ * get the previous hash for this element (before edit)
+ *
+ * @return previous hash
+ *
+ * @author Michele Crepaldi s269551
+ */
+Hash& Directory_entry::getPrevHash() {
+    return prevHash;
 }

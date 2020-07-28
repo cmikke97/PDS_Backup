@@ -20,7 +20,7 @@ class Hash {
 public:
     Hash();
     Hash(const unsigned char *buf, unsigned long len);
-    std::pair<unsigned char*, unsigned long> getHash();
+    std::pair<unsigned char*, unsigned long> getValue();
     bool operator==(Hash& h);
 };
 

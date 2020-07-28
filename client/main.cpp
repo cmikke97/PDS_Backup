@@ -11,8 +11,10 @@
 #include "Event.h"
 #include "Circular_vector.h"
 #include "Thread_guard.h"
+#include "Socket.h"
 
 #define EVENT_QUEUE_SIZE 20 //dimension of the event queue, a.k.a. how many events can be putted in queue at the same time
+#define SECONDS_BETWEEN_RECONNECTIONS 10
 
 /**
  * the client main function
@@ -25,8 +27,8 @@
  */
 int main(int argc, char **argv) {
 
-    if(argc != 3){
-        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address]" << std::endl;
+    if(argc != 4){
+        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port]" << std::endl;
         exit(1);
     }
 
@@ -35,33 +37,225 @@ int main(int argc, char **argv) {
 
     // create a circular vector instance that will contain all the events happened
     Circular_vector<Event> eventQueue(EVENT_QUEUE_SIZE);
+    std::string server_ip = argv[2];
+    std::string server_port = argv[3];
 
     // initialize the communication thread (thread that will communicate with the server) and an atomic boolean to make it stop
     std::atomic<bool> thread_stop = false;
-    std::thread communication_thread([&thread_stop, &eventQueue](){
+    std::thread communication_thread([&thread_stop, &eventQueue, server_ip, server_port](){
         // this thread will loop until it will be told to stop
         while(!thread_stop.load()){
-            //TODO initialize socket
+            try{
+                struct sockaddr_in server_address = Socket::composeAddress(server_ip, server_port);
 
-            //TODO connect with server
+                //initialize socket
+                Socket client_socket;
 
-            //TODO authenticate user
+                //connect with server
+                client_socket.connect(&server_address, sizeof(server_address));
 
-            //TODO extract (front) event from event queue
+                //TODO authenticate user
 
-            //TODO generate request
+                //after connection and authentication then iteratively do these things;
+                //if any connection error occurs then redo connection and authentication
+                while(!thread_stop.load()) {
+                    //extract (front) event from event queue
+                    Event e = eventQueue.front();
 
-            //TODO send request to server
+                    //generate probe request
+                    Message probeMessage = e.getProbe();
+                    Message optionalAdditionalMesssage;
 
-            //TODO receive server response
+                    //send request to server
+                    client_socket.write(probeMessage.getMessage(), probeMessage.getSize(), 0);
 
-            //TODO evaluate what to do
+                    //receive server response
+                    unsigned long header_length;
+                    client_socket.read(reinterpret_cast<char *>(&header_length), sizeof(unsigned long), 0);
+                    char response[header_length];
+                    client_socket.read(response,header_length,0);
+                    messageType resType = Event::getType(response);
 
-            //TODO send optional response to server
+                    //evaluate what to do
+                    if(e.getElement().is_regular_file()){
+                        switch(e.getStatus()) {
+                            case FileSystemStatus::created:
+                                std::cout << "File created: " << e.getElement().getPath() << "response from server: ";
+                                //file created
+                                switch(resType){
+                                    case messageType::OK:
+                                        std::cout << "OK" << std::endl;
+                                        //if the file already exists then edit (sending) it
+                                        optionalAdditionalMesssage = e.getEditHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
 
-            //TODO receive optional server response
+                                        //TODO open file and iteratively send it to the server
 
-            //TODO in case everything went smoothly then pop event from event queue
+                                        break;
+                                    case messageType::NO:
+                                        std::cout << "NO" << std::endl;
+                                        //if the file does not exist in the server then create (sending) it
+                                        optionalAdditionalMesssage = e.getCreateHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+
+                                        //TODO open file and iteratively send it to the server
+
+                                        break;
+                                    case messageType::ER:
+                                        std::cout << "ER" << std::endl;
+                                        //in case of eventual server errors (not connection ones)
+                                        //TODO implement error management (possibly retrying)
+                                        break;
+                                    case messageType::CV:
+                                        std::cout << "CV" << std::endl;
+                                        //in case of a change version response then change version and retry
+                                        //TODO decide if it is worth to implement this or not
+                                        break;
+                                    default:
+                                        std::cout << "Error! Unknown message type." << std::endl;
+                                }
+                                break;
+                            case FileSystemStatus::modified:
+                                std::cout << "File modified: " << e.getElement().getPath() << std::endl;
+                                //file modified
+                                switch(resType){
+                                    case messageType::OK:
+                                        std::cout << "OK" << std::endl;
+                                        //if the file already exists do nothing.
+                                        break;
+                                    case messageType::NO:
+                                        std::cout << "NO" << std::endl;
+                                        //if the file does not exist in the server then send it
+                                        optionalAdditionalMesssage = e.getCreateHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+
+                                        //TODO open file and iteratively send it to the server
+
+                                        break;
+                                    case messageType::ER:
+                                        std::cout << "ER" << std::endl;
+                                        //in case of eventual server errors (not connection ones)
+                                        //TODO implement error management (possibly retrying)
+                                        break;
+                                    case messageType::CV:
+                                        std::cout << "CV" << std::endl;
+                                        //in case of a change version response then change version and retry
+                                        //TODO decide if it is worth to implement this or not
+                                        break;
+                                    default:
+                                        std::cout << "Error! Unknown message type." << std::endl;
+                                }
+                                break;
+                            case FileSystemStatus::deleted:
+                                std::cout << "File deleted: " << e.getElement().getPath() << std::endl;
+                                //file deleted
+                                switch(resType){
+                                    case messageType::OK:
+                                        std::cout << "OK" << std::endl;
+                                        //if the file already exists then delete it
+                                        optionalAdditionalMesssage = e.getDeleteHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+                                        break;
+                                    case messageType::NO:
+                                        std::cout << "NO" << std::endl;
+                                        //if the file does not exist in the server then do nothing.
+                                        break;
+                                    case messageType::ER:
+                                        std::cout << "ER" << std::endl;
+                                        //in case of eventual server errors (not connection ones)
+                                        //TODO implement error management (possibly retrying)
+                                        break;
+                                    case messageType::CV:
+                                        std::cout << "CV" << std::endl;
+                                        //in case of a change version response then change version and retry
+                                        //TODO decide if it is worth to implement this or not
+                                        break;
+                                    default:
+                                        std::cout << "Error! Unknown message type." << std::endl;
+                                }
+                                break;
+                            default:
+                                std::cout << "Error! Unknown file status." << std::endl;
+                        }
+                    }
+                    else if(e.getElement().is_directory()){
+                        switch(e.getStatus()) {
+                            case FileSystemStatus::created:
+                                std::cout << "Directory created: " << e.getElement().getPath() << std::endl;
+                                //directory created
+                                switch(resType){
+                                    case messageType::OK:
+                                        std::cout << "OK" << std::endl;
+                                        //if the directory already exists then do nothing.
+                                        break;
+                                    case messageType::NO:
+                                        std::cout << "NO" << std::endl;
+                                        //if the directory does not exist in the server then create it
+                                        optionalAdditionalMesssage = e.getCreateHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+                                        break;
+                                    case messageType::ER:
+                                        std::cout << "ER" << std::endl;
+                                        //in case of eventual server errors (not connection ones)
+                                        //TODO implement error management (possibly retrying)
+                                        break;
+                                    case messageType::CV:
+                                        std::cout << "CV" << std::endl;
+                                        //in case of a change version response then change version and retry
+                                        //TODO decide if it is worth to implement this or not
+                                        break;
+                                    default:
+                                        std::cout << "Error! Unknown message type." << std::endl;
+                                }
+                                break;
+                            /*case FileSystemStatus::modified:
+                                //std::cout << "Directory modified: " << e.getElement().getPath() << std::endl;
+                                break;*/
+                            case FileSystemStatus::deleted:
+                                std::cout << "Directory deleted: " << e.getElement().getPath() << std::endl;
+                                //directory deleted
+                                switch(resType){
+                                    case messageType::OK:
+                                        std::cout << "OK" << std::endl;
+                                        //if the directory already exists then delete it.
+                                        optionalAdditionalMesssage = e.getDeleteHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+                                        break;
+                                    case messageType::NO:
+                                        std::cout << "NO" << std::endl;
+                                        //if the directory does not exist in the server then do nothing
+                                        break;
+                                    case messageType::ER:
+                                        std::cout << "ER" << std::endl;
+                                        //in case of eventual server errors (not connection ones)
+                                        //TODO implement error management (possibly retrying)
+                                        break;
+                                    case messageType::CV:
+                                        std::cout << "CV" << std::endl;
+                                        //in case of a change version response then change version and retry
+                                        //TODO decide if it is worth to implement this or not
+                                        break;
+                                    default:
+                                        std::cout << "Error! Unknown message type." << std::endl;
+                                }
+                                break;
+                            default:
+                                std::cout << "Error! Unknown file status." << std::endl;
+                        }
+                    }
+                    else{
+                        std::cout << "change to an unsupported type." << std::endl;
+                    }
+
+                    //in case everything went smoothly then pop event from event queue
+                    eventQueue.pop();
+                }
+            }
+            catch (std::runtime_error &err){
+                //error in connection; retry later; wait for x seconds
+                std::cout << "Connection error. Retry in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
+                std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
+            }
         }
     });
     // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
