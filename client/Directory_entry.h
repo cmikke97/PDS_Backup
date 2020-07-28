@@ -36,7 +36,7 @@ private:
     uintmax_t size{};
     Directory_entry_TYPE type;
     std::string last_write_time;
-    Hash hash;
+    Hash hash, prevHash;
 
 public:
     Directory_entry();
@@ -50,7 +50,9 @@ public:
     std::string getLastWriteTime();
     bool is_regular_file();
     bool is_directory();
-    Hash getHash();
+    Hash& getHash();
+    void assignPrevHash(Hash prev);
+    Hash& getPrevHash();
 };
 
 

@@ -62,7 +62,7 @@ Hash::Hash(const unsigned char *buf, unsigned long len) {
  *
  * @author Michele Crepaldi s269551
  */
-std::pair<unsigned char*, unsigned long> Hash::getHash() {
+std::pair<unsigned char*, unsigned long> Hash::getValue() {
     return std::make_pair(md_value, md_len);
 }
 
@@ -75,8 +75,8 @@ std::pair<unsigned char*, unsigned long> Hash::getHash() {
  * @author Michele Crepaldi s269551
  */
 bool Hash::operator==(Hash &other) {
-    auto myHash = this->getHash();
-    auto otherHash = other.getHash();
+    auto myHash = this->getValue();
+    auto otherHash = other.getValue();
     if(myHash.second == otherHash.second) //if the len is the same (they should be unless there are errors)
         return CRYPTO_memcmp(myHash.first, otherHash.first, myHash.second); //then compare the two hashes in constant time
     return false;
