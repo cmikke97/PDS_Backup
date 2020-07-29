@@ -37,7 +37,7 @@ public:
     Message getCreateHeader();
     Message getEditHeader();
     Message getDeleteHeader();
-    Message getSalt(const std::string& username);
+    Message getSaltHeader(const std::string& username);
     Message getAuthHeader(const std::string& username, const std::string& password, char* salt);
 
     static messageType getType(char* response);

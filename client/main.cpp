@@ -85,12 +85,7 @@ int main(int argc, char **argv) {
                                 switch(resType){
                                     case messageType::OK:
                                         std::cout << "OK" << std::endl;
-                                        //if the file already exists then edit (sending) it
-                                        optionalAdditionalMesssage = e.getEditHeader();
-                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
-
-                                        //TODO open file and iteratively send it to the server
-
+                                        //if the file already exists then do nothing
                                         break;
                                     case messageType::NO:
                                         std::cout << "NO" << std::endl;
@@ -121,7 +116,11 @@ int main(int argc, char **argv) {
                                 switch(resType){
                                     case messageType::OK:
                                         std::cout << "OK" << std::endl;
-                                        //if the file already exists do nothing.
+                                        //if the file already exists then edit (sending) it.
+                                        optionalAdditionalMesssage = e.getEditHeader();
+                                        client_socket.write(optionalAdditionalMesssage.getMessage(), optionalAdditionalMesssage.getSize(), 0);
+
+                                        //TODO open file and iteratively send it to the server
                                         break;
                                     case messageType::NO:
                                         std::cout << "NO" << std::endl;

@@ -44,10 +44,10 @@ Message Event::getProbe() {
     auto hash_pair = h.getValue();
 
     unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(unsigned long)+
-            hash_pair.second);
+            sizeof(unsigned int)+   //version
+            sizeof(messageType)+    //type
+            sizeof(unsigned long)+  //hash length
+            hash_pair.second);      //hash
 
     m = Message{header_length + sizeof(unsigned long)};
     m.append(header_length);
@@ -71,16 +71,28 @@ Message Event::getCreateHeader() {
     messageType type = element.getType()==Directory_entry_TYPE::file? messageType::FC : messageType::DC;
 
     //calculate header length
-    unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(size_t)+
-            element.getPath().length()+
-            sizeof(uintmax_t)+
-            sizeof(size_t)+
-            element.getLastWriteTime().length()+
-            sizeof(unsigned long)+
-            hash_pair.second);
+    unsigned long header_length;
+    if(element.getType()==Directory_entry_TYPE::file) { //is file
+        header_length = sizeof(unsigned char) * (
+                sizeof(unsigned int) +   //version
+                sizeof(messageType) +    //type
+                sizeof(size_t) +         //path length
+                element.getPath().length() + //path
+                sizeof(uintmax_t) +      //size
+                sizeof(size_t) +         //last write time length
+                element.getLastWriteTime().length() +    //last write time
+                sizeof(unsigned long) +  //hash length
+                hash_pair.second);      //hash
+    }
+    else { //is directory
+        header_length = sizeof(unsigned char) * (
+                sizeof(unsigned int) +   //version
+                sizeof(messageType) +    //type
+                sizeof(size_t) +         //path length
+                element.getPath().length() + //path
+                sizeof(unsigned long) +  //hash length
+                hash_pair.second);      //hash
+    }
 
     //initialize message
     m = Message{header_length + sizeof(unsigned long)};
@@ -96,13 +108,15 @@ Message Event::getCreateHeader() {
     m.append(element.getPath().length());
     m.append(element.getPath());
 
-    //add file size
-    //m.append(sizeof(uintmax_t));
-    m.append(element.getSize());
+    if(element.getType()==Directory_entry_TYPE::file){
+        //add file size
+        //m.append(sizeof(uintmax_t));
+        m.append(element.getSize());
 
-    //add last write time
-    m.append(element.getLastWriteTime().length());
-    m.append(element.getLastWriteTime());
+        //add last write time
+        m.append(element.getLastWriteTime().length());
+        m.append(element.getLastWriteTime());
+    }
 
     //add hash
     m.append(hash_pair.second);
@@ -124,18 +138,32 @@ Message Event::getEditHeader() {
     messageType type = element.getType()==Directory_entry_TYPE::file? messageType::FE : messageType::DE;
 
     //calculate header length
-    unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(size_t)+
-            element.getPath().length()+
-            sizeof(uintmax_t)+
-            sizeof(size_t)+
-            element.getLastWriteTime().length()+
-            sizeof(unsigned long)+
-            prev_hash_pair.second+
-            sizeof(unsigned long)+
-            hash_pair.second);
+    unsigned long header_length;
+    if(element.getType()==Directory_entry_TYPE::file) { //is file
+        header_length = sizeof(unsigned char) * (
+                sizeof(unsigned int) +  //version
+                sizeof(messageType) +   //type
+                sizeof(size_t) +        //path length
+                element.getPath().length() +    //path
+                sizeof(uintmax_t) +     //size
+                sizeof(size_t) +        //last write time length
+                element.getLastWriteTime().length() +   //last write time
+                sizeof(unsigned long) +     //previous hash length
+                prev_hash_pair.second +     //previous hash
+                sizeof(unsigned long) +     //new hash length
+                hash_pair.second);          //new hash
+    }
+    else { //is directory
+        header_length = sizeof(unsigned char) * (
+                sizeof(unsigned int) +  //version
+                sizeof(messageType) +   //type
+                sizeof(size_t) +        //path length
+                element.getPath().length() +    //path
+                sizeof(unsigned long) +     //previous hash length
+                prev_hash_pair.second +     //previous hash
+                sizeof(unsigned long) +     //new hash length
+                hash_pair.second);          //new hash
+    }
 
     //initialize message
     m = Message{header_length + sizeof(unsigned long)};
@@ -151,13 +179,15 @@ Message Event::getEditHeader() {
     m.append(element.getPath().length());
     m.append(element.getPath());
 
-    //add file size
-    //m.append(sizeof(uintmax_t));
-    m.append(element.getSize());
+    if(element.getType()==Directory_entry_TYPE::file) {
+        //add file size
+        //m.append(sizeof(uintmax_t));
+        m.append(element.getSize());
 
-    //add last write time
-    m.append(element.getLastWriteTime().length());
-    m.append(element.getLastWriteTime());
+        //add last write time
+        m.append(element.getLastWriteTime().length());
+        m.append(element.getLastWriteTime());
+    }
 
     //add previous hash
     m.append(prev_hash_pair.second);
@@ -183,10 +213,10 @@ Message Event::getDeleteHeader() {
 
     //calculate header length
     unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(unsigned long)+
-            hash_pair.second);
+            sizeof(unsigned int)+   //version
+            sizeof(messageType)+    //type
+            sizeof(unsigned long)+  //hash length
+            hash_pair.second);      //hash
 
     //initialize message
     m = Message{header_length + sizeof(unsigned long)};
@@ -212,13 +242,13 @@ Message Event::getDeleteHeader() {
  *
  * @author Michele Crepaldi s269551
  */
-Message Event::getSalt(const std::string& username) {
+Message Event::getSaltHeader(const std::string& username) {
     //calculate header length
     unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(size_t)+
-            username.length());
+            sizeof(unsigned int)+   //version
+            sizeof(messageType)+    //type
+            sizeof(size_t)+         //username length
+            username.length());     //username
 
     //initialize message
     m = Message{header_length + sizeof(unsigned long)};
@@ -255,12 +285,12 @@ Message Event::getAuthHeader(const std::string& username, const std::string& pas
 
     //calculate header length
     unsigned long header_length = sizeof(unsigned char)*(
-            sizeof(unsigned int)+
-            sizeof(messageType)+
-            sizeof(size_t)+
-            username.length()+
-            sizeof(unsigned long)+
-            hash_pair.second);
+            sizeof(unsigned int)+   //version
+            sizeof(messageType)+    //type
+            sizeof(size_t)+         //username length
+            username.length()+      //username
+            sizeof(unsigned long)+  //password (salted) hash length
+            hash_pair.second);      //password (salted) hash
 
     //initialize message
     m = Message{header_length + sizeof(unsigned long)};
@@ -270,7 +300,7 @@ Message Event::getAuthHeader(const std::string& username, const std::string& pas
     //add message version
     m.append(version);
     //add message type
-    m.append(messageType::GS);
+    m.append(messageType::AU);
 
     //add username
     m.append(username.length());

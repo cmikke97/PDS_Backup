@@ -132,8 +132,8 @@ int Socket::getSockfd() {
 struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::string& port) {
     struct sockaddr_in address{};
     address.sin_family = AF_INET;
-    inet_pton(AF_INET, "192.0.2.33", &(address.sin_addr));
-    address.sin_port = stoi(port);
+    inet_pton(AF_INET, addr.c_str(), &(address.sin_addr));
+    address.sin_port = htons(stoi(port));
     return address;
 }
 
