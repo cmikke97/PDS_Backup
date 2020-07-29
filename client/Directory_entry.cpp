@@ -20,21 +20,12 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
-        path(entry.path().string()),
-        name(entry.path().filename().string()),
-        type(entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType)){
-
-    size = type==Directory_entry_TYPE::file?entry.file_size():0;
-
-    std::time_t tt = to_time_t(entry.last_write_time());
-    std::tm *gmt = std::gmtime(&tt);
-    std::stringstream buffer;
-    buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
-    last_write_time = buffer.str();
-
-    std::stringstream temp;
-    temp << path << size << last_write_time;
-    hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
+        Directory_entry(
+                entry.path().string(),
+                entry.path().filename().string(),
+                entry.file_size(),
+                entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType),
+                entry.last_write_time()){
 }
 
 /**
@@ -59,9 +50,16 @@ Directory_entry::Directory_entry(std::string path, std::string name, uintmax_t s
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
     last_write_time = buffer.str();
 
-    std::stringstream temp;
-    temp << path << size << last_write_time;
-    hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
+    if(type==Directory_entry_TYPE::file) {
+        std::stringstream temp;
+        temp << path << size << last_write_time;
+        hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
+    }
+    else if(type==Directory_entry_TYPE::directory){
+        std::stringstream temp;
+        temp << path;
+        hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
+    }
 }
 
 /**

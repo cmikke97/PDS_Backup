@@ -88,62 +88,98 @@ tipo di modifica | azione da eseguire (su client)
 ------------ | -------------
 creazione di un file | calcolo hash del file (considerando file name, data di ultima modifica, file size) + verifica che il server non abbia già una copia di tale file + invio comando di creazione file (file + hash) 
 modifica di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di modifica file (file + hash)
-(NO) rinominazione di un file | calcolo nuova hash del file (file name, date, size) + verifica che il server non abbia già una copia di tale file + invio comando di ridenominazione file (+ new file name  hash)
 eliminazione di un file | verifica che il server abbia una copia di tale file + invio comando di eliminazione file
-(NO) spostamento di un file in un altra cartella (monitorata) | (hash non cambia, già calcolato, se serve si può ricalcolare) invio comando spostamento file (src + dst)
 creazione di una cartella | invio comando creazione cartella
 eliminazione di una cartella | invio comando eliminazione cartella (+ recursive o no)
-(NO) spostamento di una cartella | invio comando spostamento cartella (src + dst)
-(NO) rinominazione di una cartella | invio comando ridenominazione cartella
 
 ### messaggi
-* #### struttura
-1 byte | 1byte | 1 byte | x bytes |
---- | --- | --- | ---
-total len | version | type | content
+* #### struttura generale
+unsigned long | unsigned int | messageType class (enum) | (opt) x bytes | (opt) y bytes
+--- | --- | --- | --- | ---
+header len | version | type | (opt) header content | (opt) file
 
-* #### tipi
-codice | significato | content | effetti | src | dst
---- | --- | --- | --- | --- | ---
-FC | file create | file metadata (name, path relative to backup root, date, size etc.)+ file + file hash | crea file sul server | C | S
-FE | file edit | file metadata (name, path relative to backup root, date, size etc.) + file + previous file hash + new file hash | sovrascrivi (o cancella e poi scrivi) file esistente sul server (modificandolo) | C | S
-(NO) FR | file rename | file metadata (name, path relative to backup root, date, size etc.) + prev file hash + new file hash | rinomina file esistente sul server | C | S
+* #### tipi di header
+codice | significato | content | effetti | src | dst | optional payload
+--- | --- | --- | --- | --- | --- | ---
+FC | file create | file metadata (path relative to backup root, size, last write time) + file hash | crea file sul server | C | S | file
+FE | file edit | file metadata (path relative to backup root, size, last write time) + previous file hash + new file hash | sovrascrivi (o cancella e poi scrivi) file esistente sul server (modificandolo) | C | S | file
 FD | file delete | file hash | elimina file da server | C | S
-(NO) FM | file move | (new) file metadata (name, path relative to backup root, date, size ect.) + file hash | sposta file da una cartella all'altra sul server | C | S
-DC | directory create | directory metadata (name, path relative to backup root) | crea cartella sul server | C | S
-DD | directory delete | directory metadata (name, path relative to backup root) | elimina cartella sul server | C | S
-(NO) DM | directory move | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | sposta cartella sul server | C | S
-(NO) DR | directory rename | previous directory metadata (name, path relative to backup root) + new directory metadata (name, path relative to backup root) | rinomina cartella sul server | C | S
-AV | ask (/agree on) version | latest supported version (on client) | indica al server quale è la massima versione supportata dal client | C | S |
-SV | set version | version to use | il server sceglie la versione minima tra la massima versione supportanta dal client e la massima versione supportata dal server (sceglie quindi la massima versione supportanta da entrambi) e la comunica al client (d'ora in poi sia il client che il server useranno questa versione) | S | C
-PF | probe file | file hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
-PD | probe directory | dir relative path | verifica se il path ricevuto corrisponde a una cartella esistente e rispondi OK o NO | C | S
+DC | directory create | directory metadata (path relative to backup root, (fictitious) size, last write time) + dir hash | crea cartella sul server | C | S
+DE| directory edit| nothing | non utilizzato.. sarebbe da utilizzare se si volesse notificare anche la modifica del contenuto di una cartella.. cosa che è ridondante
+DD | directory delete | directory metadata (path relative to backup root, (fictitious) size, last write time) + dir hash | elimina cartella sul server | C | S
+CV | change version | nothing (version in version field) | indica al client una versione da utilizzare diversa da quella utilizzata dal client nella precedente interazione | S | C |
+PH | probe hash | file/directory hash | compara file hash ricevuta con file hash possedute e rispondi al client OK o NO | C | S
 OK | ok | nothing | dipende da quando viene usato | S | C
 NO | not ok | nothing | dipende da quando viene usato | S | C
-AU | authenticate user | username + password | verifica username e password (+salt) e autentica lo user | C | S
+GS | get salt | username | richiede il salt relativo allo user specificato | C | S
+US | user salt| salt | invia al client il salt relativo allo user specificato | S | C
+AU | authenticate user | username + password hash (salted) | verifica username e hash(salt+password) e autentica lo user | C | S
 ER | error | error code | segnala un errore | S | C
+
+* #### struttura messaggio per tipo
+PH | unsigned long | unsigned int | messageType class(enum) | unsigned long | hash length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | hash length | hash
+
+FC | unsigned long | unsigned int | messageType class(enum) | size_t | path length | uintmax_t | size_t | last write time length | unsigned long | hash length
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+| | header len | version | type | path length | path | file size | last write time length | last write time | hash length | hash
+
+FE | unsigned long | unsigned int | messageType class(enum) | size_t | path length | uintmax_t | size_t | last write time length | unsigned long | hash length | unsigned long | hash length
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+| | header len | version | type | path length | path | file size | last write time length | last write time | prev hash length | prev hash | new hash length | new hash
+
+FD | unsigned long | unsigned int | messageType class(enum) | unsigned long | hash length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | hash length | hash
+
+DC | unsigned long | unsigned int | messageType class(enum) | size_t | path length | unsigned long | hash length
+--- | --- | --- | --- | --- | --- | --- | ---
+| | header len | version | type | path length | path | hash length | hash
+
+DD | unsigned long | unsigned int | messageType class(enum) | unsigned long | hash length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | hash length | hash
+
+CV | unsigned long | unsigned int | messageType class(enum) 
+--- | --- | --- | --- 
+| | header len | version | type 
+
+OK | unsigned long | unsigned int | messageType class(enum) 
+--- | --- | --- | --- 
+| | header len | version | type 
+
+NO | unsigned long | unsigned int | messageType class(enum) 
+--- | --- | --- | --- 
+| | header len | version | type 
+
+ER | unsigned long | unsigned int | messageType class(enum) | int
+--- | --- | --- | --- | ---
+| | header len | version | type | error code
+
+GS | unsigned long | unsigned int | messageType class(enum) | size_t | username length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | username length | username
+
+US | unsigned long | unsigned int | messageType class(enum) | unsigned long | salt length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | salt length | salt
+
+AU | unsigned long | unsigned int | messageType class(enum) | size_t | username length | unsigned long | password (salted) hash length
+--- | --- | --- | --- | --- | ---
+| | header len | version | type | username length | username | password (salted) hash length | password (salted) hash
 
 * #### scambio messaggi
   * ##### file create
   ![File Create](GitHub_images/file_create.svg)
   * ##### file edit
   ![File Edit](GitHub_images/file_edit.svg)
-  * ##### (NO) file rename
-  ![File Rename](GitHub_images/file_rename.svg)
   * ##### file delete
   ![File Delete](GitHub_images/file_delete.svg)
-  * ##### (NO) file move
-  ![File Move](GitHub_images/file_move.svg)
   * ##### dir create
   ![Dir_Create](GitHub_images/dir_create.svg)
   * ##### dir delete
   ![Dir_Delete](GitHub_images/dir_delete.svg)
-  * ##### (NO) dir move
-  ![Dir_Move](GitHub_images/dir_move.svg)
-  * ##### (NO) dir rename
-  ![Dir_Rename](GitHub_images/dir_rename.svg)
-  * ##### version agreement
-  ![Version_Agreement](GitHub_images/version_agreement.svg)
   * ##### user authentication
   ![User_Auth](GitHub_images/user_auth.svg)
   
