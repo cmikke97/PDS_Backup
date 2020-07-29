@@ -166,7 +166,7 @@ US | unsigned long | unsigned int | messageType class(enum) | unsigned long | sa
 | | header len | version | type | salt length | salt
 
 AU | unsigned long | unsigned int | messageType class(enum) | size_t | username length | unsigned long | password (salted) hash length
---- | --- | --- | --- | --- | ---
+--- | --- | --- | --- | --- | --- | --- | ---
 | | header len | version | type | username length | username | password (salted) hash length | password (salted) hash
 
 * #### scambio messaggi
