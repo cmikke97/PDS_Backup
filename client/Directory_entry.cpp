@@ -23,7 +23,7 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
         Directory_entry(
                 entry.path().string(),
                 entry.path().filename().string(),
-                entry.file_size(),
+                entry.is_regular_file()?entry.file_size():0,
                 entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType),
                 entry.last_write_time()){
 }
