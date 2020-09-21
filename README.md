@@ -194,3 +194,11 @@ il server
 thread safe.
 * TOT thread secondari (thread pool) che prelevano dalla coda delle connessioni 1 socket ciascuno (per ora) e rispondono alle richieste del client
 relativo a tale socket fino a disconnessione del client.
+
+### da discutere/implementare
+* implementare connessione SSL (con OpenSSL) sicura su cui trasferire i dati (attraverso i soliti socket); per fare ciò occorre un certificato sul server..
+* a connessione SSL stabilita l'invio della password può avvenire in 'chiaro' (perchè la connessione stessa è crittata)
+* le password sono conservate in un db lato server -> campi per ogni record: userID, salt, saltedHash (of password)
+* implementare creazione nuovo utente -> lato client può avvenire a seguito dell'aggiunta di un argomento "-c" (create) su linea di comando
+* rivedere struttura messaggi e protocollo applicativo.. potrebbe essere interessante fare qualcosa di simile a FTP o comunque prendere spunto da esso
+* pensare a come risolvere problemi di incompatibilità di endianness tra i vari sistemi (i file stessi non dovrebbero avere problemi, gli indirizzi devono essere convertiti come al solito; le cose che possono creare problemi sono i messaggi scambiati (protocollo applicativo) -> se sono in binario (raw) (cosa necessaria per le dimensioni per esempio) allora ci potrebbero essere dei problemi di endianness (se invece fossero in testuale no)
