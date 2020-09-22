@@ -202,10 +202,3 @@ relativo a tale socket fino a disconnessione del client.
 * implementare creazione nuovo utente -> lato client può avvenire a seguito dell'aggiunta di un argomento "-c" (create) su linea di comando
 * rivedere struttura messaggi e protocollo applicativo.. potrebbe essere interessante fare qualcosa di simile a FTP o comunque prendere spunto da esso
 * pensare a come risolvere problemi di incompatibilità di endianness tra i vari sistemi (i file stessi non dovrebbero avere problemi, gli indirizzi devono essere convertiti come al solito; le cose che possono creare problemi sono i messaggi scambiati (protocollo applicativo) -> se sono in binario (raw) (cosa necessaria per le dimensioni per esempio) allora ci potrebbero essere dei problemi di endianness (se invece fossero in testuale no)
-
-# note di configurazione
-## su linux:
-* installare openssl (cmd: ```sudo apt-get install libssl-dev```)
-* installare gcc 9 (potrebbe andar bene anche gcc 8 ma è meglio la 9):
-** ```sudo apt install build-essential```
-
