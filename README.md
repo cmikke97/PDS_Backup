@@ -201,11 +201,11 @@ VER | version | version number | richiede cambio versione
             optional bytes salt = 3;
             
             enum type{
-             OK = 0;
-             SEND = 1;
-             ERR = 2;
-             SALT = 3;
-             VER = 4;
+                OK = 0;
+                SEND = 1;
+                ERR = 2;
+                SALT = 3;
+                VER = 4;
             }       
         }
         ```
