@@ -202,3 +202,25 @@ relativo a tale socket fino a disconnessione del client.
 * implementare creazione nuovo utente -> lato client può avvenire a seguito dell'aggiunta di un argomento "-c" (create) su linea di comando
 * rivedere struttura messaggi e protocollo applicativo.. potrebbe essere interessante fare qualcosa di simile a FTP o comunque prendere spunto da esso
 * pensare a come risolvere problemi di incompatibilità di endianness tra i vari sistemi (i file stessi non dovrebbero avere problemi, gli indirizzi devono essere convertiti come al solito; le cose che possono creare problemi sono i messaggi scambiati (protocollo applicativo) -> se sono in binario (raw) (cosa necessaria per le dimensioni per esempio) allora ci potrebbero essere dei problemi di endianness (se invece fossero in testuale no)
+
+# note di configurazione
+## su linux:
+* installare openssl (cmd: ``sudo apt-get install libssl-dev``)
+* installare gcc 9 (potrebbe andar bene anche gcc 8 ma è meglio la 9):
+  * ``sudo apt install build-essential``
+  * ``gcc --version`` -> controllare che la versione sia la 9
+  * se non è la 9 allora procedere come segue: (installazione di configurazioni multiple (oppure installare solamente la versione 9))
+  * ``sudo apt install software-properties-common``
+  * ``sudo add-apt-repository ppa:ubuntu-toolchain-r/test``
+  * ``sudo apt install gcc-7 g++-7 gcc-8 g++-8 gcc-9 g++-9``
+  ```
+       sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 --slave /usr/bin/g++ g++ /usr/bin/g++-9 --slave /usr/bin/gcov gcov /usr/bin/gcov-9
+       sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 --slave /usr/bin/g++ g++ /usr/bin/g++-8 --slave /usr/bin/gcov gcov /usr/bin/gcov-8
+       sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70 --slave /usr/bin/g++ g++ /usr/bin/g++-7 --slave /usr/bin/gcov gcov /usr/bin/gcov-7
+  ```
+  * (la versione di default è la 9, successivamente per cambiare versione: ``sudo update-alternatives --config gcc``)
+  * infine andare nei settings di CLion -> Build, Execution, Deployment -> Toolchains e impostare i compilatori C e C++ come gcc-9 e g++-9 rispettivamente (dovrebbero trovarsi in ```/usr/bin/gcc-9``` e ```/usr/bin/c++-9```)
+
+## su windows:
+* utilizzare come configurazione Cygwin (potrebbe essere già quella di default, controllare..), se necessario installare Cygwin (se hai problemi in questo passo contattami e ti mostro la mia configurazione attuale)
+* installare openssl da https://slproweb.com/products/Win32OpenSSL.html (32 o 64 bit, full (no light version)) in ``C:\Program Files\OpenSSL-Win64`` (la destinazione non dovrebbe essere importante); fatto ciò provare a compilare e se la compilazione dà errore allora è necessario aggiungere la cartella di installazione di openssl alle variabili di ambiente seguendo la guida: https://docs.oracle.com/en/database/oracle/r-enterprise/1.5.1/oread/creating-and-modifying-environment-variables-on-windows.html#GUID-DD6F9982-60D5-48F6-8270-A27EC53807D0 e impostando una nuova variabile d'ambiente di sistema con nome = ``OPENSSL_ROOT`` e impostando come valore la cartella di installazione di Openssl (nel mio caso è ``C:\Program Files\OpenSSL-Win64``)
