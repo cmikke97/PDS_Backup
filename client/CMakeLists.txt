@@ -20,12 +20,10 @@ if (CYGWIN)
     message(STATUS "Using OpenSSL ${OPENSSL_VERSION} on windows")
 
     target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
-endif (CYGWIN)
-
-if (UNIX)
+else ()
     #if on unix
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
 
     target_link_libraries(${PROJECT_NAME} PUBLIC ssl crypto)
     message(STATUS "Using OpenSSL on linux")
-endif (UNIX)
+endif ()
