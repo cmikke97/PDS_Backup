@@ -202,6 +202,7 @@ relativo a tale socket fino a disconnessione del client.
 * implementare creazione nuovo utente -> lato client può avvenire a seguito dell'aggiunta di un argomento "-c" (create) su linea di comando
 * rivedere struttura messaggi e protocollo applicativo.. potrebbe essere interessante fare qualcosa di simile a FTP o comunque prendere spunto da esso: https://it.wikipedia.org/wiki/File_Transfer_Protocol
 * pensare a come risolvere problemi di incompatibilità di endianness tra i vari sistemi (i file stessi non dovrebbero avere problemi, gli indirizzi devono essere convertiti come al solito; le cose che possono creare problemi sono i messaggi scambiati (protocollo applicativo) -> se sono in binario (raw) (cosa necessaria per le dimensioni per esempio) allora ci potrebbero essere dei problemi di endianness (se invece fossero in testuale no)
+* (soluzione alla precedente riga) : usare i protocol buffers! https://developers.google.com/protocol-buffers/docs/cpptutorial#parsing-and-serialization
 
 # note di configurazione
 ## su linux (ubuntu):
