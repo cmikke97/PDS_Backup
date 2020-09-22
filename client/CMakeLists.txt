@@ -24,4 +24,8 @@ endif (CYGWIN)
 
 if (UNIX)
     #if on unix
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
+
+    target_link_libraries(${PROJECT_NAME} PUBLIC ssl crypto)
+    message(STATUS "Using OpenSSL on linux")
 endif (UNIX)
