@@ -206,3 +206,6 @@ relativo a tale socket fino a disconnessione del client.
 # note di configurazione
 ## su linux:
 * installare openssl (cmd: ```sudo apt-get install libssl-dev```)
+* installare gcc 9 (potrebbe andar bene anche gcc 8 ma è meglio la 9):
+** ```sudo apt install build-essential```
+
