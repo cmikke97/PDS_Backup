@@ -41,6 +41,7 @@ private:
 public:
     Directory_entry();
     explicit Directory_entry(const std::filesystem::directory_entry&);
+
     Directory_entry(std::string path, std::string name, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time);
 
     std::string getPath();
