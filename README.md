@@ -219,7 +219,7 @@ relativo a tale socket fino a disconnessione del client.
        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70 --slave /usr/bin/g++ g++ /usr/bin/g++-7 --slave /usr/bin/gcov gcov /usr/bin/gcov-7
   ```
   * (la versione di default è la 9, successivamente per cambiare versione: ``sudo update-alternatives --config gcc``)
-  * infine andare nei settings di CLion -> Build, Execution, Deployment -> Toolchains e impostare i compilatori C e C++ come gcc-9 e g++-9 rispettivamente (dovrebbero trovarsi in ```/usr/bin/gcc-9``` e ```/usr/bin/c++-9```)
+  * infine andare nei settings di CLion -> Build, Execution, Deployment -> Toolchains e impostare i compilatori C e C++ come gcc-9 e g++-9 rispettivamente (dovrebbero trovarsi in ``/usr/bin/gcc-9`` e ``/usr/bin/c++-9``)
 
 * (nota: come è indicato sopra questi sono i passaggi da seguire su una macchina ubuntu, se hai un altro sistema operativo i comandi potrebbero non essere esattamente questi ma dovrebbero essere simili.. in ogni caso l'importante è installare Openssl e avere la versione 9 di gcc e g++)
 ## su windows:
