@@ -110,7 +110,7 @@ QUIT | quit protocol | nothing | chiude lo scambio di messaggi
 * #### server messages
 type | significato | content | effetti
 --- | --- | --- | ---
-OK | ok (prev command finished) | nothing | dipende da quando viene usato
+OK | ok (prev command finished) | nothing | lo scambio di messaggi si è concluso senza errori
 SEND | send file | nothing | segnala la necessità di inviare il file
 ERR | error | error code | segnala un errore
 SALT | user salt| salt | invia al client il salt relativo allo user specificato
