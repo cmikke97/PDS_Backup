@@ -2,6 +2,7 @@
 // Created by michele on 28/07/2020.
 //
 
+#include <vector>
 #include "Socket.h"
 
 /**
@@ -129,12 +130,85 @@ int Socket::getSockfd() {
     return sockfd;
 }
 
+/**
+ * function to compose the address
+ *
+ * @param addr
+ * @param port
+ * @return sockaddr_in structure
+ *
+ * @author Michele Crepaldi
+ */
 struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::string& port) {
     struct sockaddr_in address{};
     address.sin_family = AF_INET;
     inet_pton(AF_INET, addr.c_str(), &(address.sin_addr));
     address.sin_port = htons(stoi(port));
     return address;
+}
+
+/**
+ * funtion to write a string to a socket (useful with messages)
+ *
+ * @param stringBuffer string to write to socket
+ * @param options
+ *
+ * @author Michele Crepaldi
+ */
+void Socket::stringWrite(std::string &stringBuffer, int options) {
+    write(stringBuffer.c_str(), stringBuffer.length(), options);
+
+    //alternativa
+    /*
+    uint32_t dataLength = htonl(stringBuffer.size()); // Ensure network byte order when sending the data length
+
+    write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
+    write(stringBuffer.c_str() ,stringBuffer.size() ,0); // Send the string data
+    */
+}
+
+/**
+ * funtion to read a string from a socket (useful with messages)
+ *
+ * @param options
+ * @return string read from socket
+ *
+ * @author Michele Crepaldi
+ */
+std::string Socket::stringRead(int options) {
+    // create the buffer with space for the data
+    const unsigned int MAX_BUF_LENGTH = 4096;
+    std::vector<char> buffer(MAX_BUF_LENGTH);
+    std::string stringBuffer;
+    int bytesReceived = 0;
+    do {
+        bytesReceived = read(&buffer[0], buffer.size(), 0);
+        // append string from buffer.
+        if ( bytesReceived == -1 ) {
+            // error
+        } else {
+            stringBuffer.append( buffer.cbegin(), buffer.cend() );
+        }
+    } while ( bytesReceived == MAX_BUF_LENGTH );
+    // At this point we have the available data (which may not be a complete
+    // application level message).
+
+    return stringBuffer;
+
+    //alternativa
+    /*
+    uint32_t dataLength;
+    read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), 0); // Receive the message length
+    dataLength = ntohl(dataLength); // Ensure host system byte order
+
+    std::vector<uint8_t> rcvBuf;    // Allocate a receive buffer
+    rcvBuf.resize(dataLength,0x00); // with the necessary size
+
+    read(reinterpret_cast<char *>(&(rcvBuf[0])), dataLength, 0); // Receive the string data
+
+    stringBuffer.assign(reinterpret_cast<const char *>(&(rcvBuf[0])), rcvBuf.size()); // assign buffered data to a string
+    return stringBuffer;
+    */
 }
 
 /**

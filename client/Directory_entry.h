@@ -12,8 +12,15 @@
 #include <utility>
 #include "Hash.h"
 
-enum class Directory_entry_TYPE {directory, file,notAType};
+enum class Directory_entry_TYPE {directory, file, notAType};
 
+/**
+ * function to used to convert std::filesystem::file_time_type to std::time_t
+ *
+ * @tparam TP
+ * @param tp time as std::filesystem::file_time_type
+ * @return std::time_t representation of the input time
+ */
 template <typename TP>
 std::time_t to_time_t(TP tp)
 {
@@ -36,7 +43,7 @@ private:
     uintmax_t size{};
     Directory_entry_TYPE type;
     std::string last_write_time;
-    Hash hash, prevHash;
+    Hash hash;
 
 public:
     Directory_entry();
@@ -52,8 +59,6 @@ public:
     bool is_regular_file();
     bool is_directory();
     Hash& getHash();
-    void assignPrevHash(Hash prev);
-    Hash& getPrevHash();
 };
 
 

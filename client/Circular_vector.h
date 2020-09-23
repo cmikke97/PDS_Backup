@@ -8,6 +8,7 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <optional>
 
 /**
  * generic and thread safe circular vector with functions to push, try to push, return (a reference) and pop an element to/from the vector
@@ -80,6 +81,23 @@ public:
         std::unique_lock l(m);
         cvPop.wait(l, [this](){return start != end;});
         return v[start];
+    }
+
+    /**
+     * function which returns a reference to the element in the head of the circular vector (it doesn't pop it)
+     * it also waits for timeout time before returning in any case
+     *
+     * @param timeout time to wait
+     *
+     * @return a reference to the first object inserted in the circular vector (the head of the circular vector) or a nullopt value (if timeout)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    T& frontWaitFor(int timeout){
+        std::unique_lock l(m);
+        if (cvPop.wait_for(l, std::chrono::seconds(timeout), [this](){return start != end;}) == std::cv_status::timeout)
+            return std::nullopt;
+        return std::optional<T>{v[start]};
     }
 
     /**

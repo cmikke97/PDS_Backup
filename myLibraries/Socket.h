@@ -30,7 +30,9 @@ public:
     Socket(Socket &&other) noexcept;
     Socket& operator=(Socket &&other) noexcept;
     ssize_t read(char *buffer, size_t len, int options);
+    std::string stringRead(int options);
     ssize_t write(const char *buffer, size_t len, int options);
+    void stringWrite(std::string &stringBuffer, int options);
     static struct sockaddr_in composeAddress(const std::string& addr, const std::string& port);
     void connect(struct sockaddr_in *addr, unsigned int len);
     int getSockfd();

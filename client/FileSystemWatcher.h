@@ -13,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <utility>
+#include <atomic>
 #include "Directory_entry.h"
 
 using namespace std::chrono_literals;
@@ -22,7 +23,7 @@ using namespace std::chrono_literals;
  *
  * @author Michele Crepaldi s269551
  */
-enum class FileSystemStatus {notAStatus, created, modified, deleted};
+enum class FileSystemStatus {notAStatus, created, deleted};
 
 /**
  * class to use to watch the file system for changes
@@ -72,19 +73,12 @@ public:
             for(const auto& file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
                 auto current_file = Directory_entry(file);
 
+                if(current_file.getType() == Directory_entry_TYPE::notAType) //if it is not a file nor a directory don't do anything and go on
+                    continue;
+
                 if(!contains(file.path().string())) { //file creation
                     if(action(current_file, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
                         paths_[current_file.getPath()] = current_file;
-
-                } else if(paths_[current_file.getPath()].getLastWriteTime() != current_file.getLastWriteTime()) { //file modification
-                    if(current_file.getType() == Directory_entry_TYPE::directory){ //if the modified entry is a directory don't do anything, just update the entry (a directory is modified when its content changes.. so we are not interested in it since we will iterate also on its content)
-                        paths_[current_file.getPath()] = current_file;
-                        continue;
-                    }
-                    if(action(current_file, FileSystemStatus::modified)) { //if the action was successful then overwrite the element to paths_; otherwise this element will be overwritten later
-                        current_file.assignPrevHash(paths_[current_file.getPath()].getHash()); //save the previous hash
-                        paths_[current_file.getPath()] = current_file;
-                    }
                 }
             }
         }
@@ -92,7 +86,7 @@ public:
 
     /**
      * stops the FileSystemWatcher
-     * @return nothing
+     * @return nothing (not used for now)
      *
      * @author Michele Crepaldi s269551
      */
