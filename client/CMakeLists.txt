@@ -3,7 +3,10 @@ project(client)
 
 set(CMAKE_CXX_STANDARD 17)
 set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp Event.h
-        Circular_vector.cpp Circular_vector.h Thread_guard.cpp Thread_guard.h Hash.cpp Hash.h Socket.h Socket.cpp Message.cpp Message.h)
+        Circular_vector.cpp Circular_vector.h Thread_guard.cpp Thread_guard.h Hash.cpp Hash.h Message.cpp Message.h
+        ../myLibraries/Socket.cpp ../myLibraries/messages.pb.cc)
+
+include_directories(../myLibraries)
 set(PROJECT_NAME client)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})

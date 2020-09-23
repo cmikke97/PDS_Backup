@@ -1,0 +1,43 @@
+syntax = "proto2";
+
+package messages;
+
+message ClientMessage{
+  required int32 version = 1;
+  required Type type = 2 [default = NOOP];
+
+  optional string path = 3;           //for STOR, DELE, MKD, RMD
+  optional uint64 fileSize = 4;       //for STOR
+  optional string lastWriteTime = 5;  //for STOR
+  optional bytes hash = 6;            //for STOR, DELE
+  optional string username = 7;       //for USER
+  optional bytes hashedPassword = 8;  //for PASS
+
+  enum Type{
+    NOOP = 0;
+    STOR = 1;
+    DELE = 2;
+    MKD = 3;
+    RMD = 4;
+    USER = 5;
+    PASS = 6;
+    QUIT = 7;
+  }
+}
+
+message ServerMessage{
+  required int32 version = 1;
+  required Type type = 2 [default = NOOP];
+
+  optional int32 errcode = 3; //for ERR
+  optional bytes salt = 4;    //for SALT
+
+  enum Type{
+    NOOP = 0;
+    OK = 1;
+    SEND = 2;
+    ERR = 3;
+    SALT = 4;
+    VER = 5;
+  }
+}

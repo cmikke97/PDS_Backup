@@ -11,7 +11,8 @@
 #include "Event.h"
 #include "Circular_vector.h"
 #include "Thread_guard.h"
-#include "Socket.h"
+#include "../myLibraries/Socket.h"
+#include "messages.pb.h"
 
 #define EVENT_QUEUE_SIZE 20 //dimension of the event queue, a.k.a. how many events can be putted in queue at the same time
 #define SECONDS_BETWEEN_RECONNECTIONS 10
