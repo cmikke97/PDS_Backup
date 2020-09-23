@@ -56,11 +56,12 @@ Directory_entry::Directory_entry(std::string path, std::string name, uintmax_t s
         temp << path << size << last_write_time;
         hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
     }
+    /*
     else if(type==Directory_entry_TYPE::directory){
         std::stringstream temp;
         temp << path;
         hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
-    }
+    }*/
 }
 
 /**
@@ -147,26 +148,4 @@ bool Directory_entry::is_directory() {
  */
 Hash& Directory_entry::getHash() {
     return hash;
-}
-
-/**
- * assign previous hash to this element (before edit)
- *
- * @param prev hash
- *
- * @author Michele Crepaldi s269551
- */
-void Directory_entry::assignPrevHash(Hash prev) {
-    prevHash = prev;
-}
-
-/**
- * get the previous hash for this element (before edit)
- *
- * @return previous hash
- *
- * @author Michele Crepaldi s269551
- */
-Hash& Directory_entry::getPrevHash() {
-    return prevHash;
 }
