@@ -4,9 +4,6 @@
 
 #include "Event.h"
 
-#include <utility>
-#include <cstring>
-
 /**
  * constructor of Event Object
  *
