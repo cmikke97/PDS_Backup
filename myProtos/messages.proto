@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package messages;
+
+//client messages
+message ClientMessage{
+  int32 version = 1;  //version of the protocol
+  Type type = 2; //type of message
+
+  string path = 3;           //for STOR, DELE, MKD, RMD
+  uint64 fileSize = 4;       //for STOR
+  string lastWriteTime = 5;  //for STOR
+  bytes hash = 6;            //for STOR, DELE
+  string username = 7;       //for USER
+  bytes hashedPassword = 8;  //for PASS
+
+  enum Type{
+    NOOP = 0;
+    STOR = 1;
+    DELE = 2;
+    MKD = 3;
+    RMD = 4;
+    USER = 5;
+    PASS = 6;
+    QUIT = 7;
+  }
+}
+
+//server messages
+message ServerMessage{
+  int32 version = 1;  //version of the protocol
+  Type type = 2; //type of message
+
+  int32 errcode = 3; //for ERR
+  bytes salt = 4;    //for SALT
+
+  enum Type{
+    NOOP = 0;
+    OK = 1;
+    SEND = 2;
+    ERR = 3;
+    SALT = 4;
+    VER = 5;
+  }
+}
