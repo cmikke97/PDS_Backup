@@ -61,7 +61,7 @@ else () #if on unix
     find_package(Protobuf)
 
     #print a simple message
-    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on windows")
+    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on linux")
 
     #include protocol buffers directories
     include_directories(${Protobuf_INCLUDE_DIRS})
