@@ -26,7 +26,7 @@ if (CYGWIN) #if on windows
     message(STATUS "Using OpenSSL ${OPENSSL_VERSION} on windows")
 
     #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
-    file(TO_CMAKE_PATH $ENV{PROTOC_ROOT} PROTOC_ROOT_DIR)
+    file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} PROTOC_ROOT_DIR)
     #replace the sequence "C/" to "C:/"
     string(REGEX REPLACE "C/" "C:/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
     #set some variables (directories)
