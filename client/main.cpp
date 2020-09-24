@@ -17,7 +17,7 @@
 #define SECONDS_BETWEEN_RECONNECTIONS 10
 #define TIMEOUT 300 //seconds to wait before client-server connection timeout (5 minutes)
 
-void communicate(std::atomic<bool> &, Circular_vector<Event> &, const std::string &, const std::string &);
+void communicate(std::atomic<bool> &, Circular_vector<Event> &, const std::string &, const std::string &, const std::string &, const std::string &);
 
 /**
  * the client main function
@@ -33,9 +33,8 @@ int main(int argc, char **argv) {
     // compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    if (argc != 4) {
-        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port]"
-                  << std::endl;
+    if (argc != 6) {
+        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port] [username] [password]" << std::endl;
         exit(1);
     }
 
@@ -48,10 +47,12 @@ int main(int argc, char **argv) {
     //extract the arguments
     std::string server_ip = argv[2];
     std::string server_port = argv[3];
+    std::string username = argv[4];
+    std::string password = argv[5];
 
     // initialize the communication thread (thread that will communicate with the server) and an atomic boolean to make it stop
     std::atomic<bool> thread_stop = false;
-    std::thread communication_thread(communicate, std::ref(thread_stop), std::ref(eventQueue), server_ip, server_port);
+    std::thread communication_thread(communicate, std::ref(thread_stop), std::ref(eventQueue), server_ip, server_port, username, password);
 
     // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
     Thread_guard tg_communication(communication_thread, thread_stop);
@@ -66,7 +67,7 @@ int main(int argc, char **argv) {
 }
 
 void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQueue, const std::string &server_ip,
-                 const std::string &server_port) {
+                 const std::string &server_port, const std::string &username, const std::string &password) {
     messages::ClientMessage clientMessage;
     messages::ServerMessage serverMessage;
     std::string client_temp, server_temp;
@@ -81,18 +82,94 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
             Socket client_socket;
 
             //extract (front) event from event queue (blocking wait)
-            Event e = eventQueue.front();
+            if(!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
+                return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
             //connect with server
             client_socket.connect(&server_address, sizeof(server_address));
 
             //TODO authenticate user
+            //compute message
+            clientMessage.set_type(messages::ClientMessage_Type_USER);
+            clientMessage.set_username(username);
+            client_temp = clientMessage.SerializeAsString();
+            //send message to server
+            client_socket.sendString(client_temp, 0);
+
+            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+            clientMessage.Clear();
+
+            //get server response
+            server_temp = client_socket.recvString(0);
+
+            //parse server response
+            serverMessage.ParseFromString(server_temp);
+            std::cout << serverMessage.type();
+
+            switch (serverMessage.type()) {
+                case messages::ServerMessage_Type_SALT:
+                    //the response contains the user salt
+                    //get it and use it to compute password hash
+
+                    //TODO get salt
+
+                    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+                    serverMessage.Clear();
+
+                    //TODO compute password hash and send it
+
+                    break;
+                case messages::ServerMessage_Type_ERR:
+                    //retrieve error code
+                    errorCode = serverMessage.errcode();
+                    std::cerr << "Error: code " << errorCode << std::endl;
+
+                    //based on error code handle it
+                    //TODO handle error
+                    break;
+                case messages::ServerMessage_Type_VER:
+                    //server response contains the version to use
+                    //TODO handle version change
+                    break;
+                default:
+                    break;
+            }
+
+            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+            serverMessage.Clear();
 
             //after connection and authentication then iteratively do these things;
             //if any connection error occurs then redo connection and authentication
             while (!thread_stop.load()) {
-                //evaluate what to do
 
+                //extract (front) event from event queue; if nothing happens for TIMEOUT seconds then disconnect from server
+                std::optional<Event> m = eventQueue.frontWaitFor(TIMEOUT, thread_stop); //it return optionally the next event as value
+                if (!m.has_value()) { //if there is no value it means that it timed out!
+                    //create message
+                    clientMessage.set_type(messages::ClientMessage_Type_QUIT);
+
+                    //compute message
+                    client_temp = clientMessage.SerializeAsString();
+
+                    //send message to server
+                    client_socket.sendString(client_temp, 0);
+
+                    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+                    clientMessage.Clear();
+
+                    //connection will be closed automatically by the client_socket destructor
+
+                    if(thread_stop.load()) //if we are here because the thread_stop atomic boolean then return
+                        return;
+
+                    //otherwise just close connection and loop
+                    break;
+                }
+
+                // if an event has occured then assign it to the current event to be handled
+                Event e = m.value();
+
+                //evaluate what to do
                 if (e.getElement().is_regular_file()) {   //if the element is a file
                     switch (e.getStatus()) {
                         case FileSystemStatus::created: //file created
@@ -152,31 +229,38 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                     client_temp = clientMessage.SerializeAsString();
 
                     //send message to server
-                    client_socket.stringWrite(client_temp, 0);
+                    client_socket.sendString(client_temp, 0);
 
                     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
                     clientMessage.Clear();
 
-                    server_temp = client_socket.stringRead(0);
+                    //get server response
+                    server_temp = client_socket.recvString(0);
 
+                    //parse server response
                     serverMessage.ParseFromString(server_temp);
-                    std::cout << serverMessage.type();
+
+                    //if the message is a send then check also if the event is about the creation of a file
+                    if(serverMessage.type() == messages::ServerMessage_Type_SEND && e.getElement().is_regular_file() && e.getStatus() == FileSystemStatus::created){
+                        //send file
+
+                        //send file to server
+                        client_socket.sendFile(e.getElement().getPath(), 0);
+
+                        //clear the server message
+                        serverMessage.Clear();
+                        //get server response
+                        server_temp = client_socket.recvString(0);
+
+                        //parse server response
+                        serverMessage.ParseFromString(server_temp);
+                    }
 
                     switch (serverMessage.type()) {
                         case messages::ServerMessage_Type_OK:
                             // do nothing. The command succeded
                             std::cout << "Command for " << e.getElement().getPath() << " has been sent to server"
                                       << std::endl;
-                            break;
-                        case messages::ServerMessage_Type_SEND:
-                            //send file
-
-                            //check if the event is about the creation of a file
-                            if (!e.getElement().is_regular_file() || e.getStatus() != FileSystemStatus::created) {
-                                break; //exit the switch and go on (do not send anything)
-                            }
-
-                            //TODO read and send file
                             break;
                         case messages::ServerMessage_Type_ERR:
                             //retrieve error code
@@ -187,33 +271,17 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                             //TODO handle error
                             break;
                         default:
+                            //unrecognised message type
+                            std::cerr << "Unrecognised message type" << std::endl;
                             break;
                     }
+
+                    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+                    serverMessage.Clear();
                 }
 
                 //in case everything went smoothly then pop event from event queue
                 eventQueue.pop();
-
-                //extract (front) event from event queue; if nothing happens for TIMEOUT seconds then disconnect from server
-                std::optional<Event> m = eventQueue.frontWaitFor(
-                        TIMEOUT); //it return optionally the next event as value
-                if (!m.has_value()) { //if there is no value it means that it timed out!
-                    //create message
-                    clientMessage.set_type(messages::ClientMessage_Type_QUIT);
-
-                    //compute message
-                    client_temp = clientMessage.SerializeAsString();
-
-                    //send message to server
-                    client_socket.stringWrite(client_temp, 0);
-
-                    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                    clientMessage.Clear();
-                    break;
-                }
-
-                // if an event has occured then assign it to the current event to be handled
-                e = m.value();
             }
         }
         catch (std::runtime_error &err) {

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <optional>
+#include <atomic>
 
 /**
  * generic and thread safe circular vector with functions to push, try to push, return (a reference) and pop an element to/from the vector
@@ -51,7 +52,8 @@ public:
     }
 
     /**
-     * function which tries to push an object in the circular vector; if the circular vector is full then it immediately returns false, otherwise it pushes the object and it returns true
+     * function which tries to push an object in the circular vector; if the circular vector is full then it immediately returns false,
+     * otherwise it pushes the object and it returns true
      *
      * @param t object to push in the circular vector
      * @return whether the element was successfully pushed in the circular vector or not
@@ -84,20 +86,41 @@ public:
     }
 
     /**
-     * function which returns a reference to the element in the head of the circular vector (it doesn't pop it)
+     * function which returns a reference to the element in the head of the circular vector (it doesn't pop it);
      * it also waits for timeout time before returning in any case
+     * <p>
+     * moreover the waiting can be stopped by the stop atomic boolean given in input, in such case it also returns nullopt
+     * but for a different reason -> it will be the caller job to recognise it (looking at the stop atomic boolean)
      *
+     * @param stop atomic boolean for witch to stop
      * @param timeout time to wait
      *
      * @return a reference to the first object inserted in the circular vector (the head of the circular vector) or a nullopt value (if timeout)
      *
      * @author Michele Crepaldi s269551
      */
-    std::optional<T> frontWaitFor(int timeout){
+    std::optional<T> frontWaitFor(int timeout, std::atomic<bool> &stop){
         std::unique_lock l(m);
-        if (!cvPop.wait_for(l, std::chrono::seconds(timeout), [this](){return start != end;})) //if false it means that it timed out!
+        if (!cvPop.wait_for(l, std::chrono::seconds(timeout), [this, &stop](){return start != end || stop.load();})) //if false it means that it timed out!
             return std::nullopt;
         return std::optional<T>{v[start]};
+    }
+
+    /**
+     * function used to know if there are elements that can be popped from the circular vector
+     * or if we were told to stop.
+     * <p>
+     * It blocks the thread until something can be popped or if stop is true
+     *
+     * @param stop
+     * @return true if there is an element, false if stop is true
+     *
+     * @author Michele Crepaldi
+     */
+    bool waitForCondition(std::atomic<bool> &stop){
+        std::unique_lock l(m);
+        cvPop.wait(l, [this, &stop](){return start != end || stop.load();}); //stop will be always false, it will be true only when we want to close the program
+        return !stop.load();
     }
 
     /**
