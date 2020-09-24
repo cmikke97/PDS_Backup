@@ -49,17 +49,20 @@ if (CYGWIN) #if on windows
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
     #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+    #add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
+    #target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
 
 else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread -lprotobuf")
 
+    #add all source files to project executable + message objects automatically generated
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+
     #target the OpenSSL crypto libraries to the project
-    target_link_libraries(${PROJECT_NAME} PUBLIC ssl crypto)
+    target_link_libraries(${PROJECT_NAME} ssl crypto)
 
     #print a simple message
     message(STATUS "Using OpenSSL on linux")
@@ -67,7 +70,7 @@ else () #if on unix
 endif ()
 
 #add my custom libraries and the protocol buffers library to myLibrary
-add_library(myLibrary STATIC  "../myLibraries/Socket.cpp" "../myLibraries/Socket.h")
+add_library(myLibrary STATIC "../myLibraries/Socket.cpp" "../myLibraries/Socket.h")
 
 #target my custom library to the project
 target_link_libraries(${PROJECT_NAME} myLibrary)
