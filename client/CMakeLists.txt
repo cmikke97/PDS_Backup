@@ -14,7 +14,7 @@ if (CYGWIN) #if on windows
     #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{OPENSSL_ROOT} OPENSSL_ROOT_DIR)
     #replace the sequence "C/" to "C:/"
-    string(REGEX REPLACE "C/" "C:/" OPENSSL_ROOT_DIR ${OPENSSL_ROOT_DIR})
+    string(REGEX REPLACE "C/" "/cygdrive/c/" OPENSSL_ROOT_DIR ${OPENSSL_ROOT_DIR})
     #set some variables (directories)
     set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_ROOT_DIR}/bin/libcrypto-1_1-x64.dll)
     set(OPENSSL_INCLUDE_DIR ${OPENSSL_ROOT_DIR}/include)
@@ -28,7 +28,7 @@ if (CYGWIN) #if on windows
     #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} PROTOC_ROOT_DIR)
     #replace the sequence "C/" to "C:/"
-    string(REGEX REPLACE "C/" "C:/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
+    string(REGEX REPLACE "C/" "/cygdrive/c/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
     #set some variables (directories)
     set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_ROOT_DIR}/bin/protoc.exe)
     set(Protobuf_LIBRARY ${PROTOC_ROOT_DIR}/lib/libprotobuf.dll.a)

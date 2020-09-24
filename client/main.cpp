@@ -7,7 +7,6 @@
 #include <iostream>
 #include <atomic>
 #include "FileSystemWatcher.h"
-#include "Directory_entry.h"
 #include "Event.h"
 #include "Circular_vector.h"
 #include "Thread_guard.h"
@@ -18,7 +17,7 @@
 #define SECONDS_BETWEEN_RECONNECTIONS 10
 #define TIMEOUT 300 //seconds to wait before client-server connection timeout (5 minutes)
 
-void communicate(std::atomic<bool>&, Circular_vector<Event>&, const std::string&, const std::string&);
+void communicate(std::atomic<bool> &, Circular_vector<Event> &, const std::string &, const std::string &);
 
 /**
  * the client main function
@@ -34,8 +33,9 @@ int main(int argc, char **argv) {
     // compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    if(argc != 4){
-        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port]" << std::endl;
+    if (argc != 4) {
+        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port]"
+                  << std::endl;
         exit(1);
     }
 
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     Thread_guard tg_communication(communication_thread, thread_stop);
 
     // Start monitoring a folder for changes and (in case of changes) run a user provided lambda function
-    fw.start([&eventQueue](Directory_entry& element, FileSystemStatus status) -> bool {
+    fw.start([&eventQueue](Directory_entry &element, FileSystemStatus status) -> bool {
         //it returns true if the object was successfully pushed, false otherwise; in any case it returns immediately with no waiting.
         //This is done is such way as to not be blocked waiting for the queue to be not full.
         //So elements not pushed successfully won't be added to the already watched ones and this process will be repeated after some time
@@ -65,15 +65,16 @@ int main(int argc, char **argv) {
     });
 }
 
-void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQueue, const std::string& server_ip, const std::string& server_port){
+void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQueue, const std::string &server_ip,
+                 const std::string &server_port) {
     messages::ClientMessage clientMessage;
     messages::ServerMessage serverMessage;
     std::string client_temp, server_temp;
     int errorCode;
 
     // this thread will loop until it will be told to stop
-    while(!thread_stop.load()){
-        try{
+    while (!thread_stop.load()) {
+        try {
             struct sockaddr_in server_address = Socket::composeAddress(server_ip, server_port);
 
             //initialize socket
@@ -89,11 +90,11 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
 
             //after connection and authentication then iteratively do these things;
             //if any connection error occurs then redo connection and authentication
-            while(!thread_stop.load()) {
+            while (!thread_stop.load()) {
                 //evaluate what to do
 
-                if(e.getElement().is_regular_file()){   //if the element is a file
-                    switch(e.getStatus()) {
+                if (e.getElement().is_regular_file()) {   //if the element is a file
+                    switch (e.getStatus()) {
                         case FileSystemStatus::created: //file created
                             std::cout << "File created: " << e.getElement().getPath() << "response from server: ";
 
@@ -102,7 +103,8 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                             clientMessage.set_path(e.getElement().getPath());
                             clientMessage.set_filesize(e.getElement().getSize());
                             clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                            clientMessage.set_hash(e.getElement().getHash().getValue().first, e.getElement().getHash().getValue().second);
+                            clientMessage.set_hash(e.getElement().getHash().getValue().first,
+                                                   e.getElement().getHash().getValue().second);
                             break;
 
                         case FileSystemStatus::deleted: //file deleted
@@ -111,15 +113,15 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                             //create message
                             clientMessage.set_type(messages::ClientMessage_Type_DELE);
                             clientMessage.set_path(e.getElement().getPath());
-                            clientMessage.set_hash(e.getElement().getHash().getValue().first, e.getElement().getHash().getValue().second);
+                            clientMessage.set_hash(e.getElement().getHash().getValue().first,
+                                                   e.getElement().getHash().getValue().second);
                             break;
 
                         default:
                             std::cerr << "Error! Unknown file status." << std::endl;
                     }
-                }
-                else if(e.getElement().is_directory()){ //if the element is a directory
-                    switch(e.getStatus()) {
+                } else if (e.getElement().is_directory()) { //if the element is a directory
+                    switch (e.getStatus()) {
                         case FileSystemStatus::created: //directory created
                             std::cout << "Directory created: " << e.getElement().getPath() << std::endl;
 
@@ -139,13 +141,12 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                         default:
                             std::cerr << "Error! Unknown file status." << std::endl;
                     }
-                }
-                else{
+                } else {
                     std::cerr << "change to an unsupported type." << std::endl;
                 }
 
                 //if the event is of a supported type
-                if(e.getElement().is_regular_file() || e.getElement().is_directory()) {
+                if (e.getElement().is_regular_file() || e.getElement().is_directory()) {
                     //compute message
                     //clientMessage.SerializeToString(&message);
                     client_temp = clientMessage.SerializeAsString();
@@ -194,8 +195,9 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                 eventQueue.pop();
 
                 //extract (front) event from event queue; if nothing happens for TIMEOUT seconds then disconnect from server
-                std::optional<Event> m = eventQueue.frontWaitFor(TIMEOUT); //it return optionally the next event as value
-                if(!m.has_value()){ //if there is no value it means that it timed out!
+                std::optional<Event> m = eventQueue.frontWaitFor(
+                        TIMEOUT); //it return optionally the next event as value
+                if (!m.has_value()) { //if there is no value it means that it timed out!
                     //create message
                     clientMessage.set_type(messages::ClientMessage_Type_QUIT);
 
@@ -214,7 +216,7 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
                 e = m.value();
             }
         }
-        catch (std::runtime_error &err){
+        catch (std::runtime_error &err) {
             //error in connection; retry later; wait for x seconds
             std::cout << "Connection error. Retry in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
