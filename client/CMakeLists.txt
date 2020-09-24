@@ -49,20 +49,34 @@ if (CYGWIN) #if on windows
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
     #add all source files to project executable + message objects automatically generated
-    #add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    #target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
 
 else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread -lprotobuf")
 
-    #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+    find_package(Protobuf)
 
-    #target the OpenSSL crypto libraries to the project
-    target_link_libraries(${PROJECT_NAME} ssl crypto)
+    #print a simple message
+    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on windows")
+
+    #include protocol buffers directories
+    include_directories(${Protobuf_INCLUDE_DIRS})
+
+    #include current binary dir
+    include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+    #generate the messages object from messages.proto file (it is done every time you compile the project..)
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
+
+    #add all source files to project executable + message objects automatically generated
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+
+    #link OpenSSL and Protobuf libraries to the project
+    target_link_libraries(${PROJECT_NAME} ssl crypto ${Protobuf_LIBRARIES})
 
     #print a simple message
     message(STATUS "Using OpenSSL on linux")
