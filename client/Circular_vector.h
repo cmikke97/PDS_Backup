@@ -93,9 +93,9 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    T& frontWaitFor(int timeout){
+    std::optional<T> frontWaitFor(int timeout){
         std::unique_lock l(m);
-        if (cvPop.wait_for(l, std::chrono::seconds(timeout), [this](){return start != end;}) == std::cv_status::timeout)
+        if (!cvPop.wait_for(l, std::chrono::seconds(timeout), [this](){return start != end;})) //if false it means that it timed out!
             return std::nullopt;
         return std::optional<T>{v[start]};
     }

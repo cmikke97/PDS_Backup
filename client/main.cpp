@@ -91,187 +91,103 @@ void communicate(std::atomic<bool> &thread_stop, Circular_vector<Event> &eventQu
             //if any connection error occurs then redo connection and authentication
             while(!thread_stop.load()) {
                 //evaluate what to do
-                if(e.getElement().is_regular_file()){
-                    switch(e.getStatus()) {
-                        case FileSystemStatus::created:
-                            std::cout << "File created: " << e.getElement().getPath() << "response from server: ";
-                            //file created
 
+                if(e.getElement().is_regular_file()){   //if the element is a file
+                    switch(e.getStatus()) {
+                        case FileSystemStatus::created: //file created
+                            std::cout << "File created: " << e.getElement().getPath() << "response from server: ";
+
+                            //create message
                             clientMessage.set_type(messages::ClientMessage_Type_STOR);
                             clientMessage.set_path(e.getElement().getPath());
                             clientMessage.set_filesize(e.getElement().getSize());
                             clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
                             clientMessage.set_hash(e.getElement().getHash().getValue().first, e.getElement().getHash().getValue().second);
-
-                            //compute message
-                            //clientMessage.SerializeToString(&message);
-                            client_temp = clientMessage.SerializeAsString();
-
-                            //send message to server
-                            client_socket.stringWrite(client_temp, 0);
-
-                            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                            clientMessage.Clear();
-
-                            server_temp = client_socket.stringRead(0);
-
-                            serverMessage.ParseFromString(server_temp);
-                            std::cout << serverMessage.type() ;
-
-                            switch(serverMessage.type()){
-                                case messages::ServerMessage_Type_OK:
-                                    // do nothing. The command succeded (either the file was already there so no transfer is necessary OR the file was transfered correctly)
-                                    std::cout << "Element " << e.getElement().getPath() << " has been sent to server (or was already there)" << std::endl;
-                                    break;
-                                case messages::ServerMessage_Type_SEND:
-                                    //send file
-
-                                    //TODO read and send file
-                                    break;
-                                case messages::ServerMessage_Type_ERR:
-                                    //retrieve error code
-                                    errorCode = serverMessage.errcode();
-                                    std::cerr << "Error: code " << errorCode << std::endl;
-
-                                    //based on error code handle it
-                                    //TODO handle error
-                                    break;
-                                default:
-                                    break;
-                            }
                             break;
 
-                        case FileSystemStatus::deleted:
+                        case FileSystemStatus::deleted: //file deleted
                             std::cout << "File deleted: " << e.getElement().getPath() << std::endl;
-                            //file deleted
 
+                            //create message
                             clientMessage.set_type(messages::ClientMessage_Type_DELE);
                             clientMessage.set_path(e.getElement().getPath());
                             clientMessage.set_hash(e.getElement().getHash().getValue().first, e.getElement().getHash().getValue().second);
-
-                            //compute message
-                            //clientMessage.SerializeToString(&message);
-                            client_temp = clientMessage.SerializeAsString();
-
-                            //send message to server
-                            client_socket.stringWrite(client_temp, 0);
-
-                            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                            clientMessage.Clear();
-
-                            server_temp = client_socket.stringRead(0);
-
-                            serverMessage.ParseFromString(server_temp);
-                            std::cout << serverMessage.type() ;
-
-                            switch(serverMessage.type()){
-                                case messages::ServerMessage_Type_OK:
-                                    // do nothing. The command succeded (either the file was already removed OR the file was removed correctly)
-                                    std::cout << "Element " << e.getElement().getPath() << " has been removed from server (or was already removed)" << std::endl;
-                                    break;
-                                case messages::ServerMessage_Type_ERR:
-                                    //retrieve error code
-                                    errorCode = serverMessage.errcode();
-                                    std::cerr << "Error: code " << errorCode << std::endl;
-
-                                    //based on error code handle it
-                                    //TODO handle error
-                                    break;
-                                default:
-                                    break;
-                            }
                             break;
 
                         default:
                             std::cerr << "Error! Unknown file status." << std::endl;
                     }
                 }
-                else if(e.getElement().is_directory()){
+                else if(e.getElement().is_directory()){ //if the element is a directory
                     switch(e.getStatus()) {
-                        case FileSystemStatus::created:
+                        case FileSystemStatus::created: //directory created
                             std::cout << "Directory created: " << e.getElement().getPath() << std::endl;
-                            //directory created
+
+                            //create message
                             clientMessage.set_type(messages::ClientMessage_Type_MKD);
                             clientMessage.set_path(e.getElement().getPath());
-
-                            //compute message
-                            //clientMessage.SerializeToString(&message);
-                            client_temp = clientMessage.SerializeAsString();
-
-                            //send message to server
-                            client_socket.stringWrite(client_temp, 0);
-
-                            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                            clientMessage.Clear();
-
-                            server_temp = client_socket.stringRead(0);
-
-                            serverMessage.ParseFromString(server_temp);
-                            std::cout << serverMessage.type() ;
-
-                            switch(serverMessage.type()){
-                                case messages::ServerMessage_Type_OK:
-                                    // do nothing. The command succeded (either the file was already there so no transfer is necessary OR the file was transfered correctly)
-                                    std::cout << "Element " << e.getElement().getPath() << " has been sent to server (or was already there)" << std::endl;
-                                    break;
-                                case messages::ServerMessage_Type_ERR:
-                                    //retrieve error code
-                                    errorCode = serverMessage.errcode();
-                                    std::cerr << "Error: code " << errorCode << std::endl;
-
-                                    //based on error code handle it
-                                    //TODO handle error
-                                    break;
-                                default:
-                                    break;
-                            }
                             break;
 
-                        case FileSystemStatus::deleted:
+                        case FileSystemStatus::deleted: //directory deleted
                             std::cout << "Directory deleted: " << e.getElement().getPath() << std::endl;
-                            //directory deleted
 
+                            //create message
                             clientMessage.set_type(messages::ClientMessage_Type_RMD);
                             clientMessage.set_path(e.getElement().getPath());
-
-                            //compute message
-                            //clientMessage.SerializeToString(&message);
-                            client_temp = clientMessage.SerializeAsString();
-
-                            //send message to server
-                            client_socket.stringWrite(client_temp, 0);
-
-                            //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                            clientMessage.Clear();
-
-                            server_temp = client_socket.stringRead(0);
-
-                            serverMessage.ParseFromString(server_temp);
-                            std::cout << serverMessage.type() ;
-
-                            switch(serverMessage.type()){
-                                case messages::ServerMessage_Type_OK:
-                                    // do nothing. The command succeded (either the file was already there so no transfer is necessary OR the file was transfered correctly)
-                                    std::cout << "Element " << e.getElement().getPath() << " has been sent to server (or was already there)" << std::endl;
-                                    break;
-                                case messages::ServerMessage_Type_ERR:
-                                    //retrieve error code
-                                    errorCode = serverMessage.errcode();
-                                    std::cerr << "Error: code " << errorCode << std::endl;
-
-                                    //based on error code handle it
-                                    //TODO handle error
-                                    break;
-                                default:
-                                    break;
-                            }
                             break;
+
                         default:
                             std::cerr << "Error! Unknown file status." << std::endl;
                     }
                 }
                 else{
                     std::cerr << "change to an unsupported type." << std::endl;
+                }
+
+                //if the event is of a supported type
+                if(e.getElement().is_regular_file() || e.getElement().is_directory()) {
+                    //compute message
+                    //clientMessage.SerializeToString(&message);
+                    client_temp = clientMessage.SerializeAsString();
+
+                    //send message to server
+                    client_socket.stringWrite(client_temp, 0);
+
+                    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+                    clientMessage.Clear();
+
+                    server_temp = client_socket.stringRead(0);
+
+                    serverMessage.ParseFromString(server_temp);
+                    std::cout << serverMessage.type();
+
+                    switch (serverMessage.type()) {
+                        case messages::ServerMessage_Type_OK:
+                            // do nothing. The command succeded
+                            std::cout << "Command for " << e.getElement().getPath() << " has been sent to server"
+                                      << std::endl;
+                            break;
+                        case messages::ServerMessage_Type_SEND:
+                            //send file
+
+                            //check if the event is about the creation of a file
+                            if (!e.getElement().is_regular_file() || e.getStatus() != FileSystemStatus::created) {
+                                break; //exit the switch and go on (do not send anything)
+                            }
+
+                            //TODO read and send file
+                            break;
+                        case messages::ServerMessage_Type_ERR:
+                            //retrieve error code
+                            errorCode = serverMessage.errcode();
+                            std::cerr << "Error: code " << errorCode << std::endl;
+
+                            //based on error code handle it
+                            //TODO handle error
+                            break;
+                        default:
+                            break;
+                    }
                 }
 
                 //in case everything went smoothly then pop event from event queue
