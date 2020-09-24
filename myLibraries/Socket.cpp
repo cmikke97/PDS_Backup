@@ -3,6 +3,8 @@
 //
 
 #include <vector>
+#include <filesystem>
+#include <fstream>
 #include "Socket.h"
 
 /**
@@ -153,9 +155,11 @@ struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::st
  * @param stringBuffer string to write to socket
  * @param options
  *
+ * @throw runtime error in case it cannot write data to socket
+ *
  * @author Michele Crepaldi
  */
-void Socket::stringWrite(std::string &stringBuffer, int options) {
+void Socket::sendString(std::string &stringBuffer, int options) {
     write(stringBuffer.c_str(), stringBuffer.length(), options);
 
     //alternativa
@@ -173,9 +177,11 @@ void Socket::stringWrite(std::string &stringBuffer, int options) {
  * @param options
  * @return string read from socket
  *
+ * @throw runtime error in case it cannot read data from socket
+ *
  * @author Michele Crepaldi
  */
-std::string Socket::stringRead(int options) {
+std::string Socket::recvString(int options) {
     // create the buffer with space for the data
     const unsigned int MAX_BUF_LENGTH = 4096;
     std::vector<char> buffer(MAX_BUF_LENGTH);
@@ -209,6 +215,89 @@ std::string Socket::stringRead(int options) {
     stringBuffer.assign(reinterpret_cast<const char *>(&(rcvBuf[0])), rcvBuf.size()); // assign buffered data to a string
     return stringBuffer;
     */
+}
+
+/**
+ * function which reads a file from the filesystem and sends it (in blocks) through the socket
+ *
+ * @param path path of the file to send
+ * @param options
+ *
+ * @throw runtime error in case it cannot write data to socket
+ * @throw runtime error in case the sent bytes are less than file size
+ * @throw runtime error in case the path does not correspond to a file
+ *
+ * @author Michele Crepaldi
+ */
+void Socket::sendFile(const std::filesystem::path& path, int options) {
+    //initialize variables
+    std::ifstream file;
+    std::filesystem::directory_entry element(path);
+    char buff[MAXBUFFSIZE];
+    uintmax_t totalBytesSent = 0;
+
+    if(!element.is_regular_file())
+        throw std::runtime_error("Not a file"); //if the element is not a file throw an exception
+
+    //open input file
+    file.open(path, std::ios::in | std::ios::binary);
+
+    if(file.is_open()){
+        //read file in MAXBUFFSIZE-wide blocks
+        while(file.read(buff, MAXBUFFSIZE))
+            //send block and update total amount of bytes sent
+            totalBytesSent += this->write(buff, file.gcount(), options);
+    }
+
+    //close the input file
+    file.close();
+
+    //check total amout of bytes sent against file size
+    if(totalBytesSent != element.file_size())
+        throw std::runtime_error("Sent less bytes than filesize"); //if they are different then throw an exception
+}
+
+/**
+ * function which receives a file through the socket (in blocks) and writes it to the filesystem
+ *
+ * @param path path where to save the received file to
+ * @param expectedFileSize expected file size (for checks)
+ * @param options
+ *
+ * @throw runtime error in case it cannot write data to socket
+ * @throw runtime error in case the received bytes are less than expected file size
+ *
+ * @author Michele Crepaldi
+ */
+void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileSize, int options) {
+    //initialize variables
+    std::ofstream file;
+    std::filesystem::directory_entry element(path);
+    char buff[MAXBUFFSIZE];
+    uintmax_t totalBytesReceived = 0;
+    int justReceived;
+
+    //open output file
+    file.open(path, std::ios::out | std::ios::binary);
+
+    if(file.is_open()){
+        //receive file in MAXBUFFSIZE-wide blocks
+        do{
+            justReceived = this->read(buff, MAXBUFFSIZE, options);
+
+            //write block to file and update total amount of bytes received
+            totalBytesReceived += justReceived;
+            file.write(buff, justReceived);
+        }
+        while(justReceived == MAXBUFFSIZE);
+    }
+
+    //close the output file
+    file.close();
+
+    //check total amout of bytes received against expected file size
+    if(totalBytesReceived != expectedFileSize)
+        throw std::runtime_error("received less bytes than expectedFileSize"); //if they are different then throw an exception
 }
 
 /**

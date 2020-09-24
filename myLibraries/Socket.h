@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#define MAXBUFFSIZE 1024
+
 /**
  * Socket class
  *
@@ -30,9 +32,11 @@ public:
     Socket(Socket &&other) noexcept;
     Socket& operator=(Socket &&other) noexcept;
     ssize_t read(char *buffer, size_t len, int options);
-    std::string stringRead(int options);
+    std::string recvString(int options);
+    void recvFile(const std::filesystem::path& path, uintmax_t expectedFileSize, int options);
     ssize_t write(const char *buffer, size_t len, int options);
-    void stringWrite(std::string &stringBuffer, int options);
+    void sendString(std::string &stringBuffer, int options);
+    void sendFile(const std::filesystem::path& path, int options);
     static struct sockaddr_in composeAddress(const std::string& addr, const std::string& port);
     void connect(struct sockaddr_in *addr, unsigned int len);
     int getSockfd();
