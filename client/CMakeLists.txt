@@ -49,10 +49,10 @@ if (CYGWIN) #if on windows
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
     #add all source files to project executable + message objects automatically generated
-    #add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    #target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
 
 else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)
