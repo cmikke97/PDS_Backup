@@ -16,10 +16,14 @@
 class Hash {
     unsigned char md_value[EVP_MAX_MD_SIZE]{};
     unsigned int md_len{};
+    EVP_MD_CTX *mdctx;
 
 public:
     Hash();
     Hash(const unsigned char *buf, unsigned long len);
+    void HashInit();
+    void HashUpdate(char *buf, unsigned long len);
+    void HashFinalize();
     std::pair<unsigned char*, unsigned long> getValue();
     bool operator==(Hash& h);
 };

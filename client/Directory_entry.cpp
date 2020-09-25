@@ -3,7 +3,11 @@
 //
 
 #include <iomanip>
+#include <fstream>
+#include <utility>
 #include "Directory_entry.h"
+
+#define MAXBUFFSIZE 1024
 
 /**
  * default constructor (it is needed by the pair class in map)
@@ -22,8 +26,7 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
  */
 Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
         Directory_entry(
-                entry.path().string(),
-                entry.path().filename().string(),
+                entry.path(),
                 entry.is_regular_file()?entry.file_size():0,
                 entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType),
                 entry.last_write_time()){
@@ -38,30 +41,51 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
  * @param type file or directory
  * @param file_time last modification time
  *
+ * @throw filesystem_error (if std::filesystem::relative fails)
+ *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(std::string path, std::string name, uintmax_t size, Directory_entry_TYPE type,
-                                 std::filesystem::file_time_type file_time): path(std::move(path)), name(std::move(name)), type(type){
+Directory_entry::Directory_entry(const std::filesystem::path& path, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time) :
+                                 relativePath(std::filesystem::relative(path,baseDir).string()), absolutePath(path.string()), type(type){
 
+    //if it is a file then set its size, if it is a directory then size is 0
     size = type==Directory_entry_TYPE::file?size:0;
 
+    //convert file time to string
     std::time_t tt = to_time_t(file_time);
     std::tm *gmt = std::gmtime(&tt);
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
     last_write_time = buffer.str();
 
+    //if the entry is a file then compute its hash
     if(type==Directory_entry_TYPE::file) {
+        //initialize stream and buffer
+        std::ifstream file;
+        char buff[MAXBUFFSIZE];
+
+        //initialize hash
+        hash.HashInit();
+
+        //open file
+        file.open(absolutePath, std::ios::in | std::ios::binary);
+
+        //read file and update hash
+        if(file.is_open()){
+            while(file.read(buff, MAXBUFFSIZE))
+                hash.HashUpdate(buff, file.gcount());
+        }
+        //concatenate other info together
         std::stringstream temp;
-        temp << path << size << last_write_time;
-        hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
+        //temp << relativePath << size << last_write_time;
+        temp << relativePath << size;
+
+        //update hash with other info
+        hash.HashUpdate(const_cast<char *>(temp.str().c_str()), temp.str().length());
+
+        //finalize hash
+        hash.HashFinalize();
     }
-    /*
-    else if(type==Directory_entry_TYPE::directory){
-        std::stringstream temp;
-        temp << path;
-        hash = Hash{reinterpret_cast<const unsigned char *>(temp.str().c_str()), temp.str().length()};
-    }*/
 }
 
 /**
@@ -71,8 +95,8 @@ Directory_entry::Directory_entry(std::string path, std::string name, uintmax_t s
  *
  * @author Michele Crepaldi s269551
  */
-std::string Directory_entry::getPath() {
-    return path;
+std::string Directory_entry::getRelativePath() {
+    return relativePath;
 }
 
 /**
@@ -82,8 +106,8 @@ std::string Directory_entry::getPath() {
  *
  * @author Michele Crepaldi s269551
  */
-std::string Directory_entry::getName() {
-    return name;
+std::string Directory_entry::getAbsolutePath() {
+    return absolutePath;
 }
 
 /**
@@ -93,7 +117,7 @@ std::string Directory_entry::getName() {
  *
  * @author Michele Crepaldi s269551
  */
-uintmax_t Directory_entry::getSize() {
+uintmax_t Directory_entry::getSize() const {
     return size;
 }
 
@@ -148,4 +172,15 @@ bool Directory_entry::is_directory() {
  */
 Hash& Directory_entry::getHash() {
     return hash;
+}
+
+/**
+ * set the base directory as the one given as argument
+ *
+ * @param dir
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Directory_entry::setBaseDir(std::string dir) {
+    baseDir = std::move(dir);
 }

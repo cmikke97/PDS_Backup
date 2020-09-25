@@ -1,19 +1,21 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.17)
 project(client)
 
 set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
 set(PROJECT_NAME client)
-set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp Event.h
-        Circular_vector.cpp Circular_vector.h Thread_guard.cpp Thread_guard.h Hash.cpp Hash.h Message.cpp Message.h)
+set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp
+        Event.h Thread_guard.cpp Thread_guard.h)
+set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
+        ../myLibraries/Circular_vector.cpp ../myLibraries/Circular_vector.h)
 
 #now we want to include OpenSSL and protocol buffers
 if (CYGWIN) #if on windows
 
     #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{OPENSSL_ROOT} OPENSSL_ROOT_DIR)
-    #replace the sequence "C/" to "C:/"
+    #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" OPENSSL_ROOT_DIR ${OPENSSL_ROOT_DIR})
     #set some variables (directories)
     set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_ROOT_DIR}/bin/libcrypto-1_1-x64.dll)
@@ -27,7 +29,7 @@ if (CYGWIN) #if on windows
 
     #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} PROTOC_ROOT_DIR)
-    #replace the sequence "C/" to "C:/"
+    #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
     #set some variables (directories)
     set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_ROOT_DIR}/bin/protoc.exe)
@@ -49,10 +51,10 @@ if (CYGWIN) #if on windows
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
     #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto ${Protobuf_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto Protobuf)
 
 else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)
@@ -73,18 +75,17 @@ else () #if on unix
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
     #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PROTO_SRCS} ${PROTO_HDRS})
+    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} ssl crypto ${Protobuf_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} ssl crypto Protobuf)
 
     #print a simple message
     message(STATUS "Using OpenSSL on linux")
 
 endif ()
 
-#add my custom libraries and the protocol buffers library to myLibrary
-add_library(myLibrary STATIC "../myLibraries/Socket.cpp" "../myLibraries/Socket.h")
-
-#target my custom library to the project
-target_link_libraries(${PROJECT_NAME} myLibrary)
+find_package(SQLite3)
+include_directories(${SQLite3_INCLUDE_DIRS})
+target_link_libraries (${PROJECT_NAME} SQLite::SQLite3)
+message(STATUS "Using SQLite3 version ${SQLite3_VERSION}")

@@ -23,7 +23,15 @@ void handleErrors()
 Hash::Hash() = default;
 
 /**
- * constructor of this Hash object
+ * constructor of this Hash object in case you want an hash of a small object
+ * (not suitable with files because you would need to load them entirely in memory)
+ * <p>
+ * for hashing a <b>file</b> use this other methods in this order:
+ * <ul>
+ *      <li> <b> hashInit
+ *      <li> <b> hashUpdate (repeated for each block of data)
+ *      <li> <b> hashFinalize
+ * </ul>
  *
  * @param buf data to be hashed
  * @param len of the data
@@ -31,8 +39,6 @@ Hash::Hash() = default;
  * @author Michele Crepaldi s269551
  */
 Hash::Hash(const unsigned char *buf, unsigned long len) {
-    EVP_MD_CTX *mdctx;
-
     ERR_load_CRYPTO_strings();
 
     if((mdctx = EVP_MD_CTX_new()) == nullptr)
@@ -80,4 +86,53 @@ bool Hash::operator==(Hash &other) {
     if(myHash.second == otherHash.second) //if the len is the same (they should be unless there are errors)
         return CRYPTO_memcmp(myHash.first, otherHash.first, myHash.second); //then compare the two hashes in constant time
     return false;
+}
+
+/**
+ * function to initialize the hash object
+ *
+ * @author Michele Crepaldi s269551
+*/
+void Hash::HashInit() {
+    ERR_load_CRYPTO_strings();
+
+    if((mdctx = EVP_MD_CTX_new()) == nullptr)
+        handleErrors();
+
+    if(1 != EVP_MD_CTX_init(mdctx))
+        handleErrors();
+
+    if(1!=EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr))
+        handleErrors();
+}
+
+/**
+ * function to update the current hash with a block of data
+ * <p>
+ * <b>(don't forget to use HashFinalize after the last block!)
+ *
+ * @param buf buffer containing data to be hashed
+ * @param len length of the buffer
+ *
+ * @author Michele Crepaldi s269551
+*/
+void Hash::HashUpdate(char *buf, unsigned long len) {
+    if(1!=EVP_DigestUpdate(mdctx, buf, len))
+        handleErrors();
+}
+
+/**
+ * function to finalize the content of the hash after hashing the last block
+ * <p>
+ * <b>(it is necessary to use this!)
+ *
+ * @author Michele Crepaldi s269551
+*/
+void Hash::HashFinalize() {
+    if(1!=EVP_DigestFinal_ex(mdctx, md_value, &md_len))
+        handleErrors();
+
+    EVP_MD_CTX_free(mdctx);
+    EVP_cleanup();
+    ERR_free_strings();
 }
