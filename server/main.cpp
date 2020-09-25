@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
         unsigned int client_address_len;
         Socket clientSocket = socket.accept(&client_address, &client_address_len);
 
-        //TODO vai avanti...
+        //TODO vai avanti
 
     }catch(std::exception &e){
 
