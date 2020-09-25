@@ -7,7 +7,6 @@
 
 #include "Directory_entry.h"
 #include "FileSystemWatcher.h"
-#include "Message.h"
 
 /**
  * Event class

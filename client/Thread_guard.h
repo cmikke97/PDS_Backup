@@ -8,6 +8,11 @@
 #include <thread>
 #include <atomic>
 
+/**
+ * thread guard class
+ *
+ * @author Michele Crepaldi s269551
+ */
 class Thread_guard {
     std::thread& t;
     std::atomic<bool>& stop;

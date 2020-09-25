@@ -10,7 +10,7 @@
 #include <filesystem>
 #include <iostream>
 #include <utility>
-#include "Hash.h"
+#include "../myLibraries/Hash.h"
 
 enum class Directory_entry_TYPE {directory, file, notAType};
 
@@ -38,8 +38,9 @@ std::time_t to_time_t(TP tp)
 class Directory_entry {
 
 private:
-    std::string path;
-    std::string name;
+    static inline std::string baseDir;
+    std::string relativePath;
+    std::string absolutePath;
     uintmax_t size{};
     Directory_entry_TYPE type;
     std::string last_write_time;
@@ -49,11 +50,13 @@ public:
     Directory_entry();
     explicit Directory_entry(const std::filesystem::directory_entry&);
 
-    Directory_entry(std::string path, std::string name, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time);
+    Directory_entry(const std::filesystem::path& path, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time);
 
-    std::string getPath();
-    std::string getName();
-    uintmax_t getSize();
+    static void setBaseDir(std::string dir);
+
+    std::string getRelativePath();
+    std::string getAbsolutePath();
+    uintmax_t getSize() const;
     Directory_entry_TYPE getType();
     std::string getLastWriteTime();
     bool is_regular_file();

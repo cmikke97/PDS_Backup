@@ -115,8 +115,8 @@ public:
      * @param stop
      * @return true if there is an element, false if stop is true
      *
-     * @author Michele Crepaldi
-     */
+     * @author Michele Crepaldi s269551
+*/
     bool waitForCondition(std::atomic<bool> &stop){
         std::unique_lock l(m);
         cvPop.wait(l, [this, &stop](){return start != end || stop.load();}); //stop will be always false, it will be true only when we want to close the program

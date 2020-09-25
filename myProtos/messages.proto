@@ -12,7 +12,7 @@ message ClientMessage{
   string lastWriteTime = 5;  //for STOR
   bytes hash = 6;            //for STOR, DELE
   string username = 7;       //for USER
-  bytes hashedPassword = 8;  //for PASS
+  string password = 8;       //for PASS
 
   enum Type{
     NOOP = 0;
@@ -20,9 +20,8 @@ message ClientMessage{
     DELE = 2;
     MKD = 3;
     RMD = 4;
-    USER = 5;
-    PASS = 6;
-    QUIT = 7;
+    AUTH = 5;
+    QUIT = 6;
   }
 }
 
@@ -31,15 +30,14 @@ message ServerMessage{
   int32 version = 1;  //version of the protocol
   Type type = 2; //type of message
 
-  int32 errcode = 3; //for ERR
-  bytes salt = 4;    //for SALT
+  int32 code = 3;   //for OK and ERR
+  int32 newVersion = 4; //for VER
 
   enum Type{
     NOOP = 0;
     OK = 1;
     SEND = 2;
     ERR = 3;
-    SALT = 4;
-    VER = 5;
+    VER = 4;
   }
 }

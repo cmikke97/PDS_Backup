@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.17)
-project(client)
+project(server)
 
 set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
-set(PROJECT_NAME client)
-set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp
-        Event.h Thread_guard.cpp Thread_guard.h)
+set(PROJECT_NAME server)
+set(SOURCE_FILES main.cpp)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/Circular_vector.cpp ../myLibraries/Circular_vector.h)
 

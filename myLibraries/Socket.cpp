@@ -139,8 +139,8 @@ int Socket::getSockfd() {
  * @param port
  * @return sockaddr_in structure
  *
- * @author Michele Crepaldi
- */
+ * @author Michele Crepaldi s269551
+*/
 struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::string& port) {
     struct sockaddr_in address{};
     address.sin_family = AF_INET;
@@ -157,8 +157,8 @@ struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::st
  *
  * @throw runtime error in case it cannot write data to socket
  *
- * @author Michele Crepaldi
- */
+ * @author Michele Crepaldi s269551
+*/
 void Socket::sendString(std::string &stringBuffer, int options) {
     write(stringBuffer.c_str(), stringBuffer.length(), options);
 
@@ -179,8 +179,8 @@ void Socket::sendString(std::string &stringBuffer, int options) {
  *
  * @throw runtime error in case it cannot read data from socket
  *
- * @author Michele Crepaldi
- */
+ * @author Michele Crepaldi s269551
+*/
 std::string Socket::recvString(int options) {
     // create the buffer with space for the data
     const unsigned int MAX_BUF_LENGTH = 4096;
@@ -227,8 +227,8 @@ std::string Socket::recvString(int options) {
  * @throw runtime error in case the sent bytes are less than file size
  * @throw runtime error in case the path does not correspond to a file
  *
- * @author Michele Crepaldi
- */
+ * @author Michele Crepaldi s269551
+*/
 void Socket::sendFile(const std::filesystem::path& path, int options) {
     //initialize variables
     std::ifstream file;
@@ -267,8 +267,8 @@ void Socket::sendFile(const std::filesystem::path& path, int options) {
  * @throw runtime error in case it cannot write data to socket
  * @throw runtime error in case the received bytes are less than expected file size
  *
- * @author Michele Crepaldi
- */
+ * @author Michele Crepaldi s269551
+*/
 void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileSize, int options) {
     //initialize variables
     std::ofstream file;
@@ -319,6 +319,11 @@ ServerSocket::ServerSocket(int port) {
         throw std::runtime_error("Cannot bind port");
     if(::listen(sockfd, 8) != 0)
         throw std::runtime_error("Cannot bind port");
+
+    //extract ip address in readable form
+    char address[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &sockaddrIn.sin_addr, address, sizeof(address));
+    std::cout << "Server opened: available at [" << address << ":" << port << "]" << std::endl;
 }
 
 /**
