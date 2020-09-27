@@ -24,7 +24,7 @@ using namespace std::chrono_literals;
  *
  * @author Michele Crepaldi s269551
  */
-enum class FileSystemStatus {notAStatus, created, deleted};
+enum class FileSystemStatus {created, deleted, modified, sent};
 
 /**
  * class to use to watch the file system for changes

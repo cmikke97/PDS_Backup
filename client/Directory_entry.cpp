@@ -18,13 +18,24 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
 }
 
 /**
+ * constructor with a filesystem::path as input
+ *
+ * @param entry std::filesystem::path of the element to be represented
+ *
+ * @author Michele Crepaldi s269551
+ */
+Directory_entry::Directory_entry(const std::filesystem::path &path) :
+        Directory_entry(std::filesystem::directory_entry(path)){
+}
+
+/**
  * constructor with a filesystem::directory_entry as input
  *
  * @param entry std::filesystem::directory_entry to be represented
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry):
+Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry) :
         Directory_entry(
                 entry.path(),
                 entry.is_regular_file()?entry.file_size():0,
@@ -49,7 +60,7 @@ Directory_entry::Directory_entry(const std::filesystem::path& path, uintmax_t si
                                  relativePath(std::filesystem::relative(path,baseDir).string()), absolutePath(path.string()), type(type){
 
     //if it is a file then set its size, if it is a directory then size is 0
-    size = type==Directory_entry_TYPE::file?size:0;
+    this->size = type==Directory_entry_TYPE::file?size:0;
 
     //convert file time to string
     std::time_t tt = to_time_t(file_time);
@@ -58,34 +69,15 @@ Directory_entry::Directory_entry(const std::filesystem::path& path, uintmax_t si
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
     last_write_time = buffer.str();
 
+    std::stringstream temp;
+    temp << relativePath;
+
     //if the entry is a file then compute its hash
-    if(type==Directory_entry_TYPE::file) {
-        //initialize stream and buffer
-        std::ifstream file;
-        char buff[MAXBUFFSIZE];
+    if(type==Directory_entry_TYPE::file)
+        temp << this->size;
 
-        //initialize hash
-        hash.HashInit();
-
-        //open file
-        file.open(absolutePath, std::ios::in | std::ios::binary);
-
-        //read file and update hash
-        if(file.is_open()){
-            while(file.read(buff, MAXBUFFSIZE))
-                hash.HashUpdate(buff, file.gcount());
-        }
-        //concatenate other info together
-        std::stringstream temp;
-        //temp << relativePath << size << last_write_time;
-        temp << relativePath << size;
-
-        //update hash with other info
-        hash.HashUpdate(const_cast<char *>(temp.str().c_str()), temp.str().length());
-
-        //finalize hash
-        hash.HashFinalize();
-    }
+    temp << last_write_time;
+    hash = Hash(temp.str());
 }
 
 /**

@@ -23,6 +23,27 @@ void handleErrors()
 Hash::Hash() = default;
 
 /**
+ * constructor of this Hash object in case you want an hash of a small string
+ * (not suitable with files because you would need to load them entirely in memory)
+ * <p>
+ * for hashing a <b>file</b> use this other methods in this order:
+ * <ul>
+ *      <li> <b> hashInit
+ *      <li> <b> hashUpdate (repeated for each block of data)
+ *      <li> <b> hashFinalize
+ * </ul>
+ *
+ * @param string to be hashed
+ *
+ * @author Michele Crepaldi s269551
+ */
+Hash::Hash(std::string data) {
+    HashInit();
+    HashUpdate(const_cast<char *>(data.c_str()), data.length());
+    HashFinalize();
+}
+
+/**
  * constructor of this Hash object in case you want an hash of a small object
  * (not suitable with files because you would need to load them entirely in memory)
  * <p>
@@ -38,27 +59,10 @@ Hash::Hash() = default;
  *
  * @author Michele Crepaldi s269551
  */
-Hash::Hash(const unsigned char *buf, unsigned long len) {
-    ERR_load_CRYPTO_strings();
-
-    if((mdctx = EVP_MD_CTX_new()) == nullptr)
-        handleErrors();
-
-    if(1 != EVP_MD_CTX_init(mdctx))
-        handleErrors();
-
-    if(1!=EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr))
-        handleErrors();
-
-    if(1!=EVP_DigestUpdate(mdctx, buf, len))
-        handleErrors();
-
-    if(1!=EVP_DigestFinal_ex(mdctx, md_value, &md_len))
-        handleErrors();
-
-    EVP_MD_CTX_free(mdctx);
-    EVP_cleanup();
-    ERR_free_strings();
+Hash::Hash(char *buf, unsigned long len) {
+    HashInit();
+    HashUpdate(buf, len);
+    HashFinalize();
 }
 
 /**
