@@ -159,16 +159,11 @@ struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::st
  *
  * @author Michele Crepaldi s269551
 */
-void Socket::sendString(std::string &stringBuffer, int options) {
-    write(stringBuffer.c_str(), stringBuffer.length(), options);
-
-    //alternativa
-    /*
+ssize_t Socket::sendString(std::string &stringBuffer, int options) {
     uint32_t dataLength = htonl(stringBuffer.size()); // Ensure network byte order when sending the data length
 
     write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
-    write(stringBuffer.c_str() ,stringBuffer.size() ,0); // Send the string data
-    */
+    return write(stringBuffer.c_str() ,stringBuffer.size() ,0); // Send the string data
 }
 
 /**
@@ -182,93 +177,21 @@ void Socket::sendString(std::string &stringBuffer, int options) {
  * @author Michele Crepaldi s269551
 */
 std::string Socket::recvString(int options) {
-    // create the buffer with space for the data
-    const unsigned int MAX_BUF_LENGTH = 4096;
-    std::vector<char> buffer(MAX_BUF_LENGTH);
     std::string stringBuffer;
-    int bytesReceived = 0;
-    do {
-        bytesReceived = read(&buffer[0], buffer.size(), 0);
-        // append string from buffer.
-        if ( bytesReceived == -1 ) {
-            // error
-        } else {
-            stringBuffer.append( buffer.cbegin(), buffer.cend() );
-        }
-    } while ( bytesReceived == MAX_BUF_LENGTH );
-    // At this point we have the available data (which may not be a complete
-    // application level message).
-
-    return stringBuffer;
-
-    //alternativa
-    /*
     uint32_t dataLength;
-    read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), 0); // Receive the message length
+    read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), options); // Receive the message length
     dataLength = ntohl(dataLength); // Ensure host system byte order
 
     std::vector<uint8_t> rcvBuf;    // Allocate a receive buffer
     rcvBuf.resize(dataLength,0x00); // with the necessary size
 
-    read(reinterpret_cast<char *>(&(rcvBuf[0])), dataLength, 0); // Receive the string data
+    read(reinterpret_cast<char *>(&(rcvBuf[0])), dataLength, options); // Receive the string data
 
     stringBuffer.assign(reinterpret_cast<const char *>(&(rcvBuf[0])), rcvBuf.size()); // assign buffered data to a string
     return stringBuffer;
-    */
 }
 
-/**
- * function which reads a file from the filesystem and sends it (in blocks) through the socket
- *
- * @param path path of the file to send
- * @param options
- *
- * @throw runtime error in case it cannot write data to socket
- * @throw runtime error in case the sent bytes are less than file size
- * @throw runtime error in case the path does not correspond to a file
- *
- * @author Michele Crepaldi s269551
-*/
-void Socket::sendFile(const std::filesystem::path& path, int options) {
-    //initialize variables
-    std::ifstream file;
-    std::filesystem::directory_entry element(path);
-    char buff[MAXBUFFSIZE];
-    uintmax_t totalBytesSent = 0;
-
-    if(!element.is_regular_file())
-        throw std::runtime_error("Not a file"); //if the element is not a file throw an exception
-
-    //open input file
-    file.open(path, std::ios::in | std::ios::binary);
-
-    if(file.is_open()){
-        //read file in MAXBUFFSIZE-wide blocks
-        while(file.read(buff, MAXBUFFSIZE))
-            //send block and update total amount of bytes sent
-            totalBytesSent += this->write(buff, file.gcount(), options);
-    }
-
-    //close the input file
-    file.close();
-
-    //check total amout of bytes sent against file size
-    if(totalBytesSent != element.file_size())
-        throw std::runtime_error("Sent less bytes than filesize"); //if they are different then throw an exception
-}
-
-/**
- * function which receives a file through the socket (in blocks) and writes it to the filesystem
- *
- * @param path path where to save the received file to
- * @param expectedFileSize expected file size (for checks)
- * @param options
- *
- * @throw runtime error in case it cannot write data to socket
- * @throw runtime error in case the received bytes are less than expected file size
- *
- * @author Michele Crepaldi s269551
-*/
+/*
 void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileSize, int options) {
     //initialize variables
     std::ofstream file;
@@ -298,6 +221,16 @@ void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileS
     //check total amout of bytes received against expected file size
     if(totalBytesReceived != expectedFileSize)
         throw std::runtime_error("received less bytes than expectedFileSize"); //if they are different then throw an exception
+}*/
+
+/**
+ * function used to manually close the connection
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Socket::closeConnection() {
+    if(sockfd != 0)
+        close(sockfd);
 }
 
 /**

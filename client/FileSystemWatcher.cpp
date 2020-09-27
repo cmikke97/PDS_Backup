@@ -50,6 +50,9 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
             if(!contains(file.path().string())) { //file creation
                 if(action(current_file, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
                     paths_[current_file.getAbsolutePath()] = current_file;
+            }else if(paths_[current_file.getAbsolutePath()].getLastWriteTime() != current_file.getLastWriteTime()) { //file modify
+                if(action(current_file, FileSystemStatus::modified))
+                    paths_[current_file.getAbsolutePath()] = current_file;
             }
         }
     }

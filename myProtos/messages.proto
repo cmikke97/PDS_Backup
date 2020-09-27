@@ -4,40 +4,46 @@ package messages;
 
 //client messages
 message ClientMessage{
-  int32 version = 1;  //version of the protocol
-  Type type = 2; //type of message
+  int32 version = 1;          //version of the protocol
+  Type type = 2;              //type of message
 
-  string path = 3;           //for STOR, DELE, MKD, RMD
-  uint64 fileSize = 4;       //for STOR
-  string lastWriteTime = 5;  //for STOR
-  bytes hash = 6;            //for STOR, DELE
-  string username = 7;       //for USER
-  string password = 8;       //for PASS
+  string path = 4;            //for PROB, STOR, MKD
+  uint64 fileSize = 5;        //for STOR
+  string lastWriteTime = 6;   //for STOR, MKD
+  bytes hash = 7;             //for PROB, STOR, DELE, MKD, RMD
+  bytes data = 8;             //for DATA
+  string username = 9;        //for AUTH
+  string password = 10;       //for AUTH
+  bool last = 11;             //for DATA
 
   enum Type{
-    NOOP = 0;
-    STOR = 1;
-    DELE = 2;
-    MKD = 3;
-    RMD = 4;
-    AUTH = 5;
-    QUIT = 6;
+    NOOP = 0;   //has version, type
+    PROB = 1;   //has version, type, path, hash
+    STOR = 2;   //has version, type, path, fileSize, lastWriteTime, hash
+    DELE = 3;   //has version, type, hash
+    MKD = 4;    //has version, type, path, lastWriteTime, hash
+    RMD = 5;    //has version, type, hash
+    DATA = 6;   //has version, type, data, last
+    AUTH = 7;   //has version, type, username, password
+    QUIT = 8;   //has version, type
   }
 }
 
 //server messages
 message ServerMessage{
-  int32 version = 1;  //version of the protocol
-  Type type = 2; //type of message
+  int32 version = 1;          //version of the protocol
+  Type type = 2;              //type of message
 
-  int32 code = 3;   //for OK and ERR
-  int32 newVersion = 4; //for VER
+  string path = 4;        //for SEND
+  bytes hash = 5;         //for SEND
+  int32 code = 6;         //for OK, ERR
+  int32 newVersion = 7;   //for VER
 
   enum Type{
-    NOOP = 0;
-    OK = 1;
-    SEND = 2;
-    ERR = 3;
-    VER = 4;
+    NOOP = 0;   //has version, type
+    OK = 1;     //has version, type, code
+    SEND = 2;   //has version, type, path, hash
+    ERR = 3;    //has version, type, code
+    VER = 4;    //has version, type, newVersion
   }
 }

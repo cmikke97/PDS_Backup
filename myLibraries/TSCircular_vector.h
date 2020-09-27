@@ -2,8 +2,8 @@
 // Created by michele on 27/07/2020.
 //
 
-#ifndef CLIENT_CIRCULAR_VECTOR_H
-#define CLIENT_CIRCULAR_VECTOR_H
+#ifndef CLIENT_TSCIRCULAR_VECTOR_H
+#define CLIENT_TSCIRCULAR_VECTOR_H
 
 #include <vector>
 #include <mutex>
@@ -19,7 +19,7 @@
  * @author Michele Crepaldi s269551
  */
 template <typename T>
-class Circular_vector {
+class TSCircular_vector {
     std::mutex m;
     std::condition_variable cvPush, cvPop;
     std::vector<T> v;
@@ -33,7 +33,8 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    explicit Circular_vector(int size): start(0), end(0), size(size+1), v(size+1){
+    explicit TSCircular_vector(int size): start(0), end(0), size(size + 1){
+        v.resize(size+1);
     }
 
     /**
@@ -86,27 +87,6 @@ public:
     }
 
     /**
-     * function which returns a reference to the element in the head of the circular vector (it doesn't pop it);
-     * it also waits for timeout time before returning in any case
-     * <p>
-     * moreover the waiting can be stopped by the stop atomic boolean given in input, in such case it also returns nullopt
-     * but for a different reason -> it will be the caller job to recognise it (looking at the stop atomic boolean)
-     *
-     * @param stop atomic boolean for witch to stop
-     * @param timeout time to wait
-     *
-     * @return a reference to the first object inserted in the circular vector (the head of the circular vector) or a nullopt value (if timeout)
-     *
-     * @author Michele Crepaldi s269551
-     */
-    std::optional<T> frontWaitFor(int timeout, std::atomic<bool> &stop){
-        std::unique_lock l(m);
-        if (!cvPop.wait_for(l, std::chrono::seconds(timeout), [this, &stop](){return start != end || stop.load();})) //if false it means that it timed out!
-            return std::nullopt;
-        return std::optional<T>{v[start]};
-    }
-
-    /**
      * function used to know if there are elements that can be popped from the circular vector
      * or if we were told to stop.
      * <p>
@@ -116,12 +96,13 @@ public:
      * @return true if there is an element, false if stop is true
      *
      * @author Michele Crepaldi s269551
-*/
+    */
     bool waitForCondition(std::atomic<bool> &stop){
         std::unique_lock l(m);
         cvPop.wait(l, [this, &stop](){return start != end || stop.load();}); //stop will be always false, it will be true only when we want to close the program
         return !stop.load();
     }
+
 
     /**
      * function which pops the element in the head of the circular vector (it doesn't return it)
@@ -134,7 +115,19 @@ public:
         start = (start+1)%size;
         cvPush.notify_all();
     }
+
+    /**
+     * function used to know if the queue has elements or not
+     *
+     * @return true if there is at least one element in the vector, false otherwise
+     *
+     * @author Michele Crepaldi s269551
+     */
+    bool canGet(){
+        std::unique_lock l(m);
+        return start != end;
+    }
 };
 
 
-#endif //CLIENT_CIRCULAR_VECTOR_H
+#endif //CLIENT_TSCIRCULAR_VECTOR_H

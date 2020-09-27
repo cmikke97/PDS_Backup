@@ -12,15 +12,18 @@
 
 /**
  * Hash object -> used to compute, get and compare an hash of some data
+ *
+ * @author Michele Crepaldi s269551
  */
 class Hash {
     unsigned char md_value[EVP_MAX_MD_SIZE]{};
     unsigned int md_len{};
-    EVP_MD_CTX *mdctx;
+    EVP_MD_CTX *mdctx{};
 
 public:
     Hash();
-    Hash(const unsigned char *buf, unsigned long len);
+    explicit Hash(std::string data);
+    Hash(char *buf, unsigned long len);
     void HashInit();
     void HashUpdate(char *buf, unsigned long len);
     void HashFinalize();
@@ -28,5 +31,8 @@ public:
     bool operator==(Hash& h);
 };
 
+static bool operator!=(Hash &h1, Hash& h2){
+    return !(h1==h2);
+}
 
 #endif //CLIENT_HASH_H
