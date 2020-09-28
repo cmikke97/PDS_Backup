@@ -70,7 +70,7 @@ public:
      * @author Michele Crepaldi s269551
      */
     SocketException(const std::string& msg):
-            std::runtime_error(msg), error_number(err_num){
+            std::runtime_error(msg){
     }
 
     /**
