@@ -32,14 +32,14 @@ public:
     ~Socket();
     Socket(Socket &&other) noexcept;
     Socket& operator=(Socket &&other) noexcept;
-    void closeConnection();
-    ssize_t read(char *buffer, size_t len, int options);
-    std::string recvString(int options);
-    ssize_t write(const char *buffer, size_t len, int options);
-    ssize_t sendString(std::string &stringBuffer, int options);
+    void closeConnection() const;
+    ssize_t read(char *buffer, size_t len, int options) const;
+    std::string recvString(int options) const;
+    ssize_t write(const char *buffer, size_t len, int options) const;
+    ssize_t sendString(std::string &stringBuffer, int options) const;
     static struct sockaddr_in composeAddress(const std::string& addr, const std::string& port);
-    void connect(struct sockaddr_in *addr, unsigned int len);
-    int getSockfd();
+    void connect(struct sockaddr_in *addr, unsigned int len) const;
+    int getSockfd() const;
 };
 
 /**
@@ -51,6 +51,34 @@ class ServerSocket: private Socket{
 public:
     explicit ServerSocket(int port);
     Socket accept(struct sockaddr_in* addr, unsigned int* len);
+};
+
+/**
+ * exceptions for the socket class
+ *
+ * @author Michele Crepaldi s269551
+ */
+class SocketException : public std::runtime_error {
+
+public:
+
+    /**
+     * socket exception constructor
+     *
+     * @param msg the error message
+     *
+     * @author Michele Crepaldi s269551
+     */
+    SocketException(const std::string& msg):
+            std::runtime_error(msg), error_number(err_num){
+    }
+
+    /**
+     * socket exception destructor.
+     *
+     * @author Michele Crepaldi s269551
+     */
+    ~SocketException() noexcept override = default;
 };
 
 #endif //CLIENT_SOCKET_H

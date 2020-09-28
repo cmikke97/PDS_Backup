@@ -20,14 +20,14 @@ Socket::Socket(int sockfd) : sockfd(sockfd) {
 /**
  * Socket default constructor
  *
- * @throw runtime error in case the socket cannot be created
+ * @throw SocketException(msg) in case the socket cannot be created
  *
  * @author Michele Crepaldi s269551
  */
 Socket::Socket() {
     sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd < 0)
-        throw std::runtime_error("Cannot create socket");
+        throw SocketException("Cannot create socket");
 }
 
 /**
@@ -75,14 +75,14 @@ Socket &Socket::operator=(Socket &&other) noexcept {
  * @param options
  * @return number of bytes read
  *
- * @throw runtime error in case it cannot receive data from socket
+ * @throw SocketException(msg) in case it cannot receive data from socket
  *
  * @author Michele Crepaldi s269551
  */
-ssize_t Socket::read(char *buffer, size_t len, int options) {
+ssize_t Socket::read(char *buffer, size_t len, int options) const {
     ssize_t res = recv(sockfd, buffer, len, options);
     if(res < 0)
-        throw std::runtime_error("Cannot receive from socket");
+        throw SocketException("Cannot read from socket");
     return res;
 }
 
@@ -94,15 +94,15 @@ ssize_t Socket::read(char *buffer, size_t len, int options) {
  * @param options
  * @return number of bytes written
  *
- * @throw runtime error in case it cannot write data to socket
+ * @throw SocketException(msg) in case it cannot write data to socket
  *
  * @author Michele Crepaldi s269551
  *
  */
-ssize_t Socket::write(const char *buffer, size_t len, int options) {
+ssize_t Socket::write(const char *buffer, size_t len, int options) const {
     ssize_t res = send(sockfd, buffer, len, options);
     if(res < 0)
-        throw std::runtime_error("Cannot write to socket");
+        throw SocketException("Cannot write to socket");
     return res;
 }
 
@@ -112,13 +112,13 @@ ssize_t Socket::write(const char *buffer, size_t len, int options) {
  * @param addr of the server to connect to
  * @param len of the struct addr
  *
- * @throw runtime error in case it cannot connect to remote socket
+ * @throw SocketException(msg) in case it cannot connect to remote socket
  *
  * @author Michele Crepaldi s269551
  */
-void Socket::connect(struct sockaddr_in *addr, unsigned int len) {
+void Socket::connect(struct sockaddr_in *addr, unsigned int len) const {
     if(::connect(sockfd, reinterpret_cast<struct sockaddr*>(addr), len) != 0)
-        throw std::runtime_error("Cannot connect to remote socket");
+        throw SocketException("Cannot connect to remote socket");
 }
 
 /**
@@ -128,15 +128,15 @@ void Socket::connect(struct sockaddr_in *addr, unsigned int len) {
  *
  * @author Michele Crepaldi s269551
  */
-int Socket::getSockfd() {
+int Socket::getSockfd() const {
     return sockfd;
 }
 
 /**
  * function to compose the address
  *
- * @param addr
- * @param port
+ * @param addr address of the server to connect to
+ * @param port port of the server to connect to
  * @return sockaddr_in structure
  *
  * @author Michele Crepaldi s269551
@@ -155,11 +155,11 @@ struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::st
  * @param stringBuffer string to write to socket
  * @param options
  *
- * @throw runtime error in case it cannot write data to socket
+ * @throw SocketException(msg,ErrorCode::write) in case it cannot write data to socket
  *
  * @author Michele Crepaldi s269551
 */
-ssize_t Socket::sendString(std::string &stringBuffer, int options) {
+ssize_t Socket::sendString(std::string &stringBuffer, int options) const {
     uint32_t dataLength = htonl(stringBuffer.size()); // Ensure network byte order when sending the data length
 
     write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
@@ -172,11 +172,11 @@ ssize_t Socket::sendString(std::string &stringBuffer, int options) {
  * @param options
  * @return string read from socket
  *
- * @throw runtime error in case it cannot read data from socket
+ * @throw SocketException(msg,ErrorCode::read) in case it cannot read data from socket
  *
  * @author Michele Crepaldi s269551
 */
-std::string Socket::recvString(int options) {
+std::string Socket::recvString(int options) const {
     std::string stringBuffer;
     uint32_t dataLength;
     read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), options); // Receive the message length
@@ -228,7 +228,7 @@ void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileS
  *
  * @author Michele Crepaldi s269551
  */
-void Socket::closeConnection() {
+void Socket::closeConnection() const {
     if(sockfd != 0)
         close(sockfd);
 }
@@ -236,9 +236,9 @@ void Socket::closeConnection() {
 /**
  * ServerSocket constructor
  *
- * @param port
+ * @param port port to use
  *
- * @throw runtime error in case it cannot bind the port and create the socket
+ * @throw SocketException(msg) in case it cannot bind the port and create the socket
  *
  * @author Michele Crepaldi s269551
  */
@@ -249,9 +249,9 @@ ServerSocket::ServerSocket(int port) {
     //sockaddrIn.sin_len = sizeof(sockaddrIn);
     sockaddrIn.sin_addr.s_addr = htonl(INADDR_ANY);
     if(::bind(sockfd, reinterpret_cast<struct sockaddr*>(&sockaddrIn), sizeof(sockaddrIn)) != 0)
-        throw std::runtime_error("Cannot bind port");
+        throw SocketException("Cannot bind port");
     if(::listen(sockfd, 8) != 0)
-        throw std::runtime_error("Cannot bind port");
+        throw SocketException("Cannot bind port");
 
     //extract ip address in readable form
     char address[INET_ADDRSTRLEN];
@@ -266,13 +266,13 @@ ServerSocket::ServerSocket(int port) {
  * @param len of the struct addr
  * @return the newly created file descriptor (fd)
  *
- * @throw runtime error in case it cannot accept a socket
+ * @throw SocketException(msg) in case it cannot accept a socket
  *
  * @author Michele Crepaldi s269551
  */
 Socket ServerSocket::accept(struct sockaddr_in *addr, unsigned int *len) {
     int fd = ::accept(sockfd, reinterpret_cast<struct sockaddr*>(addr), reinterpret_cast<socklen_t *>(len));
     if(fd < 0)
-        throw std::runtime_error("Cannot accept socket");
+        throw SocketException("Cannot accept socket");
     return Socket(fd);
 }

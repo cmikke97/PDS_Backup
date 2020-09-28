@@ -13,8 +13,6 @@
 FileSystemWatcher::FileSystemWatcher(std::string  path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
     //set directory entry class base directory to the path to watch
     Directory_entry::setBaseDir(path_to_watch);
-
-    //TODO link to database and retrieve previous file state
 }
 
 /**
@@ -25,6 +23,7 @@ FileSystemWatcher::FileSystemWatcher(std::string  path_to_watch, std::chrono::du
  * @author Michele Crepaldi s269551
  */
 void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop) {
+
     while(!stop.load()) {
         // Wait for "delay" milliseconds
         std::this_thread::sleep_for(delay);
@@ -69,4 +68,21 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
 bool FileSystemWatcher::contains(const std::string &key) {
     auto el = paths_.find(key);
     return el != paths_.end();
+}
+
+/**
+ * function used by this class to retrieve previously save data (about the entries) from the db
+ *
+ * @param db db to retrieve data from
+ *
+ * @throw runtime exception in case of db errors
+ *
+ * @author Michele Crepaldi s269551
+ */
+void FileSystemWatcher::recoverFromDB(Database &db) {
+    std::function<void (const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime)> f;
+    f = [this](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime){
+        paths_.insert({path, Directory_entry(path,size,type,lastWriteTime)});
+    };
+    db.forAll(f);
 }

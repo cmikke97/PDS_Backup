@@ -14,7 +14,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-ProtocolManager::ProtocolManager(Socket &s, int max, int ver) : s(s), start(0), end(0), size(max), protocolVersion(ver) {
+ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver) : s(s), db(db), start(0), end(0), size(max), protocolVersion(ver) {
     waitingForResponse.resize(size+1);
 }
 
@@ -162,7 +162,7 @@ void ProtocolManager::receive() {
     switch (serverMessage.type()) {
         case messages::ServerMessage_Type_SEND:
             //only if the element is a file then it is right to send it
-            if(e.getElement().is_regular_file() && e.getStatus() == FileSystemStatus::created){
+            if(e.getElement().is_regular_file() && (e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified)){
                 //send file
 
                 //if(start != end) this condition is true if I receive something
@@ -177,8 +177,14 @@ void ProtocolManager::receive() {
 
                 //otherwise send file
 
+                //distinguish between file creation and modification
+                Event tmp;
+                if(e.getStatus() == FileSystemStatus::created)
+                    tmp = Event(e.getElement(), FileSystemStatus::storeSent); //file created
+                else
+                    tmp = Event(e.getElement(), FileSystemStatus::modifySent); //file modified
+
                 //save the send event in a local list (to then wait for its respose)
-                Event tmp = Event(e.getElement(), FileSystemStatus::sent);
                 waitingForResponse[end] = tmp;
                 end = (end+1)%size;
 
@@ -207,7 +213,23 @@ void ProtocolManager::receive() {
 
             std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been sent to server: " << serverMessage.code() << std::endl;
 
-            //TODO connect to database and update file/directory state
+            if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified){
+                std::string type;
+                if(e.getElement().getType() == Directory_entry_TYPE::file)
+                    type = "file";
+                else
+                    type = "directory";
+
+                //insert or update element in db
+                if(e.getStatus() == FileSystemStatus::created)
+                    db.insert(e.getElement().getRelativePath(),type,e.getElement().getSize(),e.getElement().getLastWriteTime()); //insert element into db
+                else
+                    db.update(e.getElement().getRelativePath(),type,e.getElement().getSize(),e.getElement().getLastWriteTime()); //update element in db
+            }
+            else if(e.getStatus() == FileSystemStatus::deleted)
+                db.remove(e.getElement().getRelativePath()); //delete element from db
+
+
             break;
         case messages::ServerMessage_Type_ERR:
             //retrieve error code
@@ -251,7 +273,7 @@ void ProtocolManager::recoverFromError() {
     for(int i = start; i != end; i = (i+1)%size){
         Event &e = waitingForResponse[i];
 
-        if(e.getStatus() == FileSystemStatus::sent){
+        if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
             //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
             //then it means that the file was deleted or modified --> I can't send it anymore
             std::filesystem::path ap = e.getElement().getAbsolutePath();
@@ -271,7 +293,7 @@ void ProtocolManager::recoverFromError() {
         //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
         clientMessage.Clear();
 
-        if(e.getStatus() == FileSystemStatus::sent){
+        if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
             sendFile(e.getElement().getAbsolutePath(), 0);
         }
     }
@@ -288,8 +310,9 @@ void ProtocolManager::composeMessage(Event &e) {
     //evaluate what to do
     if (e.getElement().is_regular_file()) {   //if the element is a file
         switch (e.getStatus()) {
+            case FileSystemStatus::modified: //file modified
             case FileSystemStatus::created: //file created
-                std::cout << "File created: " << e.getElement().getAbsolutePath() << "response from server: ";
+                std::cout << "File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
 
                 //create message
                 clientMessage.set_version(protocolVersion);
@@ -309,7 +332,8 @@ void ProtocolManager::composeMessage(Event &e) {
                                        e.getElement().getHash().getValue().second);
                 break;
 
-            case FileSystemStatus::sent:
+            case FileSystemStatus::modifySent: //modify message sent
+            case FileSystemStatus::storeSent: //store message sent
                 //create message
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_STOR);
@@ -325,6 +349,7 @@ void ProtocolManager::composeMessage(Event &e) {
         }
     } else { //if the element is a directory
         switch (e.getStatus()) {
+            case FileSystemStatus::modified: //directory modified
             case FileSystemStatus::created: //directory created
                 std::cout << "Directory created: " << e.getElement().getAbsolutePath() << std::endl;
 

@@ -46,24 +46,23 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry) 
 /**
  * constructor with all the parameters
  *
- * @param path of the directory entry
- * @param name of the directory entry
- * @param size of the file (only to be used if this is a file)
- * @param type file or directory
+ * @param path absolute path of the directory entry
+ * @param size size of the file (only to be used if this is a file)
+ * @param type type od the entry: file or directory
  * @param file_time last modification time
  *
  * @throw filesystem_error (if std::filesystem::relative fails)
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::filesystem::path& path, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time) :
-                                 relativePath(std::filesystem::relative(path,baseDir).string()), absolutePath(path.string()), type(type){
+Directory_entry::Directory_entry(const std::filesystem::path& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
+                                 relativePath(std::filesystem::relative(absolutePath,baseDir).string()), absolutePath(absolutePath.string()), type(type){
 
     //if it is a file then set its size, if it is a directory then size is 0
     this->size = type==Directory_entry_TYPE::file?size:0;
 
     //convert file time to string
-    std::time_t tt = to_time_t(file_time);
+    std::time_t tt = to_time_t(lastWriteTime);
     std::tm *gmt = std::gmtime(&tt);
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
@@ -74,6 +73,37 @@ Directory_entry::Directory_entry(const std::filesystem::path& path, uintmax_t si
 
     //if the entry is a file then compute its hash
     if(type==Directory_entry_TYPE::file)
+        temp << this->size;
+
+    temp << last_write_time;
+    hash = Hash(temp.str());
+}
+
+/**
+ * alternative constructor useful when handling data retrieved from a db
+ *
+ * @param relativePath relative path of the entry
+ * @param size size of the entry
+ * @param type type of the entry (file or directory)
+ * @param lastWriteTime lastWriteTime of the entry in textual format
+ *
+ * @author Michele Crepaldi s269551
+ */
+Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime) :
+                                 relativePath(relativePath), absolutePath(baseDir + "/" + relativePath), last_write_time(std::move(lastWriteTime)), size(size){
+
+    if(type == "file")
+        this->type = Directory_entry_TYPE::file;
+    else if(type == "directory")
+        this->type = Directory_entry_TYPE::directory;
+    else
+        this->type = Directory_entry_TYPE::notAType;
+
+    std::stringstream temp;
+    temp << relativePath;
+
+    //if the entry is a file then compute its hash
+    if(this->type == Directory_entry_TYPE::file)
         temp << this->size;
 
     temp << last_write_time;

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 #set some variables
 set(PROJECT_NAME client)
 set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp
-        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h)
+        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Database.cpp Database.h)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
 
