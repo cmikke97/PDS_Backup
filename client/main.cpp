@@ -20,8 +20,12 @@
 #define SELECT_TIMEOUT 5
 #define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
 #define VERSION 1
+#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/client/clientDB/clientDB.sqlite"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, const std::string &, const std::string &, const std::string &);
+
+//TODO create exceptions for database class and for protocol manager class
+Database db;
 
 /**
  * the client main function
@@ -44,6 +48,19 @@ int main(int argc, char **argv) {
 
     // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
     FileSystemWatcher fw{argv[1], std::chrono::milliseconds(5000)};
+
+    try {
+        //open the database (and if not previously there create also the needed table)
+        db.open(DATABASE_PATH);
+
+        //make the filesystem watcher retrieve previously saved data from db
+        fw.recoverFromDB(db);
+    }
+    catch (std::runtime_error &e) {
+        //in case of database exceptions show message and return
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
 
     // create a circular vector instance that will contain all the events happened
     TSCircular_vector<Event> eventQueue(EVENT_QUEUE_SIZE);
@@ -94,115 +111,124 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     //initialize socket address
     struct sockaddr_in server_address = Socket::composeAddress(server_ip, server_port);
 
-    //initialize socket
-    Socket client_socket;
+    try{
+        //initialize socket
+        Socket client_socket; //may throw an exception!
+        //initialize protocol manager
+        ProtocolManager pm(client_socket, db, MAX_RESPONSE_WAITING, VERSION);
 
-    //initialize protocol manager
-    ProtocolManager pm(client_socket, MAX_RESPONSE_WAITING, VERSION);
+        //for select
+        fd_set read_fds;
+        fd_set write_fds;
 
-    //for select
-    fd_set read_fds;
-    fd_set write_fds;
+        // this thread will loop until it will be told to stop
+        while (!thread_stop.load()) {
+            try {
 
-    // this thread will loop until it will be told to stop
-    while (!thread_stop.load()) {
-        try {
+                //wait until there is at least one event in the event queue (blocking wait)
+                if(!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
+                    return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
-            //wait until there is at least one event in the event queue (blocking wait)
-            if(!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
-                return; //if false then we exited the condition for the thread_stop being true so we want to close the program
+                //connect with server
+                client_socket.connect(&server_address, sizeof(server_address));
 
-            //connect with server
-            client_socket.connect(&server_address, sizeof(server_address));
+                //authenticate user
+                pm.authenticate(username, password); //TODO add MAC
 
-            //authenticate user
-            pm.authenticate(username, password); //TODO add MAC
+                //if there was an exception then resend all unacknowledged messages
+                pm.recoverFromError();
 
-            //if there was an exception then resend all unacknowledged messages
-            pm.recoverFromError();
+                //some variables for the loop and select
+                int timeWaited = 0;
+                bool loop = true;
 
-            //some variables for the loop and select
-            int timeWaited = 0;
-            bool loop = true;
+                //after connection and authentication then iteratively do this;
+                //if any connection error occurs then redo connection and authentication
+                while (loop && !thread_stop.load()) { //if thread_stop is true then i want to exit
+                    try {
 
-            //after connection and authentication then iteratively do this;
-            //if any connection error occurs then redo connection and authentication
-            while (loop && !thread_stop.load()) { //if thread_stop is true then i want to exit
-                try {
+                        //build fd sets
+                        FD_ZERO(&read_fds);
+                        FD_SET(client_socket.getSockfd(), &read_fds);
 
-                    //build fd sets
-                    FD_ZERO(&read_fds);
-                    FD_SET(client_socket.getSockfd(), &read_fds);
+                        FD_ZERO(&write_fds);
+                        // there is something to send, set up write_fd for server socket
+                        if (pm.canSend() && eventQueue.canGet())
+                            FD_SET(client_socket.getSockfd(), &write_fds);
 
-                    FD_ZERO(&write_fds);
-                    // there is something to send, set up write_fd for server socket
-                    if (pm.canSend() && eventQueue.canGet())
-                        FD_SET(client_socket.getSockfd(), &write_fds);
+                        int maxfd = client_socket.getSockfd();
+                        struct timeval tv{};
+                        tv.tv_sec = SELECT_TIMEOUT;
 
-                    int maxfd = client_socket.getSockfd();
-                    struct timeval tv;
-                    tv.tv_sec = SELECT_TIMEOUT;
+                        int activity = select(maxfd + 1, &read_fds, &write_fds, nullptr, &tv);
 
-                    int activity = select(maxfd + 1, &read_fds, &write_fds, nullptr, &tv);
+                        if (thread_stop.load()) { //if thread_stop atomic boolean is true then close connection and return
+                            //quit connection
+                            pm.quit();
+                            //close connection
+                            client_socket.closeConnection();
+                            return;
+                        }
 
-                    if (thread_stop.load()) { //if thread_stop atomic boolean is true then close connection and return
-                        //quit connection
-                        pm.quit();
-                        //close connection
-                        client_socket.closeConnection();
-                        return;
+                        switch (activity) {
+                            case -1:
+                                perror("select()");
+                                //TODO handle select error
+                                break;
+
+                            case 0:
+                                timeWaited += SELECT_TIMEOUT;
+
+                                if(timeWaited >= TIMEOUT)   //if the time already waited is greater than TIMEOUT
+                                    loop = false;           //then exit inner loop --> this will cause the connection to be closed
+
+                                break;
+
+                            default:
+                                //reset timeout
+                                timeWaited = 0;
+
+                                //if I have something to write and I can write
+                                if (FD_ISSET(client_socket.getSockfd(), &write_fds)) {
+                                    // if an event has occured then assign it to the current event to be handled
+                                    pm.send(eventQueue.front()); //if an exception occurs now I won't pop the queue so next time I'll get the same element
+
+                                    //in case everything went smoothly then pop event from event queue
+                                    eventQueue.pop();
+                                }
+
+                                //if I have something to read
+                                if (FD_ISSET(client_socket.getSockfd(), &read_fds)) {
+                                    pm.receive();
+                                }
+                        }
                     }
-
-                    switch (activity) {
-                        case -1:
-                            perror("select()");
-                            //TODO handle select error
-                            break;
-
-                        case 0:
-                            timeWaited += SELECT_TIMEOUT;
-
-                            if(timeWaited >= TIMEOUT)   //if the time already waited is greater than TIMEOUT
-                                loop = false;           //then exit inner loop --> this will cause the connection to be closed
-
-                            break;
-
-                        default:
-                            //reset timeout
-                            timeWaited = 0;
-
-                            //if I have something to write and I can write
-                            if (FD_ISSET(client_socket.getSockfd(), &write_fds)) {
-                                // if an event has occured then assign it to the current event to be handled
-                                pm.send(eventQueue.front()); //if an exception occurs now I won't pop the queue so next time I'll get the same element
-
-                                //in case everything went smoothly then pop event from event queue
-                                eventQueue.pop();
-                            }
-
-                            //if I have something to read
-                            if (FD_ISSET(client_socket.getSockfd(), &read_fds)) {
-                                pm.receive();
-                            }
+                    catch(std::runtime_error &err){
+                        //TODO handle error
                     }
                 }
-                catch(std::runtime_error &err){
-                    //TODO handle error
-                }
+
+                //quit connection
+                pm.quit();
+
+                //close connection
+                client_socket.closeConnection();
             }
-
-            //quit connection
-            pm.quit();
-
-            //close connection
-            client_socket.closeConnection();
+            catch (SocketException &e) {
+                //error in connection; retry later; wait for x seconds
+                std::cout << "Connection error. Retry in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
+                std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
+                //TODO retry for a number of times then return
+            }
+            catch (std::runtime_error &err) {
+                //TODO handle error
+            }
         }
-        catch (std::runtime_error &err) {
-            //error in connection; retry later; wait for x seconds
-            std::cout << "Connection error. Retry in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
-
-            //TODO handle error
-        }
+    }
+    catch (SocketException &e) {
+        //we are here if the socket class couldn't create a sokcet
+        std::cerr << e.what() << std::endl;
+        //close program
+        return;
     }
 }

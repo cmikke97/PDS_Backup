@@ -18,6 +18,7 @@
  */
 class ProtocolManager {
     Socket &s;
+    Database &db;
     messages::ClientMessage clientMessage;
     messages::ServerMessage serverMessage;
 
@@ -25,7 +26,7 @@ class ProtocolManager {
     int start, end, size, protocolVersion;
 
 public:
-    ProtocolManager(Socket &s, int max, int ver);
+    ProtocolManager(Socket &s, Database &db, int max, int ver);
     void authenticate(const std::string& username, const std::string& password);
     void quit();
     void send(Event &e);

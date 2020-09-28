@@ -22,7 +22,9 @@ Thread_guard::Thread_guard(std::thread &t_, std::atomic<bool>& stop_) : t(t_), s
  * @author Michele Crepaldi s269551
  */
 Thread_guard::~Thread_guard() {
+    //tell the connection thread to stop
     stop.store(true);
+    //then join on it
     if(t.joinable())
         t.join();
 

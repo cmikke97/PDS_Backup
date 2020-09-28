@@ -51,7 +51,8 @@ public:
     explicit Directory_entry(const std::filesystem::path&);
     explicit Directory_entry(const std::filesystem::directory_entry&);
 
-    Directory_entry(const std::filesystem::path& path, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type file_time);
+    Directory_entry(const std::filesystem::path& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
+    Directory_entry(const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime);
 
     static void setBaseDir(std::string dir);
 
