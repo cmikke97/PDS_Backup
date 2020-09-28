@@ -9,12 +9,14 @@
  * constructor of protocol manager class
  *
  * @param s socket to read/write to/from
+ * @param db Database object to save/modify/delete entries to/from
  * @param max max number of messages sent without response
  * @param ver verion of the protocol
+ * @param maxTries maximum number of successive re-tries the client can do for the same message (which has received an error response)
  *
  * @author Michele Crepaldi s269551
  */
-ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver) : s(s), db(db), start(0), end(0), size(max), protocolVersion(ver) {
+ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver, int maxTries) : s(s), db(db), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver) {
     waitingForResponse.resize(size+1);
 }
 
@@ -24,8 +26,11 @@ ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver) : s(
  * @param username username of the user
  * @param password password of the user
  *
- * @throw exception TODO in case of an authentication error (wrong username and password)
- * @throw exception TODO in case of a server error -> try again connection
+ * @throw exception ProtocolManagerException("Authentication error", code) in case of an authentication error (wrong username and password)
+ * @throw exception ProtocolManagerException("Internal server error", code, tries) in case of a server error -> try again connection
+ * @throw exception ProtocolManagerException("Unknown server error", 0, 0) in case of an unknown server error
+ * @throw (for now) exception ProtocolManagerException("Version not supported", 505, serverMessage.newversion()) in case of a change version request
+ * @throw exxcpetion ProtocolManagerException("Unsupported message type error", -1, 0) in case of an unsupported message type
  *
  * @author Michele Crepaldi s269551
  */
@@ -63,19 +68,24 @@ void ProtocolManager::authenticate(const std::string& username, const std::strin
             std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            //TODO handle error -> send exception to handle outside
-
-            //stop the file system watcher and return
-            //TODO --> fileWatcher_stop.store(true);
-            return;
+            switch(code){
+                case 401:
+                    throw ProtocolManagerException("Authentication error", code, 0);
+                case 500:
+                    throw ProtocolManagerException("Internal server error", code, 0); //internal server error while NOT authenticated -> data = 0
+                default:
+                    throw ProtocolManagerException("Unknown server error", 0, 0);
+            }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
-            //TODO handle version change and retry -> send exception to handle outside
-            break;
-        default:    //i should never arrive here
+            std::cout << "change version to: " << serverMessage.newversion() << std::endl;
+            //for future use (not implemented now, to implement when a new version is written)
+            //for now terminate the program
+            throw ProtocolManagerException("Version not supported", 505, serverMessage.newversion());
+
+        default: //i should never arrive here
             std::cerr << "Unsupported message type" << std::endl;
-            //TODO handle this protocol error and retry -> send exception to handle outside
-            break;
+            throw ProtocolManagerException("Unsupported message type error", -1, 0);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
@@ -107,7 +117,7 @@ void ProtocolManager::quit() {
  *
  * @param e event to create the message from
  *
- * @throw runtime error in case it cannot write data to socket
+ * @throw SocketException in case it cannot write data to socket
  *
  * @author Michele Crepaldi s269551
  */
@@ -137,8 +147,10 @@ void ProtocolManager::send(Event &e) {
 /**
  * function used to receive and process messages from server
  *
- * @throw runtime error in case it cannot read data from socket
- * @throw TODO in case of a repeated (more than X times) error for the same sent message
+ * @throw SocketException in case it cannot read data from socket
+ * @throw ProtocolManagerException("Internal server error", 500, 1) in case of a repeated (more than X times) error for the same sent message
+ * @throw ProtocolManagerException("Unknown server error", 0, 0) in case of an unknown server error
+ * @throw ProtocolManagerException("Unsupported message type error", -1, 0) in case of an unsupported message type error
  *
  * @author Michele Crepaldi s269551
  */
@@ -156,7 +168,7 @@ void ProtocolManager::receive() {
 
     //check version
     if(protocolVersion != serverMessage.version())
-        std::cerr << "different protocol version!" << std::endl; //TODO throw protocol exception
+        std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
 
     int code;
     switch (serverMessage.type()) {
@@ -168,6 +180,8 @@ void ProtocolManager::receive() {
                 //if(start != end) this condition is true if I receive something
                 //pop the (create) event element (it was successful)
                 start = (start+1)%size;
+                //reset the tries variable (i popped a message)
+                tries = 0;
 
                 //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
                 //then it means that the file was deleted or modified --> I can't send it anymore
@@ -203,13 +217,15 @@ void ProtocolManager::receive() {
                 sendFile(e.getElement().getAbsolutePath(), 0);
                 break;
             }
-            //if I am here then I got a send message but the element is not a file so this is a protocol error
-            std::cerr << "protocol error" << std::endl; //TODO handle protocol error
+            //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
+            std::cerr << "protocol error" << std::endl;
             break;
         case messages::ServerMessage_Type_OK:
             //if(start != end) this condition is true if I receive something
             //pop the event element (it was successful)
             start = (start+1)%size;
+            //reset the tries variable (i popped a message)
+            tries = 0;
 
             std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been sent to server: " << serverMessage.code() << std::endl;
 
@@ -229,22 +245,35 @@ void ProtocolManager::receive() {
             else if(e.getStatus() == FileSystemStatus::deleted)
                 db.remove(e.getElement().getRelativePath()); //delete element from db
 
-
             break;
+
         case messages::ServerMessage_Type_ERR:
             //retrieve error code
             code = serverMessage.code();
             std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            //TODO handle error and possibly retry
-            recoverFromError();
+            switch(code){
+                case 500:
+                    tries++;
+
+                    //if I exceed the number of re-tries throw an exception and close the program
+                    if(tries > maxTries)
+                        throw ProtocolManagerException("Internal server error", 500, 1); //internal server error while authenticated -> data = 1
+
+                    //otherwise try to recover from the error
+                    recoverFromError();
+                    break;
+
+                default:
+                    throw ProtocolManagerException("Unknown server error", 0, 0);
+            }
             break;
+
         default:
             //unrecognised message type
             std::cerr << "Unsupported message type" << std::endl;
-            //TODO handle this protocol error and retry
-            break;
+            throw ProtocolManagerException("Unsupported message type error", -1, 0);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
@@ -265,7 +294,7 @@ bool ProtocolManager::canSend() const {
 /**
  * function used to recover from errors or exceptions -> it re-sends all already sent messages which do not have had responses
  *
- * @throw runtime error in case it cannot write data to socket
+ * @throw SocketException in case it cannot write data to socket
  *
  * @author Michele Crepaldi s269551
  */
@@ -414,7 +443,6 @@ void ProtocolManager::sendFile(const std::filesystem::path& path, int options) {
             clientMessage.Clear();
         }
     }
-    //TODO handle else
 
     //close the input file
     file.close();

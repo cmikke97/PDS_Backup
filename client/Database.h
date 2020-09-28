@@ -32,5 +32,32 @@ public:
 
 };
 
+/**
+ * exceptions for the database class
+ *
+ * @author Michele Crepaldi s269551
+ */
+class DatabaseException : public std::runtime_error {
+public:
+
+    /**
+     * database exception constructor
+     *
+     * @param msg the error message
+     *
+     * @author Michele Crepaldi s269551
+     */
+    DatabaseException(const std::string& msg):
+            std::runtime_error(msg){
+    }
+
+    /**
+     * database exception destructor.
+     *
+     * @author Michele Crepaldi s269551
+     */
+    ~DatabaseException() noexcept override = default;
+};
+
 
 #endif //CLIENT_DATABASE_H

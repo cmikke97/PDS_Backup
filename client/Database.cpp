@@ -18,7 +18,7 @@ Database::~Database() {
  *
  * @param path path of the database in the filesystem
  *
- * @throw runtime_error in case of database errors (cannot open)
+ * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
  *
  * @author Michele Crepaldi s269551
  */
@@ -34,7 +34,7 @@ void Database::open(const std::string &path) {
     if( rc ) {
         std::stringstream tmp;
         tmp << "Cannot open database: " << sqlite3_errmsg(db);
-        throw std::runtime_error(tmp.str());
+        throw DatabaseException(tmp.str());
     }
 
     //if the db is new then create the table inside it
@@ -58,7 +58,7 @@ void Database::open(const std::string &path) {
             std::stringstream tmp;
             tmp << "Cannot create table: " << zErrMsg;
             sqlite3_free(zErrMsg);
-            throw std::runtime_error(tmp.str());
+            throw DatabaseException(tmp.str());
         }
     }
 }
@@ -68,7 +68,7 @@ void Database::open(const std::string &path) {
  *
  * @param f function to be used for each row extracted from the database
  *
- * @throw runtime_error in case of database errors (cannot prepare or read)
+ * @throw DatabaseException in case of database errors (cannot prepare or read)
  *
  * @author Michele Crepaldi s269551
  */
@@ -88,7 +88,7 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
         std::stringstream tmp;
         tmp << "Cannot prepare table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw std::runtime_error(tmp.str());
+        throw DatabaseException(tmp.str());
     }
 
     //prepare some variables
@@ -120,7 +120,7 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
                 std::stringstream tmp;
                 tmp << "Cannot read table: " << zErrMsg;
                 sqlite3_free(zErrMsg);
-                throw std::runtime_error(tmp.str());
+                throw DatabaseException(tmp.str());
         }
     }
 
@@ -148,7 +148,7 @@ std::string quotesql( const std::string& s ) {
  * @param size size of the element to be inserted
  * @param lastWriteTime last write time of the element to be inserted
  *
- * @throw runtime_error in case of database errors (cannot insert)
+ * @throw DatabaseException in case of database errors (cannot insert)
  *
  * @author Michele Crepaldi s269551
  */
@@ -171,7 +171,7 @@ void Database::insert(const std::string &path, const std::string &type, uintmax_
         std::stringstream tmp;
         tmp << "Cannot insert into table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw std::runtime_error(tmp.str());
+        throw DatabaseException(tmp.str());
     }
 }
 
@@ -180,7 +180,7 @@ void Database::insert(const std::string &path, const std::string &type, uintmax_
  *
  * @param path path of the element to be removed
  *
- * @throw runtime_error in case of database errors (cannot delete)
+ * @throw DatabaseException in case of database errors (cannot delete)
  *
  * @author Michele Crepaldi s269551
  */
@@ -199,7 +199,7 @@ void Database::remove(const std::string &path) {
         std::stringstream tmp;
         tmp << "Cannot delete from table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw std::runtime_error(tmp.str());
+        throw DatabaseException(tmp.str());
     }
 }
 
@@ -211,7 +211,7 @@ void Database::remove(const std::string &path) {
  * @param size size of the element to be update
  * @param lastWriteTime last write time of the element to be update
  *
- * @throw runtime_error in case of database errors (cannot update)
+ * @throw DatabaseException in case of database errors (cannot update)
  *
  * @author Michele Crepaldi s269551
  */
@@ -233,6 +233,6 @@ void Database::update(const std::string &path, const std::string &type, uintmax_
         std::stringstream tmp;
         tmp << "Cannot update value in table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw std::runtime_error(tmp.str());
+        throw DatabaseException(tmp.str());
     }
 }
