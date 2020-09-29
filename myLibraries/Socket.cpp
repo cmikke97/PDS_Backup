@@ -141,11 +141,11 @@ int Socket::getSockfd() const {
  *
  * @author Michele Crepaldi s269551
 */
-struct sockaddr_in Socket::composeAddress(const std::string& addr, const std::string& port) {
+struct sockaddr_in Socket::composeAddress(const std::string& addr, int port) {
     struct sockaddr_in address{};
     address.sin_family = AF_INET;
     inet_pton(AF_INET, addr.c_str(), &(address.sin_addr));
-    address.sin_port = htons(stoi(port));
+    address.sin_port = htons(port);
     return address;
 }
 

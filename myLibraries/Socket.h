@@ -43,7 +43,7 @@ public:
     std::string recvString(int options) const;
     ssize_t write(const char *buffer, size_t len, int options) const;
     ssize_t sendString(std::string &stringBuffer, int options) const;
-    static struct sockaddr_in composeAddress(const std::string& addr, const std::string& port);
+    static struct sockaddr_in composeAddress(const std::string& addr, int port);
     void connect(struct sockaddr_in *addr, unsigned int len) const;
     int getSockfd() const;
     std::string getMAC() const;

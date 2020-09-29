@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <fstream>
 #include <utility>
+#include <regex>
 #include "Directory_entry.h"
 
 #define MAXBUFFSIZE 1024
@@ -24,7 +25,7 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::filesystem::path &path) :
+Directory_entry::Directory_entry(const std::string &path) :
         Directory_entry(std::filesystem::directory_entry(path)){
 }
 
@@ -55,8 +56,17 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry) 
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::filesystem::path& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
-                                 relativePath(std::filesystem::relative(absolutePath,baseDir).string()), absolutePath(absolutePath.string()), type(type){
+Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
+                                 absolutePath(absolutePath), type(type){
+
+    //get relative path from absolutePath and baseDir
+    std::smatch m;
+    std::regex e ("(" + std::regex_replace(baseDir, std::regex("\\/"), "\\/") + ")(.*)");
+
+    if(std::regex_match (absolutePath,m,e))
+        relativePath = m[2];
+    else
+        throw std::runtime_error("Error getting relative from absolute path"); //I should never arrive here
 
     //if it is a file then set its size, if it is a directory then size is 0
     this->size = type==Directory_entry_TYPE::file?size:0;
@@ -90,7 +100,7 @@ Directory_entry::Directory_entry(const std::filesystem::path& absolutePath, uint
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime) :
-                                 relativePath(relativePath), absolutePath(baseDir + "/" + relativePath), last_write_time(std::move(lastWriteTime)), size(size){
+                                 relativePath(relativePath), absolutePath(baseDir + relativePath), last_write_time(std::move(lastWriteTime)), size(size){
 
     if(type == "file")
         this->type = Directory_entry_TYPE::file;
@@ -203,6 +213,6 @@ Hash& Directory_entry::getHash() {
  *
  * @author Michele Crepaldi s269551
  */
-void Directory_entry::setBaseDir(std::string dir) {
-    baseDir = std::move(dir);
+void Directory_entry::setBaseDir(const std::string& dir) {
+    baseDir = dir;
 }

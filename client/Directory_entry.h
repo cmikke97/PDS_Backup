@@ -48,13 +48,13 @@ private:
 
 public:
     Directory_entry();
-    explicit Directory_entry(const std::filesystem::path&);
+    explicit Directory_entry(const std::string&);
     explicit Directory_entry(const std::filesystem::directory_entry&);
 
-    Directory_entry(const std::filesystem::path& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
+    Directory_entry(const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
     Directory_entry(const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime);
 
-    static void setBaseDir(std::string dir);
+    static void setBaseDir(const std::string& dir);
 
     std::string getRelativePath();
     std::string getAbsolutePath();

@@ -6,6 +6,7 @@
 #include <string>
 #include <iostream>
 #include <atomic>
+#include <regex>
 #include "FileSystemWatcher.h"
 #include "Event.h"
 #include "../myLibraries/TSCircular_vector.h"
@@ -13,22 +14,16 @@
 #include "../myLibraries/Socket.h"
 #include "messages.pb.h"
 #include "ProtocolManager.h"
+#include "Config.h"
 
-#define EVENT_QUEUE_SIZE 20 //dimension of the event queue, a.k.a. how many events can be putted in queue at the same time
-#define SECONDS_BETWEEN_RECONNECTIONS 10 //seconds to wait before client retrying connection after connection lost
-#define MAX_CONNECTION_RETRIES 12 //maximum number of times the system will re-try to connect consecutively
-#define MAX_SERVER_ERROR_RETRIES 5 //maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the final outcome) after an internal server error
-#define MAX_AUTH_ERROR_RETRIES 5 //maximum number of times the system will re-try the authentication after an internal server error
-#define TIMEOUT 300 //seconds to wait before client-server connection timeout (5 minutes)
-#define SELECT_TIMEOUT 5
-#define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
 #define VERSION 1
-#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/client/clientDB/clientDB.sqlite"
+#define CONFIG_FILE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/client/config.txt"
 
-//TODO get this costants from a configuration file
+//TODO (maybe) use OPENSSL (TLS)
 
-void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, const std::string &, const std::string &, const std::string &);
+void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
+Config config;
 Database db;
 
 /**
@@ -45,17 +40,19 @@ int main(int argc, char **argv) {
     // compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    if (argc != 6) {
-        std::cerr << "Error: format is [" << argv[0] << "] [directory to watch] [server ip address] [server port] [username] [password]" << std::endl;
+    if (argc != 5) {
+        std::cerr << "Error: format is [" << argv[0] << "] [server ip] [server port] [username] [password]" << std::endl;
         exit(1);
     }
 
+    config.load(std::string(CONFIG_FILE_PATH));
+
     // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
-    FileSystemWatcher fw{argv[1], std::chrono::milliseconds(5000)};
+    FileSystemWatcher fw{config.getPathToWatch(), std::chrono::milliseconds(config.getMillisFilesystemWatcher())};
 
     try {
         //open the database (and if not previously there create also the needed table)
-        db.open(DATABASE_PATH);
+        db.open(config.getDatabasePath());
 
         //make the filesystem watcher retrieve previously saved data from db
         fw.recoverFromDB(db);
@@ -67,19 +64,19 @@ int main(int argc, char **argv) {
     }
 
     // create a circular vector instance that will contain all the events happened
-    TSCircular_vector<Event> eventQueue(EVENT_QUEUE_SIZE);
+    TSCircular_vector<Event> eventQueue(config.getEventQueueSize());
 
     //extract the arguments
-    std::string server_ip = argv[2];
-    std::string server_port = argv[3];
-    std::string username = argv[4];
-    std::string password = argv[5];
+    std::string serverIP = argv[1];
+    std::string serverPort = argv[2];
+    std::string username = argv[3];
+    std::string password = argv[4];
 
     //initialize some atomic boolean to make the different threads stop
     std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
 
     // initialize the communication thread (thread that will communicate with the server)
-    std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), server_ip, server_port, username, password);
+    std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), serverIP, stoi(serverPort), username, password);
 
     // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
     Thread_guard tg_communication(communication_thread, communicationThread_stop);
@@ -110,16 +107,16 @@ int main(int argc, char **argv) {
  * @author Michele Crepaldi
  */
 void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &eventQueue, const std::string &server_ip,
-                 const std::string &server_port, const std::string &username, const std::string &password) {
+                 int server_port, const std::string &username, const std::string &password) {
 
     //initialize socket address
     struct sockaddr_in server_address = Socket::composeAddress(server_ip, server_port);
 
-    try{
+    try {
         //initialize socket
         Socket client_socket; //may throw an exception!
         //initialize protocol manager
-        ProtocolManager pm(client_socket, db, MAX_RESPONSE_WAITING, VERSION, MAX_SERVER_ERROR_RETRIES);
+        ProtocolManager pm(client_socket, db, config.getMaxResponseWaiting(), VERSION, config.getMaxServerErrorRetries());
 
         //for select
         fd_set read_fds;
@@ -132,7 +129,8 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             try {
 
                 //wait until there is at least one event in the event queue (blocking wait)
-                if(!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
+                if (!eventQueue.waitForCondition(
+                        thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
                     return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
                 //connect with server
@@ -167,7 +165,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     int maxfd = client_socket.getSockfd();
                     struct timeval tv{};
-                    tv.tv_sec = SELECT_TIMEOUT;
+                    tv.tv_sec = config.getSelectTimeoutSeconds();
 
                     int activity = select(maxfd + 1, &read_fds, &write_fds, nullptr, &tv);
 
@@ -189,12 +187,11 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             //terminate filesystem watcher and close program
                             fileWatcher_stop.store(true);
                             return;
-                            break;
 
                         case 0:
-                            timeWaited += SELECT_TIMEOUT;
+                            timeWaited += config.getSelectTimeoutSeconds();
 
-                            if(timeWaited >= TIMEOUT)   //if the time already waited is greater than TIMEOUT
+                            if (timeWaited >= config.getTimeoutSeconds())   //if the time already waited is greater than TIMEOUT
                                 loop = false;           //then exit inner loop --> this will cause the connection to be closed
 
                             break;
@@ -234,15 +231,17 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     case socketError::connect:  //error in socket connect
 
                         //re-try only for a limited number of times
-                        if(tries <= MAX_CONNECTION_RETRIES){
+                        if (tries < config.getMaxConnectionRetries()) {
                             //error in connection; retry later; wait for x seconds
                             tries++;
-                            std::cout << "Connection error. Retry (" << tries << ") in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
-                            std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
+                            std::cout << "Connection error. Retry (" << tries << ") in "
+                                      << config.getSecondsBetweenReconnections() << " seconds." << std::endl;
+                            std::this_thread::sleep_for(std::chrono::seconds(config.getSecondsBetweenReconnections()));
                             break;
                         }
 
                         //maximum number of re-tries exceeded -> terminate program
+                        std::cerr << "Cannot establish connection." << std::endl;
 
                     case socketError::getMac: //error retrieving the MAC
                     default:
@@ -252,7 +251,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 }
             }
             catch (ProtocolManagerException &e) {
-                switch(e.getErrorCode()){
+                switch (e.getErrorCode()) {
                     case -1: //unsupported message type error
                     case 0: //unknown server error
                     case 401: //authentication error
@@ -275,21 +274,20 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     case 500: //internal server error
 
-                        if(e.getData() == 0){ //internal server error while NOT authenticated
+                        if (e.getData() == 0) { //internal server error while NOT authenticated
                             //retry the authentication x times
 
                             //close connection
                             client_socket.closeConnection();
 
-                            if(authTries > MAX_AUTH_ERROR_RETRIES){
+                            if (authTries > config.getMaxAuthErrorRetries()) {
                                 //terminate filesystem watcher and close program
                                 fileWatcher_stop.store(true);
                                 return;
                             }
 
                             authTries++;
-                        }
-                        else{ //internal server error while authenticated (in receive)
+                        } else { //internal server error while authenticated (in receive)
                             //retries are already exceeded (the protocol manager handles retries)
 
                             //connection will be closed automatically by the socket destructor
