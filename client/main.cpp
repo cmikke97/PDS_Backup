@@ -141,7 +141,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 tries = 0;
 
                 //authenticate user
-                pm.authenticate(username, password); //TODO add MAC
+                pm.authenticate(username, password, client_socket.getMAC());
                 //if the authentication is successful reset tries
                 authTries = 0;
 
@@ -227,18 +227,29 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 client_socket.closeConnection();
             }
             catch (SocketException &e) {
-                //error in connection; retry later; wait for x seconds
+                switch (e.getCode()) {
+                    case socketError::create:   //error in socket create
+                    case socketError::read:     //error in socket read
+                    case socketError::write:    //error in socket write
+                    case socketError::connect:  //error in socket connect
 
-                //try only for a limited number of times
-                if(tries > MAX_CONNECTION_RETRIES){
-                    //maximum number of re-tries exceeded -> terminate filesystem watcher and close program
-                    fileWatcher_stop.store(true);
-                    return;
+                        //re-try only for a limited number of times
+                        if(tries <= MAX_CONNECTION_RETRIES){
+                            //error in connection; retry later; wait for x seconds
+                            tries++;
+                            std::cout << "Connection error. Retry (" << tries << ") in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
+                            std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
+                            break;
+                        }
+
+                        //maximum number of re-tries exceeded -> terminate program
+
+                    case socketError::getMac: //error retrieving the MAC
+                    default:
+                        //terminate filesystem watcher and close program
+                        fileWatcher_stop.store(true);
+                        return;
                 }
-
-                tries++;
-                std::cout << "Connection error. Retry (" << tries << ") in " << SECONDS_BETWEEN_RECONNECTIONS << " seconds." << std::endl;
-                std::this_thread::sleep_for(std::chrono::seconds(SECONDS_BETWEEN_RECONNECTIONS));
             }
             catch (ProtocolManagerException &e) {
                 switch(e.getErrorCode()){

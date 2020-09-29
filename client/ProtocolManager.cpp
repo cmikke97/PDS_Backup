@@ -25,6 +25,7 @@ ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver, int 
  *
  * @param username username of the user
  * @param password password of the user
+ * @param macAddress macAddress of this machine
  *
  * @throw exception ProtocolManagerException("Authentication error", code) in case of an authentication error (wrong username and password)
  * @throw exception ProtocolManagerException("Internal server error", code, tries) in case of a server error -> try again connection
@@ -34,12 +35,14 @@ ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver, int 
  *
  * @author Michele Crepaldi s269551
  */
-void ProtocolManager::authenticate(const std::string& username, const std::string& password) {
+void ProtocolManager::authenticate(const std::string& username, const std::string& password, const std::string& macAddress) {
+
     //authenticate user
     //compute message
     clientMessage.set_type(messages::ClientMessage_Type_AUTH);
     clientMessage.set_username(username);
     clientMessage.set_password(password);
+    clientMessage.set_macaddress(macAddress);
     std::string client_temp = clientMessage.SerializeAsString();
     //send message to server
     s.sendString(client_temp, 0);

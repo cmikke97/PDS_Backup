@@ -28,7 +28,7 @@ class ProtocolManager {
 
 public:
     ProtocolManager(Socket &s, Database &db, int max, int ver, int maxTries);
-    void authenticate(const std::string& username, const std::string& password);
+    void authenticate(const std::string& username, const std::string& password, const std::string& macAddress);
     void quit();
     void send(Event &e);
     void composeMessage(Event &e);
