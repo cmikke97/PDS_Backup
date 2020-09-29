@@ -14,7 +14,8 @@ message ClientMessage{
   bytes data = 8;             //for DATA
   string username = 9;        //for AUTH
   string password = 10;       //for AUTH
-  bool last = 11;             //for DATA
+  string macAddress = 11;     //for AUTH
+  bool last = 12;             //for DATA
 
   enum Type{
     NOOP = 0;   //has version, type

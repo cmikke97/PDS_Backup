@@ -7,11 +7,17 @@
 
 #include <iostream>
 #include <sys/socket.h>
+#include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <filesystem>
 
+#include <sys/ioctl.h>
+#include <net/if.h>
+
 #define MAXBUFFSIZE 1024
+
+enum class socketError{create, bind, accept, read, write, connect, getMac};
 
 /**
  * Socket class
@@ -40,6 +46,7 @@ public:
     static struct sockaddr_in composeAddress(const std::string& addr, const std::string& port);
     void connect(struct sockaddr_in *addr, unsigned int len) const;
     int getSockfd() const;
+    std::string getMAC() const;
 };
 
 /**
@@ -59,7 +66,7 @@ public:
  * @author Michele Crepaldi s269551
  */
 class SocketException : public std::runtime_error {
-
+    socketError code;
 public:
 
     /**
@@ -69,8 +76,8 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    SocketException(const std::string& msg):
-            std::runtime_error(msg){
+    SocketException(const std::string& msg, socketError code):
+            std::runtime_error(msg), code(code){
     }
 
     /**
@@ -79,6 +86,17 @@ public:
      * @author Michele Crepaldi s269551
      */
     ~SocketException() noexcept override = default;
+
+    /**
+     * function to retrieve the error code from the exception
+     *
+     * @return error code
+     *
+     * @author Michele Crepaldi s269551
+     */
+    socketError getCode() const noexcept{
+        return code;
+    }
 };
 
 #endif //CLIENT_SOCKET_H
