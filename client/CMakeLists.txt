@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 #set some variables
 set(PROJECT_NAME client)
 set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp
-        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Database.cpp Database.h)
+        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Database.cpp Database.h Config.cpp Config.h)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
 
@@ -19,6 +19,7 @@ if (CYGWIN) #if on windows
     string(REGEX REPLACE "C/" "/cygdrive/c/" OPENSSL_ROOT_DIR ${OPENSSL_ROOT_DIR})
     #set some variables (directories)
     set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_ROOT_DIR}/bin/libcrypto-1_1-x64.dll)
+    set(OPENSSL_SSL_LIBRARY ${OPENSSL_ROOT_DIR}/bin/libssl-1_1-x64.dll)
     set(OPENSSL_INCLUDE_DIR ${OPENSSL_ROOT_DIR}/include)
     set(OPENSSL_USE_STATIC_LIBS TRUE)
     #find OpenSSL package using previoulsy defined variables
@@ -54,7 +55,7 @@ if (CYGWIN) #if on windows
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto Protobuf)
+    target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto OpenSSL::SSL Protobuf)
 
 else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)

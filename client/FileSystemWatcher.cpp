@@ -10,9 +10,9 @@
      *
      * @author Michele Crepaldi s269551
      */
-FileSystemWatcher::FileSystemWatcher(std::string  path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
+FileSystemWatcher::FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
     //set directory entry class base directory to the path to watch
-    Directory_entry::setBaseDir(path_to_watch);
+    Directory_entry::setBaseDir(this->path_to_watch);
 }
 
 /**
