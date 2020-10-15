@@ -76,17 +76,16 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
     std::tm *gmt = std::gmtime(&tt);
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
-    last_write_time = buffer.str();
+    this->last_write_time = buffer.str();
 
-    std::stringstream temp;
-    temp << relativePath;
+    std::stringstream sizeStr;
+    sizeStr << this->size;
 
-    //if the entry is a file then compute its hash
-    if(type==Directory_entry_TYPE::file)
-        temp << this->size;
-
-    temp << last_write_time;
-    hash = Hash(temp.str());
+    HashMaker hm;
+    hm.update(relativePath);
+    hm.update(sizeStr.str());
+    hm.update(this->last_write_time);
+    hash = hm.get();
 }
 
 /**
@@ -109,15 +108,14 @@ Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size
     else
         this->type = Directory_entry_TYPE::notAType;
 
-    std::stringstream temp;
-    temp << relativePath;
+    std::stringstream sizeStr;
+    sizeStr << size;
 
-    //if the entry is a file then compute its hash
-    if(this->type == Directory_entry_TYPE::file)
-        temp << this->size;
-
-    temp << last_write_time;
-    hash = Hash(temp.str());
+    HashMaker hm;
+    hm.update(relativePath);
+    hm.update(sizeStr.str());
+    hm.update(lastWriteTime);
+    hash = hm.get();
 }
 
 /**

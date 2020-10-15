@@ -5,15 +5,6 @@
 #include "Database.h"
 
 /**
- * destructor of class Database
- *
- * @author Michele Crepaldi s269551
- */
-Database::~Database() {
-    sqlite3_close(db);
-}
-
-/**
  * function used to open the connection to a sqlite3 database; if the database already existed then it opens it, otherwise it also creates the needed table
  *
  * @param path path of the database in the filesystem
@@ -28,13 +19,17 @@ void Database::open(const std::string &path) {
     bool create = !std::filesystem::directory_entry(path).exists();
 
     //open the database
-    rc = sqlite3_open("../clientDB/clientDB.sqlite", &db);
+    sqlite3 *dbTmp;
+    rc = sqlite3_open("../clientDB/clientDB.sqlite", &dbTmp);
+
+    //db = my::UniquePtr<sqlite3>(dbTmp);
+    db.reset(dbTmp);
 
     //in case of errors throw an exception
     if( rc ) {
         std::stringstream tmp;
-        tmp << "Cannot open database: " << sqlite3_errmsg(db);
-        throw DatabaseException(tmp.str());
+        tmp << "Cannot open database: " << sqlite3_errmsg(db.get());
+        throw DatabaseException(tmp.str(), databaseError::open);
     }
 
     //if the db is new then create the table inside it
@@ -51,14 +46,14 @@ void Database::open(const std::string &path) {
                           ");";
 
         //Execute SQL statement
-        rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrMsg);
+        rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
 
         //if there was an error in the table creation throw an exception
         if( rc != SQLITE_OK ){
             std::stringstream tmp;
             tmp << "Cannot create table: " << zErrMsg;
             sqlite3_free(zErrMsg);
-            throw DatabaseException(tmp.str());
+            throw DatabaseException(tmp.str(), databaseError::create);
         }
     }
 }
@@ -81,14 +76,14 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
     std::string sql = "SELECT path, size, type, lastWriteTime from savedFiles;";
 
     //Prepare SQL statement
-    rc = sqlite3_prepare(db, sql.c_str(), -1, &stmt, nullptr);
+    rc = sqlite3_prepare(db.get(), sql.c_str(), -1, &stmt, nullptr);
 
     //if there was an error in the SQL statement prepare throw an exception
     if( rc != SQLITE_OK ){
         std::stringstream tmp;
         tmp << "Cannot prepare table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw DatabaseException(tmp.str());
+        throw DatabaseException(tmp.str(), databaseError::prepare);
     }
 
     //prepare some variables
@@ -120,7 +115,7 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
                 std::stringstream tmp;
                 tmp << "Cannot read table: " << zErrMsg;
                 sqlite3_free(zErrMsg);
-                throw DatabaseException(tmp.str());
+                throw DatabaseException(tmp.str(), databaseError::read);
         }
     }
 
@@ -164,14 +159,14 @@ void Database::insert(const std::string &path, const std::string &type, uintmax_
             + ");";
 
     // Execute SQL statement
-    rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrMsg);
+    rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
 
     //if there was an error in the table insertion throw an exception
     if( rc != SQLITE_OK ){
         std::stringstream tmp;
         tmp << "Cannot insert into table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw DatabaseException(tmp.str());
+        throw DatabaseException(tmp.str(), databaseError::insert);
     }
 }
 
@@ -192,14 +187,14 @@ void Database::remove(const std::string &path) {
                         + quotesql(path) + ";";
 
     // Execute SQL statement
-    rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrMsg);
+    rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
 
     //if there was an error in the table deletion throw an exception
     if( rc != SQLITE_OK ){
         std::stringstream tmp;
         tmp << "Cannot delete from table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw DatabaseException(tmp.str());
+        throw DatabaseException(tmp.str(), databaseError::remove);
     }
 }
 
@@ -226,13 +221,13 @@ void Database::update(const std::string &path, const std::string &type, uintmax_
                         + quotesql(path) + ";";
 
     // Execute SQL statement
-    rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrMsg);
+    rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
 
     //if there was an error in the table insertion throw an exception
     if( rc != SQLITE_OK ){
         std::stringstream tmp;
         tmp << "Cannot update value in table: " << zErrMsg;
         sqlite3_free(zErrMsg);
-        throw DatabaseException(tmp.str());
+        throw DatabaseException(tmp.str(), databaseError::update);
     }
 }
