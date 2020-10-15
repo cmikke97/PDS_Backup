@@ -11,6 +11,8 @@
 #include "../myLibraries/Socket.h"
 #include "../Event.h"
 
+#define MAXBUFFSIZE 1024
+
 /**
  * class used to manage the interactions with the server
  *
@@ -22,7 +24,7 @@ class ProtocolManager {
     messages::ClientMessage clientMessage;
     messages::ServerMessage serverMessage;
 
-    std::vector<Event> waitingForResponse;
+    std::vector<Event> waitingForResponse{};
     int start, end, size, protocolVersion;
     int tries, maxTries;
 
@@ -35,7 +37,7 @@ public:
     void receive();
     bool canSend() const;
     void recoverFromError();
-    void sendFile(const std::filesystem::path& path, int options);
+    void sendFile(const std::filesystem::path& path);
 };
 
 /**

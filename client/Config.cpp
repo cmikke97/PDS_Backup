@@ -17,8 +17,8 @@
 #define TIMEOUT 300 //seconds to wait before client-server connection timeout (5 minutes)
 #define SELECT_TIMEOUT 5 //seconds to wait between one select and the other
 #define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
-#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/client/clientDB/clientDB.sqlite"
-#define PATH_TO_WATCH "C:/Users/michele/Desktop/programmazione_di_sistema_backup"
+#define DATABASE_PATH "./clientDB/clientDB.sqlite"
+#define PATH_TO_WATCH ""
 
 void Config::load(const std::string &configFilePath) {
     std::fstream file;

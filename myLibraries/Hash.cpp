@@ -1,79 +1,48 @@
 //
-// Created by michele on 27/07/2020.
+// Created by michele on 14/10/2020.
 //
 
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <sstream>
 #include "Hash.h"
 
-/**
- * function to handle Crypto errors (Openssl)
- *
- * @author Michele Crepaldi s269551
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Hash class
  */
-void handleErrors()
+
+/**
+ * hash constructor from a buffer and its length
+ *
+ * @param buf buffer where to find data
+ * @param len length of the data
+ *
+ * @return result of memcmp
+ */
+Hash::Hash(const char *buf, size_t len) {
+    memcpy(shaSum, buf, len);
+}
+
+/**
+ * implementation of a constant time memcmp (to avoid side channel timing attacks)
+ * (taken from openSSL since wolfSSL does not support it yet)
+ *
+ * @param b1 first hash
+ * @param b2 second hash
+ * @param len length of the two hashes (must be equal)
+ * @return result of memcmp
+ */
+int CRYPTO_memcmp(const void * in_a, const void * in_b, size_t len)
 {
-    ERR_print_errors_fp(stderr);
-    abort();
-}
+    size_t i;
+    const volatile auto *a = static_cast<volatile const unsigned char *>(in_a);
+    const volatile auto *b = static_cast<volatile const unsigned char *>(in_b);
+    unsigned char x = 0;
 
-/**
- * default constructor
- *
- * @author Michele Crepaldi s269551
- */
-Hash::Hash() = default;
+    for (i = 0; i < len; i++)
+        x |= a[i] ^ b[i];
 
-/**
- * constructor of this Hash object in case you want an hash of a small string
- * (not suitable with files because you would need to load them entirely in memory)
- * <p>
- * for hashing a <b>file</b> use this other methods in this order:
- * <ul>
- *      <li> <b> hashInit
- *      <li> <b> hashUpdate (repeated for each block of data)
- *      <li> <b> hashFinalize
- * </ul>
- *
- * @param string to be hashed
- *
- * @author Michele Crepaldi s269551
- */
-Hash::Hash(std::string data) {
-    HashInit();
-    HashUpdate(const_cast<char *>(data.c_str()), data.length());
-    HashFinalize();
-}
-
-/**
- * constructor of this Hash object in case you want an hash of a small object
- * (not suitable with files because you would need to load them entirely in memory)
- * <p>
- * for hashing a <b>file</b> use this other methods in this order:
- * <ul>
- *      <li> <b> hashInit
- *      <li> <b> hashUpdate (repeated for each block of data)
- *      <li> <b> hashFinalize
- * </ul>
- *
- * @param buf data to be hashed
- * @param len of the data
- *
- * @author Michele Crepaldi s269551
- */
-Hash::Hash(char *buf, unsigned long len) {
-    HashInit();
-    HashUpdate(buf, len);
-    HashFinalize();
-}
-
-/**
- * get the hash associated to this Hash object
- *
- * @return the hash and len
- *
- * @author Michele Crepaldi s269551
- */
-std::pair<unsigned char*, unsigned long> Hash::getValue() {
-    return std::make_pair(md_value, md_len);
+    return x;
 }
 
 /**
@@ -85,58 +54,160 @@ std::pair<unsigned char*, unsigned long> Hash::getValue() {
  * @author Michele Crepaldi s269551
  */
 bool Hash::operator==(Hash &other) {
-    auto myHash = this->getValue();
-    auto otherHash = other.getValue();
-    if(myHash.second == otherHash.second) //if the len is the same (they should be unless there are errors)
-        return CRYPTO_memcmp(myHash.first, otherHash.first, myHash.second); //then compare the two hashes in constant time
+    auto myHash = this->str();  //get my hash value
+    auto otherHash = other.str();   //get the other's hash value
+    if(myHash.size() == otherHash.size()) //if the size is the same (they should be unless there are errors)
+        return CRYPTO_memcmp(myHash.c_str(), otherHash.c_str(), myHash.length()); //then compare the two hashes in constant time
     return false;
 }
 
 /**
- * function to initialize the hash object
+ * get the hash associated to this Hash object as a pair of char* and len
+ *
+ * @return the hash and len
  *
  * @author Michele Crepaldi s269551
-*/
-void Hash::HashInit() {
-    ERR_load_CRYPTO_strings();
-
-    if((mdctx = EVP_MD_CTX_new()) == nullptr)
-        handleErrors();
-
-    if(1 != EVP_MD_CTX_init(mdctx))
-        handleErrors();
-
-    if(1!=EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr))
-        handleErrors();
+ */
+std::pair<char*, size_t> Hash::get() {
+    return std::make_pair(shaSum, sizeof(shaSum));
 }
 
 /**
- * function to update the current hash with a block of data
- * <p>
- * <b>(don't forget to use HashFinalize after the last block!)
+ * get the hash associated to this Hash object as a string
+ *
+ * @return the hash as string
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::string Hash::str() {
+    return std::string(shaSum,sizeof(shaSum));
+}
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * HashMaker class
+ */
+
+/**
+ * function to handle Crypto errors (Openssl)
+ *
+ * @author Michele Crepaldi s269551
+ */
+void handleErrors(int err, const std::string& msg, hashError type)
+{
+    std::stringstream errMsg;
+    errMsg << msg << ": " << wc_GetErrorString(err);
+    throw HashException(errMsg.str(), type);
+}
+
+/**
+ * default constructor of HashMaker class
+ *
+ * @throw HashException in case it cannot initialize the HashMaker object
+ *
+ * @author Michele Crepaldi s269551
+ */
+HashMaker::HashMaker() {
+    init();
+};
+
+/**
+ * constructor of this HashMaker object with a string as input, it can be used to initialize the hash with already a value;
+ * it is still possible to update.
+ *
+ * @param string to be hashed
+ *
+ * @throw HashException in case it cannot initialize the hash object
+ * @throw HashException in case it cannot update the hash object
+ *
+ * @author Michele Crepaldi s269551
+ */
+HashMaker::HashMaker(const std::string& buffer) : HashMaker(buffer.data(), buffer.size()) {
+}
+
+/**
+ * constructor of this HashMaker object with a char * (and its length) as input, it can be used to initialize the hash
+ * with already a value; it is still possible to update.
+ *
+ * @param buf data to be hashed
+ * @param len of the data
+ *
+ * @throw HashException in case it cannot initialize the hash object
+ * @throw HashException in case it cannot update the hash object
+ *
+ * @author Michele Crepaldi s269551
+ */
+HashMaker::HashMaker(const char *buf, size_t len) : HashMaker() {
+    update(buf, len);
+}
+
+/**
+ * function to initialize the HashMaker object
+ *
+ * @throw HashException in case it cannot initialize the HashMaker object
+ *
+ * @author Michele Crepaldi s269551
+*/
+void HashMaker::init() {
+    int err = wc_InitSha256(&sha);
+    if(err != 0)
+        handleErrors(err, "Cannot initialize hash", hashError::init);
+}
+
+/**
+ * function to update the current HashMaker with a block of data
  *
  * @param buf buffer containing data to be hashed
  * @param len length of the buffer
  *
- * @author Michele Crepaldi s269551
-*/
-void Hash::HashUpdate(char *buf, unsigned long len) {
-    if(1!=EVP_DigestUpdate(mdctx, buf, len))
-        handleErrors();
-}
-
-/**
- * function to finalize the content of the hash after hashing the last block
- * <p>
- * <b>(it is necessary to use this!)
+ * @throw HashException in case it cannot update the HashMaker object
  *
  * @author Michele Crepaldi s269551
 */
-void Hash::HashFinalize() {
-    if(1!=EVP_DigestFinal_ex(mdctx, md_value, &md_len))
-        handleErrors();
+void HashMaker::update(const char *buf, size_t len) {
+    int err = wc_Sha256Update(&sha, reinterpret_cast<const byte *>(buf), len);
+    if(err != 0)
+        handleErrors(err, "Cannot update hash", hashError::update);
+}
 
-    EVP_MD_CTX_free(mdctx);
-    EVP_cleanup();
-    ERR_free_strings();
+/**
+ * function to update the current HashMaker with a block of data
+ *
+ * @param buf string buffer containing data to be hashed
+ *
+ * @throw HashException in case it cannot update the HashMaker object
+ *
+ * @author Michele Crepaldi s269551
+*/
+void HashMaker::update(std::string buf) {
+    update(buf.data(), buf.size());
+}
+
+/**
+ * function to finalize the content of the HashMaker after hashing the last block
+ * <p>
+ * <b>(it is necessary to use this!)
+ *
+ * @throw HashException in case it cannot finalize the HashMaker object
+ *
+ * @author Michele Crepaldi s269551
+*/
+void HashMaker::finalize() {
+    int err = wc_Sha256Final(&sha, reinterpret_cast<byte *>(shaSum));
+    if(err != 0)
+        handleErrors(err, "Cannot finalize hash", hashError::finalize);
+}
+
+/**
+ * function to get the final Hash object constructed by the HashMaker
+ *
+ * @return Hash constructed
+ *
+ * @throw HashException in case it cannot finalize the HashMaker object
+ *
+ * @author Michele Crepaldi s269551
+ */
+Hash HashMaker::get() {
+    finalize();
+    return Hash(shaSum, sizeof(shaSum));
 }

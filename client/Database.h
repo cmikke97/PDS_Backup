@@ -14,16 +14,34 @@
 #include <functional>
 
 /**
+ * namespace containing the definition of the UniquePtr to use in the TLS classes
+ *
+ * @author Michele Crepaldi s269551
+ */
+namespace my {
+    template<class T>
+    struct DeleterOf;
+
+    template<>
+    struct DeleterOf<sqlite3> {
+        void operator()(sqlite3 *p) const { sqlite3_close(p); }
+    };
+
+    template<class sqlite3Type>
+    using UniquePtr = std::unique_ptr<sqlite3Type, DeleterOf<sqlite3Type>>;
+}
+
+/**
  * class which represents a sqlite3 database
  *
  * @author Michele Crepaldi s269551
  */
 class Database {
-    sqlite3 *db{};
+    my::UniquePtr<sqlite3> db;
 
 public:
     Database() = default;
-    ~Database();
+    ~Database() = default;
     void open(const std::string& path);
     void forAll(std::function<void (const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime)> &f);
     void insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime);
@@ -33,11 +51,19 @@ public:
 };
 
 /**
+ * databaseError class: it describes (enumerically) all the possible database errors
+ *
+ * @author Michele Crepaldi s269551
+ */
+enum class databaseError{open, create, prepare, read, insert, remove, update};
+
+/**
  * exceptions for the database class
  *
  * @author Michele Crepaldi s269551
  */
 class DatabaseException : public std::runtime_error {
+    databaseError code;
 public:
 
     /**
@@ -47,8 +73,8 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    DatabaseException(const std::string& msg):
-            std::runtime_error(msg){
+    explicit DatabaseException(const std::string& msg, databaseError code):
+            std::runtime_error(msg), code(code){
     }
 
     /**
@@ -57,6 +83,17 @@ public:
      * @author Michele Crepaldi s269551
      */
     ~DatabaseException() noexcept override = default;
+
+    /**
+    * function to retrieve the error code from the exception
+    *
+    * @return error code
+    *
+    * @author Michele Crepaldi s269551
+    */
+    databaseError getCode() const noexcept{
+        return code;
+    }
 };
 
 

@@ -6,7 +6,6 @@
 #include <string>
 #include <iostream>
 #include <atomic>
-#include <regex>
 #include "FileSystemWatcher.h"
 #include "Event.h"
 #include "../myLibraries/TSCircular_vector.h"
@@ -17,9 +16,7 @@
 #include "Config.h"
 
 #define VERSION 1
-#define CONFIG_FILE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/client/config.txt"
-
-//TODO (maybe) use OPENSSL (TLS)
+#define CONFIG_FILE_PATH "./config.txt"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
@@ -109,12 +106,9 @@ int main(int argc, char **argv) {
 void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &eventQueue, const std::string &server_ip,
                  int server_port, const std::string &username, const std::string &password) {
 
-    //initialize socket address
-    struct sockaddr_in server_address = Socket::composeAddress(server_ip, server_port);
-
     try {
         //initialize socket
-        Socket client_socket; //may throw an exception!
+        Socket client_socket(socketType::TCP);
         //initialize protocol manager
         ProtocolManager pm(client_socket, db, config.getMaxResponseWaiting(), VERSION, config.getMaxServerErrorRetries());
 
@@ -134,7 +128,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
                 //connect with server
-                client_socket.connect(&server_address, sizeof(server_address));
+                client_socket.connect(server_ip, server_port);
                 //if the connection is successful then reset tries variable
                 tries = 0;
 

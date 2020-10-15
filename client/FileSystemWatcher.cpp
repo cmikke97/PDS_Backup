@@ -29,6 +29,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
         std::this_thread::sleep_for(delay);
 
         // check if a file/directory was deleted
+        //TODO check if the files belong to the path to watch set
         auto it = paths_.begin();
         while (it != paths_.end()) {
             if (!std::filesystem::exists(it->first)) {
@@ -40,6 +41,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
             }
         }
         // Check if a file/directory was created
+        //TODO check if the path_to_watch exists
         for(const auto& file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
             auto current_file = Directory_entry(file);
 
@@ -48,10 +50,10 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
 
             if(!contains(file.path().string())) { //file creation
                 if(action(current_file, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
-                    paths_[current_file.getAbsolutePath()] = current_file;
+                    paths_[current_file.getAbsolutePath()] = std::move(current_file);
             }else if(paths_[current_file.getAbsolutePath()].getLastWriteTime() != current_file.getLastWriteTime()) { //file modify
                 if(action(current_file, FileSystemStatus::modified))
-                    paths_[current_file.getAbsolutePath()] = current_file;
+                    paths_[current_file.getAbsolutePath()] = std::move(current_file);
             }
         }
     }

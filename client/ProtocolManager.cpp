@@ -45,13 +45,13 @@ void ProtocolManager::authenticate(const std::string& username, const std::strin
     clientMessage.set_macaddress(macAddress);
     std::string client_temp = clientMessage.SerializeAsString();
     //send message to server
-    s.sendString(client_temp, 0);
+    s.sendString(client_temp);
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     clientMessage.Clear();
 
     //get server response
-    std::string server_temp = s.recvString(0);
+    std::string server_temp = s.recvString();
 
     //parse server response
     serverMessage.ParseFromString(server_temp);
@@ -109,7 +109,7 @@ void ProtocolManager::quit() {
     std::string client_temp = clientMessage.SerializeAsString();
 
     //send message to server
-    s.sendString(client_temp, 0);
+    s.sendString(client_temp);
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     clientMessage.Clear();
@@ -137,7 +137,7 @@ void ProtocolManager::send(Event &e) {
     std::string client_temp = clientMessage.SerializeAsString();
 
     //send message to server
-    s.sendString(client_temp, 0);
+    s.sendString(client_temp);
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     clientMessage.Clear();
@@ -159,7 +159,7 @@ void ProtocolManager::send(Event &e) {
  */
 void ProtocolManager::receive() {
     //get server response
-    std::string server_temp = s.recvString(0);
+    std::string server_temp = s.recvString();
 
     //parse server response
     serverMessage.ParseFromString(server_temp);
@@ -201,23 +201,24 @@ void ProtocolManager::receive() {
                 else
                     tmp = Event(e.getElement(), FileSystemStatus::modifySent); //file modified
 
-                //save the send event in a local list (to then wait for its respose)
-                waitingForResponse[end] = tmp;
-                end = (end+1)%size;
-
                 //compose the message based on send event
                 composeMessage(tmp);
+
+                //save the send event in a local list (to then wait for its respose)
+                waitingForResponse[end] = std::move(tmp);
+                end = (end+1)%size;
+
 
                 //compute message
                 std::string client_temp = clientMessage.SerializeAsString();
 
                 //send message to server
-                s.sendString(client_temp, 0);
+                s.sendString(client_temp);
 
                 //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
                 clientMessage.Clear();
 
-                sendFile(e.getElement().getAbsolutePath(), 0);
+                sendFile(e.getElement().getAbsolutePath());
                 break;
             }
             //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
@@ -303,7 +304,7 @@ bool ProtocolManager::canSend() const {
  */
 void ProtocolManager::recoverFromError() {
     for(int i = start; i != end; i = (i+1)%size){
-        Event &e = waitingForResponse[i];
+        Event e = waitingForResponse[i];
 
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
             //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
@@ -320,13 +321,13 @@ void ProtocolManager::recoverFromError() {
         std::string client_temp = clientMessage.SerializeAsString();
 
         //send message to server
-        s.sendString(client_temp, 0);
+        s.sendString(client_temp);
 
         //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
         clientMessage.Clear();
 
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
-            sendFile(e.getElement().getAbsolutePath(), 0);
+            sendFile(e.getElement().getAbsolutePath());
         }
     }
 }
@@ -350,8 +351,8 @@ void ProtocolManager::composeMessage(Event &e) {
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_PROB);
                 clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_hash(e.getElement().getHash().getValue().first,
-                                       e.getElement().getHash().getValue().second);
+                clientMessage.set_hash(e.getElement().getHash().get().first,
+                                       e.getElement().getHash().get().second);
                 break;
 
             case FileSystemStatus::deleted: //file deleted
@@ -360,8 +361,8 @@ void ProtocolManager::composeMessage(Event &e) {
                 //create message
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_DELE);
-                clientMessage.set_hash(e.getElement().getHash().getValue().first,
-                                       e.getElement().getHash().getValue().second);
+                clientMessage.set_hash(e.getElement().getHash().get().first,
+                                       e.getElement().getHash().get().second);
                 break;
 
             case FileSystemStatus::modifySent: //modify message sent
@@ -372,8 +373,8 @@ void ProtocolManager::composeMessage(Event &e) {
                 clientMessage.set_path(e.getElement().getRelativePath());
                 clientMessage.set_filesize(e.getElement().getSize());
                 clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().getValue().first,
-                                       e.getElement().getHash().getValue().second);
+                clientMessage.set_hash(e.getElement().getHash().get().first,
+                                       e.getElement().getHash().get().second);
                 break;
 
             default:    //I should never arrive here
@@ -390,8 +391,8 @@ void ProtocolManager::composeMessage(Event &e) {
                 clientMessage.set_type(messages::ClientMessage_Type_MKD);
                 clientMessage.set_path(e.getElement().getRelativePath());
                 clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().getValue().first,
-                                       e.getElement().getHash().getValue().second);
+                clientMessage.set_hash(e.getElement().getHash().get().first,
+                                       e.getElement().getHash().get().second);
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
@@ -400,8 +401,8 @@ void ProtocolManager::composeMessage(Event &e) {
                 //create message
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_RMD);
-                clientMessage.set_hash(e.getElement().getHash().getValue().first,
-                                       e.getElement().getHash().getValue().second);
+                clientMessage.set_hash(e.getElement().getHash().get().first,
+                                       e.getElement().getHash().get().second);
                 break;
 
             default:    //I should never arrive here
@@ -418,7 +419,7 @@ void ProtocolManager::composeMessage(Event &e) {
  *
  * @author Michele Crepaldi s269551
  */
-void ProtocolManager::sendFile(const std::filesystem::path& path, int options) {
+void ProtocolManager::sendFile(const std::filesystem::path& path) {
     //initialize variables
     std::ifstream file;
     std::filesystem::directory_entry element(path);
@@ -440,7 +441,7 @@ void ProtocolManager::sendFile(const std::filesystem::path& path, int options) {
 
             //send message
             std::string client_message = clientMessage.SerializeAsString();
-            s.sendString(client_message, options);
+            s.sendString(client_message);
 
             //clear the message
             clientMessage.Clear();

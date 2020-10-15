@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 #set some variables
 set(PROJECT_NAME server)
 set(SOURCE_FILES main.cpp)
-set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
+set(MYLIBRARY ../myLibraries/Socket_OLD.cpp ../myLibraries/Socket_OLD.h ../myLibraries/Hash_OLD.cpp ../myLibraries/Hash_OLD.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
 
 #now we want to include OpenSSL and protocol buffers
