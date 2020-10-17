@@ -5,7 +5,9 @@
 #ifndef CLIENT_HASH_H
 #define CLIENT_HASH_H
 
+#include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
 #include <mutex>
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -19,11 +21,11 @@
  */
 class Hash {
     char shaSum[SHA256_DIGEST_SIZE]{};
-    Hash(const char *buf, size_t len);
-    friend class HashMaker;
 
 public:
     Hash() = default;
+    explicit Hash(const std::string& h);
+    Hash(const char *buf, size_t len);
     bool operator==(Hash& h);
     std::pair<char*, size_t> get();
     std::string str();
@@ -77,7 +79,7 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-enum class hashError{init, update, finalize};
+enum class hashError{set, init, update, finalize};
 
 /**
  * exceptions for the hash class

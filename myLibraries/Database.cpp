@@ -4,6 +4,45 @@
 
 #include "Database.h"
 
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Database class
+ */
+
+//static variable definition
+std::weak_ptr<Database> Database::database_;
+std::mutex Database::mutex_;
+
+/**
+ * Database class singleton instance getter
+ *
+ * @param path path of the database on disk
+ * @return Database instance
+ *
+ * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::shared_ptr<Database> Database::getInstance(const std::string &path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(database_.expired()) //first time, or when it was released from everybody
+        database_ = std::shared_ptr<Database>(new Database(path));  //create the database object
+    return database_.lock();
+}
+
+/**
+ * private constructor for class Database
+ *
+ * @param path path of the database on disk
+ *
+ * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
+ *
+ * @author Michele Crepaldi s269551
+ */
+Database::Database(std::string path) : path_(std::move(path)) {
+    open(path_);
+}
+
 /**
  * function used to open the connection to a sqlite3 database; if the database already existed then it opens it, otherwise it also creates the needed table
  *
@@ -20,13 +59,13 @@ void Database::open(const std::string &path) {
 
     //open the database
     sqlite3 *dbTmp;
-    rc = sqlite3_open("../clientDB/clientDB.sqlite", &dbTmp);
+    rc = sqlite3_open(path_.c_str(), &dbTmp);
 
     //db = my::UniquePtr<sqlite3>(dbTmp);
     db.reset(dbTmp);
 
     //in case of errors throw an exception
-    if( rc ) {
+    if(rc) {
         std::stringstream tmp;
         tmp << "Cannot open database: " << sqlite3_errmsg(db.get());
         throw DatabaseException(tmp.str(), databaseError::open);
@@ -42,6 +81,7 @@ void Database::open(const std::string &path) {
                           "\"size\" INTEGER,/"
                           "\"type\" TEXT,/"
                           "\"lastWriteTime\" TEXT,/"
+                          "\"hash\" TEXT,/"
                           "PRIMARY KEY(\"id\" AUTOINCREMENT)/"
                           ");";
 
@@ -67,7 +107,7 @@ void Database::open(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::forAll(std::function<void (const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime)> &f) {
+void Database::forAll(std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
     int rc;
     char *zErrMsg = nullptr;
     //statement handle
@@ -88,7 +128,7 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
 
     //prepare some variables
     bool done = false;
-    std::string path, type, lastWriteTime;
+    std::string path, type, lastWriteTime, hash;
     uintmax_t size;
 
     //loop over table content
@@ -102,9 +142,10 @@ void Database::forAll(std::function<void (const std::string &path, const std::st
                 type = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
                 size = sqlite3_column_int(stmt, 2);
                 lastWriteTime = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3)));
+                hash = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4)));
 
                 //use function provided
-                f(path, type, size, lastWriteTime);
+                f(path, type, size, lastWriteTime, hash);
                 break;
 
             case SQLITE_DONE:   //in case there are no more rows
@@ -147,15 +188,16 @@ std::string quotesql( const std::string& s ) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime) {
+void Database::insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
-    std::string sql =   "INSERT INTO savedFiles (path, size, type, lastWriteTime) VALUES ("
+    std::string sql =   "INSERT INTO savedFiles (path, size, type, lastWriteTime, hash) VALUES ("
             + quotesql(path) + ","
             + quotesql(std::to_string(size)) + ","
             + quotesql(type) + ","
             + quotesql(lastWriteTime) + ","
+            + quotesql(hash) + ","
             + ");";
 
     // Execute SQL statement
@@ -168,6 +210,24 @@ void Database::insert(const std::string &path, const std::string &type, uintmax_
         sqlite3_free(zErrMsg);
         throw DatabaseException(tmp.str(), databaseError::insert);
     }
+}
+
+/**
+ * function used to insert a new element in the database
+ *
+ * @param d element to be inserted
+ *
+ * @throw DatabaseException in case of database errors (cannot insert)
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Database::insert(Directory_entry &d) {
+    std::string type;
+    if(d.getType() == Directory_entry_TYPE::file)
+        type = "file";
+    else
+        type = "directory";
+    insert(d.getRelativePath(), type, d.getSize(), d.getLastWriteTime(), d.getHash().str());
 }
 
 /**
@@ -210,14 +270,15 @@ void Database::remove(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime) {
+void Database::update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
     std::string sql =   "UPDATE savedFiles SET size="
                         + quotesql(std::to_string(size)) + ", type="
                         + quotesql(type) + ", lastWriteTime="
-                        + quotesql(lastWriteTime) + " WHERE path="
+                        + quotesql(lastWriteTime) + ", hash="
+                        + quotesql(hash) + " WHERE path="
                         + quotesql(path) + ";";
 
     // Execute SQL statement
@@ -230,4 +291,22 @@ void Database::update(const std::string &path, const std::string &type, uintmax_
         sqlite3_free(zErrMsg);
         throw DatabaseException(tmp.str(), databaseError::update);
     }
+}
+
+/**
+ * function used to update an element of the database
+ *
+ * @param d element to be update
+ *
+ * @throw DatabaseException in case of database errors (cannot update)
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Database::update(Directory_entry &d) {
+    std::string type;
+    if(d.getType() == Directory_entry_TYPE::file)
+        type = "file";
+    else
+        type = "directory";
+    update(d.getRelativePath(), type, d.getSize(), d.getLastWriteTime(), d.getHash().str());
 }

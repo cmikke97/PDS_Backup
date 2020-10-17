@@ -81,6 +81,7 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
     std::stringstream sizeStr;
     sizeStr << this->size;
 
+    //calculate hash
     HashMaker hm;
     hm.update(relativePath);
     hm.update(sizeStr.str());
@@ -98,8 +99,8 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime) :
-                                 relativePath(relativePath), absolutePath(baseDir + relativePath), last_write_time(std::move(lastWriteTime)), size(size){
+Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime, Hash h) :
+                                 relativePath(relativePath), absolutePath(baseDir + relativePath), last_write_time(std::move(lastWriteTime)), size(size), hash(h){
 
     if(type == "file")
         this->type = Directory_entry_TYPE::file;
@@ -110,12 +111,6 @@ Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size
 
     std::stringstream sizeStr;
     sizeStr << size;
-
-    HashMaker hm;
-    hm.update(relativePath);
-    hm.update(sizeStr.str());
-    hm.update(lastWriteTime);
-    hash = hm.get();
 }
 
 /**

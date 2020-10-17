@@ -20,6 +20,43 @@
 #define DATABASE_PATH "./clientDB/clientDB.sqlite"
 #define PATH_TO_WATCH ""
 
+//static variables definition
+std::weak_ptr<Config> Config::config_;
+std::mutex Config::mutex_;
+
+/**
+ * Config class singleton instance getter
+ *
+ * @param path path of the config file on disk
+ * @return Config instance
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::shared_ptr<Config> Config::getInstance(const std::string &path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(config_.expired()) //first time, or when it was released from everybody
+        config_ = std::shared_ptr<Config>(new Config(path));  //create the database object
+    return config_.lock();
+}
+
+/**
+ * (protected) constructor ot the configuration object
+ *
+ * @param path path of the file to retrieve configuration from
+ *
+ * @author Michele Crepaldi s269551
+ */
+Config::Config(std::string path) : path_(path) {
+    load(path_);
+}
+
+/**
+ * function to load the configuration from the file (it creates it with default values if it does not exist)
+ *
+ * @param configFilePath path of the file to load configuration from
+ *
+ * @author Michele Crepaldi s269551
+ */
 void Config::load(const std::string &configFilePath) {
     std::fstream file;
     std::string str, key, value;
@@ -51,13 +88,9 @@ void Config::load(const std::string &configFilePath) {
         file << std::endl;
         file << "#Configuration file finished" << std::endl;
 
-        std::cout << "Configuration file created!" << std::endl;
-        std::cout << "Program will now continue with default settings." << std::endl;
-        std::cout << "Consider closing program and modifying config file." << std::endl;
-        std::cout << "You can find it here: " << configFilePath << std::endl;
-
         file.close();
-        return;
+
+        throw ConfigException("Configuration file created", configError::fileCreated);
     }
 
     //open configuration file
@@ -66,7 +99,9 @@ void Config::load(const std::string &configFilePath) {
     if(file.is_open()) {
         //for each line
         while(getline(file,str)) {
+            //regex match
             if(std::regex_match (str,m,e)){
+                //get the key and the value
                 key = m[1];
                 value = m[2];
 
@@ -80,7 +115,7 @@ void Config::load(const std::string &configFilePath) {
                     //delete the tailing / that may be there at the end of the path
                     std::smatch mtmp;
                     std::regex etmp ("(.*)\\/$");
-                    if(std::regex_match (value,m,e))
+                    if(std::regex_match (value,m,e))    //if i fine the trailing "/" i remove it
                         path_to_watch = m[1];
                     else
                         path_to_watch = value;
@@ -112,11 +147,18 @@ void Config::load(const std::string &configFilePath) {
         file.close();
     }
     else{
-        std::cerr << "Could not open configuration file." << std::endl;
-        std::cout << "Program will now continue with default settings." << std::endl;
+        //if the file could not be opened
+        throw ConfigException("Could not open configuration file", configError::open);
     }
 }
 
+/**
+ * path to watch getter
+ *
+ * @return path to watch
+ *
+ * @author Michele Crepaldi s269551
+ */
 const std::string Config::getPathToWatch() {
     if(path_to_watch != "")
         return path_to_watch;
@@ -124,6 +166,13 @@ const std::string Config::getPathToWatch() {
         return std::move(std::string(PATH_TO_WATCH));
 }
 
+/**
+ * database path getter
+ *
+ * @return database path
+ *
+ * @author Michele Crepaldi s269551
+ */
 const std::string Config::getDatabasePath() {
     if(database_path != "")
         return database_path;
@@ -131,6 +180,13 @@ const std::string Config::getDatabasePath() {
         return std::move(std::string(DATABASE_PATH));
 }
 
+/**
+ * millis filesystem watcher getter
+ *
+ * @return millis filesystem watcher
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getMillisFilesystemWatcher() {
     if(millis_filesystem_watcher != 0)
         return millis_filesystem_watcher;
@@ -138,6 +194,13 @@ int Config::getMillisFilesystemWatcher() {
         return MILLIS_FILESYSTEM_WATCHER;
 }
 
+/**
+ * event queue size getter
+ *
+ * @return event queue size
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getEventQueueSize() {
     if(event_queue_size != 0)
         return event_queue_size;
@@ -145,6 +208,13 @@ int Config::getEventQueueSize() {
         return EVENT_QUEUE_SIZE;
 }
 
+/**
+ * seconds between reconnections getter
+ *
+ * @return seconds between reconnections
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getSecondsBetweenReconnections() {
     if(seconds_between_reconnections != 0)
         return seconds_between_reconnections;
@@ -152,6 +222,13 @@ int Config::getSecondsBetweenReconnections() {
         return SECONDS_BETWEEN_RECONNECTIONS;
 }
 
+/**
+ * max connection retries getter
+ *
+ * @return max connection retries
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getMaxConnectionRetries() {
     if(max_connection_retries != 0)
         return max_connection_retries;
@@ -159,6 +236,13 @@ int Config::getMaxConnectionRetries() {
         return MAX_CONNECTION_RETRIES;
 }
 
+/**
+ * max server error retries getter
+ *
+ * @return max server error retries
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getMaxServerErrorRetries() {
     if(max_server_error_retries != 0)
         return max_server_error_retries;
@@ -166,6 +250,13 @@ int Config::getMaxServerErrorRetries() {
         return MAX_SERVER_ERROR_RETRIES;
 }
 
+/**
+ * max auth error retries getter
+ *
+ * @return max auth error retries
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getMaxAuthErrorRetries() {
     if(max_auth_error_retries != 0)
         return max_auth_error_retries;
@@ -173,6 +264,13 @@ int Config::getMaxAuthErrorRetries() {
         return MAX_AUTH_ERROR_RETRIES;
 }
 
+/**
+ * timeout seconds getter
+ *
+ * @return timeout seconds
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getTimeoutSeconds() {
     if(timeout_seconds != 0)
         return timeout_seconds;
@@ -180,6 +278,13 @@ int Config::getTimeoutSeconds() {
         return TIMEOUT;
 }
 
+/**
+ * select timeout seconds getter
+ *
+ * @return select timeout seconds
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getSelectTimeoutSeconds() {
     if(select_timeout_seconds != 0)
         return select_timeout_seconds;
@@ -187,6 +292,13 @@ int Config::getSelectTimeoutSeconds() {
         return SELECT_TIMEOUT;
 }
 
+/**
+ * max response waiting getter
+ *
+ * @return max response waiting
+ *
+ * @author Michele Crepaldi s269551
+ */
 int Config::getMaxResponseWaiting() {
     if(max_response_waiting != 0)
         return max_response_waiting;

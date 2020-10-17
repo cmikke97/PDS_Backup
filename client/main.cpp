@@ -13,15 +13,11 @@
 #include "../myLibraries/Socket.h"
 #include "messages.pb.h"
 #include "ProtocolManager.h"
-#include "Config.h"
 
 #define VERSION 1
 #define CONFIG_FILE_PATH "./config.txt"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
-
-Config config;
-Database db;
 
 /**
  * the client main function
@@ -42,52 +38,64 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    config.load(std::string(CONFIG_FILE_PATH));
-
-    // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
-    FileSystemWatcher fw{config.getPathToWatch(), std::chrono::milliseconds(config.getMillisFilesystemWatcher())};
-
     try {
-        //open the database (and if not previously there create also the needed table)
-        db.open(config.getDatabasePath());
+        //get the configuration
+        auto config = Config::getInstance(std::string(CONFIG_FILE_PATH));
+        //get the database instance and open the database (and if not previously there create also the needed table)
+        auto db = Database::getInstance(config->getDatabasePath());
+
+        // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
+        FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
 
         //make the filesystem watcher retrieve previously saved data from db
-        fw.recoverFromDB(db);
+        fw.recoverFromDB(db.get());
+
+        // create a circular vector instance that will contain all the events happened
+        TSCircular_vector<Event> eventQueue(config->getEventQueueSize());
+
+        //extract the arguments
+        std::string serverIP = argv[1];
+        std::string serverPort = argv[2];
+        std::string username = argv[3];
+        std::string password = argv[4];
+
+        //initialize some atomic boolean to make the different threads stop
+        std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
+
+        // initialize the communication thread (thread that will communicate with the server)
+        std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), serverIP, stoi(serverPort), username, password);
+
+        // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
+        Thread_guard tg_communication(communication_thread, communicationThread_stop);
+
+        // Start monitoring a folder for changes and (in case of changes) run a user provided lambda function
+        fw.start([&eventQueue](Directory_entry &element, FileSystemStatus status) -> bool {
+            //it returns true if the object was successfully pushed, false otherwise; in any case it returns immediately with no waiting.
+            //This is done is such way as to not be blocked waiting for the queue to be not full.
+            //So elements not pushed successfully won't be added to the already watched ones and this process will be repeated after some time
+            return eventQueue.tryPush(std::move(Event(element, status)));
+        }, fileWatcher_stop);
+
     }
-    catch (std::runtime_error &e) {
+    catch (DatabaseException &e) {
         //in case of database exceptions show message and return
         std::cerr << e.what() << std::endl;
         return 1;
     }
+    catch (ConfigException &e) {
+        if (e.getCode() == configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
+            std::cout << e.what() << std::endl;
+            std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
+            std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
+        }
+        else if(e.getCode() == configError::open){  //if there were some errors in opening the configuration file return
+            std::cerr << e.what() << std::endl;
+        }
 
-    // create a circular vector instance that will contain all the events happened
-    TSCircular_vector<Event> eventQueue(config.getEventQueueSize());
+        return 1;
+    }
 
-    //extract the arguments
-    std::string serverIP = argv[1];
-    std::string serverPort = argv[2];
-    std::string username = argv[3];
-    std::string password = argv[4];
-
-    //initialize some atomic boolean to make the different threads stop
-    std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
-
-    // initialize the communication thread (thread that will communicate with the server)
-    std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), serverIP, stoi(serverPort), username, password);
-
-    // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
-    Thread_guard tg_communication(communication_thread, communicationThread_stop);
-
-    // Start monitoring a folder for changes and (in case of changes) run a user provided lambda function
-    fw.start([&eventQueue](Directory_entry &element, FileSystemStatus status) -> bool {
-        //it returns true if the object was successfully pushed, false otherwise; in any case it returns immediately with no waiting.
-        //This is done is such way as to not be blocked waiting for the queue to be not full.
-        //So elements not pushed successfully won't be added to the already watched ones and this process will be repeated after some time
-        return eventQueue.tryPush(std::move(Event(element, status)));
-    }, fileWatcher_stop);
-
-    //if we are here then there was an error in the communication thread which caused the termination of the file system watcher
-    return 1;
+    return 0;
 }
 
 /**
@@ -109,8 +117,12 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     try {
         //initialize socket
         Socket client_socket(socketType::TCP);
+
+        //get the configuration
+        auto config = Config::getInstance(std::string(CONFIG_FILE_PATH));
+
         //initialize protocol manager
-        ProtocolManager pm(client_socket, db, config.getMaxResponseWaiting(), VERSION, config.getMaxServerErrorRetries());
+        ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries());
 
         //for select
         fd_set read_fds;
@@ -159,7 +171,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     int maxfd = client_socket.getSockfd();
                     struct timeval tv{};
-                    tv.tv_sec = config.getSelectTimeoutSeconds();
+                    tv.tv_sec = config->getSelectTimeoutSeconds();
 
                     int activity = select(maxfd + 1, &read_fds, &write_fds, nullptr, &tv);
 
@@ -183,9 +195,9 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             return;
 
                         case 0:
-                            timeWaited += config.getSelectTimeoutSeconds();
+                            timeWaited += config->getSelectTimeoutSeconds();
 
-                            if (timeWaited >= config.getTimeoutSeconds())   //if the time already waited is greater than TIMEOUT
+                            if (timeWaited >= config->getTimeoutSeconds())   //if the time already waited is greater than TIMEOUT
                                 loop = false;           //then exit inner loop --> this will cause the connection to be closed
 
                             break;
@@ -219,18 +231,18 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (SocketException &e) {
                 switch (e.getCode()) {
-                    case socketError::create:   //error in socket create
+                    //case socketError::create:   //error in socket create
                     case socketError::read:     //error in socket read
                     case socketError::write:    //error in socket write
                     case socketError::connect:  //error in socket connect
 
                         //re-try only for a limited number of times
-                        if (tries < config.getMaxConnectionRetries()) {
+                        if (tries < config->getMaxConnectionRetries()) {
                             //error in connection; retry later; wait for x seconds
                             tries++;
                             std::cout << "Connection error. Retry (" << tries << ") in "
-                                      << config.getSecondsBetweenReconnections() << " seconds." << std::endl;
-                            std::this_thread::sleep_for(std::chrono::seconds(config.getSecondsBetweenReconnections()));
+                                      << config->getSecondsBetweenReconnections() << " seconds." << std::endl;
+                            std::this_thread::sleep_for(std::chrono::seconds(config->getSecondsBetweenReconnections()));
                             break;
                         }
 
@@ -274,7 +286,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             //close connection
                             client_socket.closeConnection();
 
-                            if (authTries > config.getMaxAuthErrorRetries()) {
+                            if (authTries > config->getMaxAuthErrorRetries()) {
                                 //terminate filesystem watcher and close program
                                 fileWatcher_stop.store(true);
                                 return;
@@ -314,8 +326,30 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         }
     }
     catch (SocketException &e) {
-        //we are here if the socket class couldn't create a sokcet
+        //we are here if the socket class couldn't create a socket
         std::cerr << e.what() << std::endl;
+
+        //terminate filesystem watcher and close program
+        fileWatcher_stop.store(true);
+        return;
+    }
+    catch (DatabaseException &e){
+        //we are here if the Database class couldn't open the database
+        std::cerr << e.what() << std::endl;
+
+        //terminate filesystem watcher and close program
+        fileWatcher_stop.store(true);
+        return;
+    }
+    catch (ConfigException &e) {
+        if (e.getCode() == configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
+            std::cout << e.what() << std::endl;
+            std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
+            std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
+        }
+        else if(e.getCode() == configError::open){  //if there were some errors in opening the configuration file return
+            std::cerr << e.what() << std::endl;
+        }
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);

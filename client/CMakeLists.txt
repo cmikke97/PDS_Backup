@@ -4,15 +4,16 @@ project(client)
 set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
-set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Directory_entry.cpp Directory_entry.h Event.cpp
-        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Database.cpp Database.h Config.cpp Config.h)
+set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Event.cpp
+        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Config.cpp Config.h)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
-        ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
+        ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Database.cpp
+        ../myLibraries/Database.h ../myLibraries/Directory_entry.cpp ../myLibraries/Directory_entry.h)
 
 #now we want to include wolfSSL and protocol buffers
 if (CYGWIN) #if on windows
 
-    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
+    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} WSSL_ROOT_DIR)
     #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" WSSL_ROOT_DIR ${WSSL_ROOT_DIR})
@@ -26,7 +27,7 @@ if (CYGWIN) #if on windows
     #print a simple message
     message(STATUS "Using wolfSSL on windows")
 
-    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the OPENSSL_ROOT env variable to a cmake-style path representation
+    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} PROTOC_ROOT_DIR)
     #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
