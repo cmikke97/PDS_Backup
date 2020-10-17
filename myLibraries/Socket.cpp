@@ -262,12 +262,13 @@ TCP_Socket::~TCP_Socket() {
  * TCP_ServerSocket constructor
  *
  * @param port port to use
+ * @param n length of the listen queue
  *
  * @throw SocketException in case it cannot bind the port and create the TCP_socket
  *
  * @author Michele Crepaldi s269551
  */
-TCP_ServerSocket::TCP_ServerSocket(int port) {
+TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
     struct sockaddr_in sockaddrIn{};    //prepare struct sockaddr_in
     sockaddrIn.sin_port = htons(port);
     sockaddrIn.sin_family = AF_INET;
@@ -275,7 +276,7 @@ TCP_ServerSocket::TCP_ServerSocket(int port) {
     sockaddrIn.sin_addr.s_addr = htonl(INADDR_ANY); //set address
     if(::bind(sockfd, reinterpret_cast<struct sockaddr*>(&sockaddrIn), sizeof(sockaddrIn)) != 0)    //bind the port and address to the socket
         throw SocketException("Cannot bind port", socketError::bind);   //throw exception if there are errors
-    if(::listen(sockfd, 8) != 0)    //open the socket (set it to listen)
+    if(::listen(sockfd, n) != 0)    //open the socket (set it to listen)
         throw SocketException("Cannot bind port", socketError::bind);   //throw exception if there are errors
 
     //extract ip address in readable form
@@ -552,13 +553,14 @@ TLS_Socket::~TLS_Socket() {
  * TLS_ServerSocket constructor
  *
  * @param port port to use
+ * @param n length of the listen queue
  *
  * @throw SocketException in case it cannot bind the port and create the TLS_socket or in case it cannot create the wolfSSL context
  * or cannot load certificate or private key files (or they are not valid)
  *
  * @author Michele Crepaldi s269551
  */
-TLS_ServerSocket::TLS_ServerSocket(int port) {
+TLS_ServerSocket::TLS_ServerSocket(int port, int n) {
     ctx = my::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_server_method())); //create a new wolfSSL context using the wolfTLS server method
     if (ctx.get() == nullptr)
         throw SocketException("Cannot create server wolfSSL context", socketError::create);   //throw exception if there are errors
@@ -582,7 +584,7 @@ TLS_ServerSocket::TLS_ServerSocket(int port) {
 
     wolfSSL_CTX_set_verify(ctx.get(), SSL_VERIFY_NONE, nullptr);    //set the server to not ask the client for a certificate (no client authentication supported)
 
-    serverSock = std::make_unique<TCP_ServerSocket>(port);  //create new TCP server socket
+    serverSock = std::make_unique<TCP_ServerSocket>(port, n);  //create new TCP server socket
 }
 
 /**
@@ -759,19 +761,20 @@ void Socket::closeConnection() {
  * ServerSocket constructor
  *
  * @param port port to use
+ * @param n length of the listen queue
  *
  * @throw SocketException in case it cannot bind the port and create the socket [or in case it cannot create the wolfSSL context
  * or cannot load certificate or private key files (or they are not valid) (if TLS)]
  *
  * @author Michele Crepaldi s269551
  */
-ServerSocket::ServerSocket(int port, socketType type) : Socket(type) {
+ServerSocket::ServerSocket(int port, int n, socketType type) : Socket(type) {
     switch(type){
         case socketType::TCP:
-            serverSocket = std::make_unique<TCP_ServerSocket>(port);
+            serverSocket = std::make_unique<TCP_ServerSocket>(port, n);
             break;
         case socketType::TLS:
-            serverSocket = std::make_unique<TLS_ServerSocket>(port);
+            serverSocket = std::make_unique<TLS_ServerSocket>(port, n);
             break;
         default:
             throw SocketException("Undefined server socket type",socketError::create);

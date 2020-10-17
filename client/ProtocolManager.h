@@ -10,7 +10,9 @@
 #include <messages.pb.h>
 #include "../myLibraries/Socket.h"
 #include "../Event.h"
+#include "Config.h"
 
+#define CONFIG_FILE_PATH "./config.txt"
 #define MAXBUFFSIZE 1024
 
 /**
@@ -20,7 +22,7 @@
  */
 class ProtocolManager {
     Socket &s;
-    Database &db;
+    std::shared_ptr<Database> db;
     messages::ClientMessage clientMessage;
     messages::ServerMessage serverMessage;
 
@@ -29,7 +31,7 @@ class ProtocolManager {
     int tries, maxTries;
 
 public:
-    ProtocolManager(Socket &s, Database &db, int max, int ver, int maxTries);
+    ProtocolManager(Socket &s, int max, int ver, int maxTries);
     void authenticate(const std::string& username, const std::string& password, const std::string& macAddress);
     void quit();
     void send(Event &e);

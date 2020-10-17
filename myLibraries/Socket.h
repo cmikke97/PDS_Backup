@@ -16,6 +16,7 @@
 #include <memory>
 #include <cstdio>
 #include <string>
+#include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
 
 #define CERTIFICATE_PATH "./TLScerts/server_cert.pem"
@@ -123,7 +124,7 @@ public:
  */
 class TCP_ServerSocket: public ServerSocketBridge, public TCP_Socket{
 public:
-    explicit TCP_ServerSocket(int port);
+    explicit TCP_ServerSocket(int port, int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
     ~TCP_ServerSocket();
 };
@@ -209,7 +210,7 @@ public:
 class TLS_ServerSocket: public ServerSocketBridge, public TLS_Socket{
     std::unique_ptr<TCP_ServerSocket> serverSock;
 public:
-    explicit TLS_ServerSocket(int port);
+    explicit TLS_ServerSocket(int port, int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
     ~TLS_ServerSocket();
 };
@@ -282,7 +283,7 @@ class ServerSocket : public Socket {
     std::unique_ptr<ServerSocketBridge> serverSocket;
 
 public:
-    explicit ServerSocket(int port, socketType type);
+    explicit ServerSocket(int port, int n, socketType type);
     Socket accept(struct sockaddr_in* addr, unsigned long* len);
 };
 

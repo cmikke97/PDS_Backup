@@ -5,7 +5,7 @@
 #ifndef CLIENT_EVENT_H
 #define CLIENT_EVENT_H
 
-#include "Directory_entry.h"
+#include "../myLibraries/Directory_entry.h"
 #include "FileSystemWatcher.h"
 
 /**

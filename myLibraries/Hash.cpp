@@ -2,7 +2,6 @@
 // Created by michele on 14/10/2020.
 //
 
-#include <wolfssl/wolfcrypt/error-crypt.h>
 #include <sstream>
 #include "Hash.h"
 
@@ -17,10 +16,27 @@
  * @param buf buffer where to find data
  * @param len length of the data
  *
- * @return result of memcmp
+ * @author Michele Crepaldi s269551
+ *
  */
 Hash::Hash(const char *buf, size_t len) {
     memcpy(shaSum, buf, len);
+}
+
+/**
+ * hash constructor from a string buffer
+ *
+ * @param buf string buffer where to find data
+ *
+ * @throw HashException in case the given string length is wrong
+ *
+ * @author Michele Crepaldi s269551
+ */
+Hash::Hash(const std::string& h) {
+    if(h.size() != SHA256_DIGEST_SIZE)
+        throw HashException("Given string hash has wrong length",hashError::set);
+
+    memcpy(shaSum, h.data(), h.length());
 }
 
 /**

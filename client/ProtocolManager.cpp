@@ -16,8 +16,10 @@
  *
  * @author Michele Crepaldi s269551
  */
-ProtocolManager::ProtocolManager(Socket &s, Database &db, int max, int ver, int maxTries) : s(s), db(db), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver) {
+ProtocolManager::ProtocolManager(Socket &s, int max, int ver, int maxTries) : s(s), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver) {
+    auto config = Config::getInstance(CONFIG_FILE_PATH);
     waitingForResponse.resize(size+1);
+    db = Database::getInstance(config->getDatabasePath());
 }
 
 /**
@@ -234,20 +236,14 @@ void ProtocolManager::receive() {
             std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been sent to server: " << serverMessage.code() << std::endl;
 
             if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified){
-                std::string type;
-                if(e.getElement().getType() == Directory_entry_TYPE::file)
-                    type = "file";
-                else
-                    type = "directory";
-
                 //insert or update element in db
                 if(e.getStatus() == FileSystemStatus::created)
-                    db.insert(e.getElement().getRelativePath(),type,e.getElement().getSize(),e.getElement().getLastWriteTime()); //insert element into db
+                    db->insert(e.getElement()); //insert element into db
                 else
-                    db.update(e.getElement().getRelativePath(),type,e.getElement().getSize(),e.getElement().getLastWriteTime()); //update element in db
+                    db->update(e.getElement()); //update element in db
             }
             else if(e.getStatus() == FileSystemStatus::deleted)
-                db.remove(e.getElement().getRelativePath()); //delete element from db
+                db->remove(e.getElement().getRelativePath()); //delete element from db
 
             break;
 
