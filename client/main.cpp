@@ -17,7 +17,7 @@
 #define VERSION 1
 #define CONFIG_FILE_PATH "./config.txt"
 
-void communicate(std::atomic<bool> &, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
+void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
 /**
  * the client main function
