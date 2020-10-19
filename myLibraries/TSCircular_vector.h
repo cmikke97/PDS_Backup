@@ -47,7 +47,7 @@ public:
     void push(T t){
         std::unique_lock l(m);
         cvPush.wait(l, [this](){return (end+1)%size != start;});
-        v[end] = t;
+        v[end] = std::move(t);
         end = (end+1)%size;
         cvPop.notify_all();
     }
@@ -67,7 +67,7 @@ public:
             return false; //if it is full return false (no object can be pushed now)
 
         //otherwise push object and return true
-        v[end] = t;
+        v[end] = std::move(t);
         end = (end+1)%size;
         cvPop.notify_all();
         return true;
@@ -114,6 +114,22 @@ public:
         cvPop.wait(l, [this](){return start != end;});
         start = (start+1)%size;
         cvPush.notify_all();
+    }
+
+    /**
+     * function which pops the element in the head of the circular vector and returns it (move)
+     *
+     * @return the first object (the head) inserted in the circular vector (by movement)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    T get(){
+        std::unique_lock l(m);
+        cvPop.wait(l, [this](){return start != end;});
+        T tmp = std::move(v[start]);
+        start = (start+1)%size;
+        cvPush.notify_all();
+        return std::move(tmp);
     }
 
     /**

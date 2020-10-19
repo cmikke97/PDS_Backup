@@ -4,7 +4,7 @@ project(server)
 set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
-set(SOURCE_FILES main.cpp)
+set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
 
