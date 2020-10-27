@@ -81,10 +81,12 @@ bool FileSystemWatcher::contains(const std::string &key) {
  *
  * @author Michele Crepaldi s269551
  */
-void FileSystemWatcher::recoverFromDB(Database *db) {
+void FileSystemWatcher::recoverFromDB(Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action) {
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
-    f = [this](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-        paths_.insert({path, Directory_entry(path,size,type,lastWriteTime, Hash(hash))});
+    f = [this, action](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
+        auto element = Directory_entry(path, size, type, lastWriteTime, Hash(hash));
+        paths_.insert({path, element});
+        action(element, FileSystemStatus::created);
     };
     db->forAll(f);
 }

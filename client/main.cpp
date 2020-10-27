@@ -47,9 +47,6 @@ int main(int argc, char **argv) {
         // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
 
-        //make the filesystem watcher retrieve previously saved data from db
-        fw.recoverFromDB(db.get());
-
         // create a circular vector instance that will contain all the events happened
         TSCircular_vector<Event> eventQueue(config->getEventQueueSize());
 
@@ -67,6 +64,12 @@ int main(int argc, char **argv) {
 
         // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
         Thread_guard tg_communication(communication_thread, communicationThread_stop);
+
+        //make the filesystem watcher retrieve previously saved data from db
+        fw.recoverFromDB(db.get(), [&eventQueue](Directory_entry &element, FileSystemStatus status) {
+            //push event into event queue
+            eventQueue.push(std::move(Event(element, status)));
+        });
 
         // Start monitoring a folder for changes and (in case of changes) run a user provided lambda function
         fw.start([&eventQueue](Directory_entry &element, FileSystemStatus status) -> bool {
@@ -175,6 +178,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     int activity = select(maxfd + 1, &read_fds, &write_fds, nullptr, &tv);
 
+                    //TODO check if it is still needed
                     if (thread_stop.load()) { //if thread_stop atomic boolean is true then close connection and return
                         //quit connection
                         pm.quit();

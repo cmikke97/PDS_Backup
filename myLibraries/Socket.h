@@ -251,6 +251,7 @@ class Socket {
 public:
     Socket(const Socket &) = delete;
     Socket& operator=(const Socket &) = delete;
+    Socket() = default;
 
     explicit Socket(socketType type);
     Socket(Socket &&other) noexcept;

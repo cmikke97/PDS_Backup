@@ -72,6 +72,7 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
     this->size = type==Directory_entry_TYPE::file?size:0;
 
     //convert file time to string
+    //lastWriteTime.time_since_epoch().count();
     std::time_t tt = to_time_t(lastWriteTime);
     std::tm *gmt = std::gmtime(&tt);
     std::stringstream buffer;
@@ -81,12 +82,28 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
     std::stringstream sizeStr;
     sizeStr << this->size;
 
-    //calculate hash
-    HashMaker hm;
-    hm.update(relativePath);
-    hm.update(sizeStr.str());
-    hm.update(this->last_write_time);
-    hash = hm.get();
+    if(type == Directory_entry_TYPE::file){
+        //calculate hash
+        HashMaker hm;
+
+        /*
+        hm.update(relativePath);
+        hm.update(sizeStr.str());
+        hm.update(this->last_write_time);
+        */
+        char buf[MAXBUFFSIZE];
+
+        std::ifstream infile;
+        infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
+        if(infile.is_open()){
+            while(infile){
+                infile.getline(buf, MAXBUFFSIZE);
+                hm.update(buf, MAXBUFFSIZE);
+            }
+        }
+
+        hash = hm.get();
+    }
 }
 
 /**
@@ -100,17 +117,17 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime, Hash h) :
-                                 relativePath(relativePath), absolutePath(baseDir + relativePath), last_write_time(std::move(lastWriteTime)), size(size), hash(h){
+                                Directory_entry(baseDir + relativePath, relativePath, size, type, std::move(lastWriteTime), h){
+}
 
+Directory_entry::Directory_entry(const std::string& absolutePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h):
+        relativePath(relativePath), absolutePath(absolutePath), last_write_time(std::move(lastWriteTime)), size(size), hash(h){
     if(type == "file")
         this->type = Directory_entry_TYPE::file;
     else if(type == "directory")
         this->type = Directory_entry_TYPE::directory;
     else
         this->type = Directory_entry_TYPE::notAType;
-
-    std::stringstream sizeStr;
-    sizeStr << size;
 }
 
 /**

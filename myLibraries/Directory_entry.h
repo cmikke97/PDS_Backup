@@ -53,6 +53,8 @@ public:
 
     Directory_entry(const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
     Directory_entry(const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
+    Directory_entry(const std::string& absolutePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
+
 
     static void setBaseDir(const std::string& dir);
 

@@ -4,6 +4,8 @@
 
 #include <fstream>
 #include "ProtocolManager.h"
+#include "../server/ProtocolManager.h"
+
 
 /**
  * constructor of protocol manager class
@@ -254,7 +256,7 @@ void ProtocolManager::receive() {
 
             //based on error code handle it
             switch(code){
-                case 500:
+                case 500:   //TODO change error codes to some more easy to remember (or to constants or enum)
                     tries++;
 
                     //if I exceed the number of re-tries throw an exception and close the program
@@ -324,85 +326,6 @@ void ProtocolManager::recoverFromError() {
 
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
             sendFile(e.getElement().getAbsolutePath());
-        }
-    }
-}
-
-/**
- * function used to compose a clientMessage from an event
- *
- * @param e event to transform in message
- *
- * @author Michele Crepaldi s269551
- */
-void ProtocolManager::composeMessage(Event &e) {
-    //evaluate what to do
-    if (e.getElement().is_regular_file()) {   //if the element is a file
-        switch (e.getStatus()) {
-            case FileSystemStatus::modified: //file modified
-            case FileSystemStatus::created: //file created
-                std::cout << "File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
-
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_PROB);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
-                break;
-
-            case FileSystemStatus::deleted: //file deleted
-                std::cout << "File deleted: " << e.getElement().getAbsolutePath() << std::endl;
-
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_DELE);
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
-                break;
-
-            case FileSystemStatus::modifySent: //modify message sent
-            case FileSystemStatus::storeSent: //store message sent
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_STOR);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_filesize(e.getElement().getSize());
-                clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
-                break;
-
-            default:    //I should never arrive here
-                std::cerr << "Error! Unknown file status." << std::endl;
-        }
-    } else { //if the element is a directory
-        switch (e.getStatus()) {
-            case FileSystemStatus::modified: //directory modified
-            case FileSystemStatus::created: //directory created
-                std::cout << "Directory created: " << e.getElement().getAbsolutePath() << std::endl;
-
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_MKD);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
-                break;
-
-            case FileSystemStatus::deleted: //directory deleted
-                std::cout << "Directory deleted: " << e.getElement().getAbsolutePath() << std::endl;
-
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_RMD);
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
-                break;
-
-            default:    //I should never arrive here
-                std::cerr << "Error! Unknown file status." << std::endl;
         }
     }
 }

@@ -21,11 +21,11 @@ message ClientMessage{
     NOOP = 0;   //has version, type
     PROB = 1;   //has version, type, path, hash
     STOR = 2;   //has version, type, path, fileSize, lastWriteTime, hash
-    DELE = 3;   //has version, type, hash
+    DELE = 3;   //has version, type, path, hash
     MKD = 4;    //has version, type, path, lastWriteTime, hash
     RMD = 5;    //has version, type, hash
     DATA = 6;   //has version, type, data, last
-    AUTH = 7;   //has version, type, username, password
+    AUTH = 7;   //has version, type, username, mac, password
     QUIT = 8;   //has version, type
   }
 }
@@ -37,13 +37,15 @@ message ServerMessage{
 
   string path = 4;        //for SEND
   bytes hash = 5;         //for SEND
-  int32 code = 6;         //for OK, ERR
-  int32 newVersion = 7;   //for VER
+  uint64 fileSize = 6;        //for SEND
+  string lastWriteTime = 7;    //for SEND
+  int32 code = 8;         //for OK, ERR
+  int32 newVersion = 9;   //for VER
 
   enum Type{
     NOOP = 0;   //has version, type
     OK = 1;     //has version, type, code
-    SEND = 2;   //has version, type, path, hash
+    SEND = 2;   //has version, type, path, fileSize, lastWriteTime, hash
     ERR = 3;    //has version, type, code
     VER = 4;    //has version, type, newVersion
   }

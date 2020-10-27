@@ -4,9 +4,11 @@ project(server)
 set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
-set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp)
+set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp ProtocolManager.h ProtocolManager.cpp PWD_Database.cpp
+        PWD_Database.h Database.h Database.cpp)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
-        ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h)
+        ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Directory_entry.cpp
+        ../myLibraries/Directory_entry.h)
 
 #now we want to include wolfSSL and protocol buffers
 if (CYGWIN) #if on windows

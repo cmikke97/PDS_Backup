@@ -30,12 +30,13 @@ class ProtocolManager {
     int start, end, size, protocolVersion;
     int tries, maxTries;
 
+    void composeMessage(Event &e);
+
 public:
     ProtocolManager(Socket &s, int max, int ver, int maxTries);
     void authenticate(const std::string& username, const std::string& password, const std::string& macAddress);
     void quit();
     void send(Event &e);
-    void composeMessage(Event &e);
     void receive();
     bool canSend() const;
     void recoverFromError();
