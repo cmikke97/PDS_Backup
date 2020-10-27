@@ -15,7 +15,7 @@
 #include <utility>
 #include <atomic>
 #include "../myLibraries/Directory_entry.h"
-#include "../myLibraries/Database.h"
+#include "Database.h"
 #include <sqlite3.h>
 
 using namespace std::chrono_literals;
@@ -41,7 +41,7 @@ public:
     std::chrono::duration<int, std::milli> delay;
     FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay);
     void start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop);
-    void recoverFromDB(Database *db);
+    void recoverFromDB(Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);
 
 private:
     std::unordered_map<std::string, Directory_entry> paths_;

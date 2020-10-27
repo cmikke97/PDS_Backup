@@ -5,6 +5,9 @@
 #include "../myLibraries/Socket.h"
 #include "../myLibraries/TSCircular_vector.h"
 #include "Thread_guard.h"
+#include "PWD_Database.h"
+#include "Database.h"
+#include "ProtocolManager.h"
 
 #define VERSION 1
 #define CONFIG_FILE_PATH "./config.txt"
@@ -12,6 +15,11 @@
 #define LISTEN_QUEUE 8
 #define N_THREADS 8
 #define SOCKET_QUEUE_SIZE 10
+#define SELECT_TIMEOUT_SECONDS 5
+#define TIMEOUT_SECONDS 60
+#define PASSWORD_DATABASE_PATH "./serverfiles/passwordDB.sqlite"
+#define DATABASE_PATH "./serverfiles/serverDB.sqlite"
+#define SERVER_PATH "C:/Users/michele/Desktop/server_folder"
 //TODO put these constants into the config object
 
 void single_server(TSCircular_vector<Socket> &, std::atomic<bool> &);
@@ -31,8 +39,8 @@ int main(int argc, char** argv) {
         int port = std::stoi(serverPort);
 
         //TODO get config
-        //TODO (get db reference)
-        //TODO load db
+        auto pass_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
+        auto db = Database::getInstance(DATABASE_PATH);
 
         ServerSocket server{port, LISTEN_QUEUE, socketType::TCP};   //initialize server socket with port
         TSCircular_vector<Socket> sockets{SOCKET_QUEUE_SIZE};
@@ -67,6 +75,14 @@ int main(int argc, char** argv) {
                 return 1;
         }
     }
+    catch (PWT_DatabaseException &e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
+    catch (DatabaseException &e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
     catch (std::exception &e) {
         std::cerr << e.what() << std::endl;
         return 1;
@@ -77,6 +93,59 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
     while(!thread_stop.load()){ //loop until we are told to stop
         Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
 
+        //for select
+        fd_set read_fds;
+        int timeWaited = 0;
+        bool loop = true;
+        ProtocolManager pm{sock, VERSION, SERVER_PATH};
+
+        try{
+            //authenticate the connected client
+            pm.authenticate();
+            pm.recoverFromDB();
+
+            while(loop && !thread_stop.load()) { //loop until we are told to stop
+                //build fd sets
+                FD_ZERO(&read_fds);
+                FD_SET(sock.getSockfd(), &read_fds);
+
+                int maxfd = sock.getSockfd();
+                struct timeval tv{};
+                tv.tv_sec = SELECT_TIMEOUT_SECONDS;
+
+                //select on read socket
+                int activity = select(maxfd + 1, &read_fds, nullptr, nullptr, &tv);
+
+                switch (activity) {
+                    case -1:
+                        //I should never get here
+                        std::cerr << "Select error" << std::endl;
+
+                        loop = false;      //exit loop --> this will cause the current connection to be closed
+                        break;
+
+                    case 0:
+                        timeWaited += SELECT_TIMEOUT_SECONDS;
+
+                        if (timeWaited >= TIMEOUT_SECONDS)   //if the time already waited is greater than TIMEOUT
+                            loop = false;      //then exit loop --> this will cause the current connection to be closed
+
+                        break;
+
+                    default:
+                        //reset timeout
+                        timeWaited = 0;
+
+                        //if I have something to read
+                        if (FD_ISSET(sock.getSockfd(), &read_fds)) {
+                            pm.receive();
+                        }
+                }
+            }
+        }
+        catch (std::exception &e) {
+
+        }
         //TODO authenticate client
 
         //TODO while loop (communication)
