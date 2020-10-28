@@ -18,10 +18,6 @@ if (CYGWIN) #if on windows
     string(REGEX REPLACE "C/" "/cygdrive/c/" WSSL_ROOT_DIR ${WSSL_ROOT_DIR})
 
     set(LIB_PATH "${WSSL_ROOT_DIR}/usr/local")
-    set(CFLAGS "-I${LIB_PATH}/include")
-    set(LIBS "-L${LIB_PATH}/lib -lm")
-    set(STATIC_LIB "${LIB_PATH}/lib/libwolfssl.la")
-    set(DYN_LIB -lwolfssl)
 
     #print a simple message
     message(STATUS "Using wolfSSL on windows")
@@ -34,64 +30,43 @@ if (CYGWIN) #if on windows
     set(Protobuf_PROTOC_EXECUTABLE ${PROTOC_ROOT_DIR}/bin/protoc.exe)
     set(Protobuf_LIBRARY ${PROTOC_ROOT_DIR}/lib/libprotobuf.dll.a)
     set(Protobuf_INCLUDE_DIR ${PROTOC_ROOT_DIR}/usr/include)
-    #find Protocol buffers package using previoulsy defined variables
-    find_package(Protobuf REQUIRED)
-
-    #print a simple message
-    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on windows")
-
-    #include protocol buffers directories
-    include_directories(${Protobuf_INCLUDE_DIRS})
-
-    #include current binary dir
-    include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-    #generate the messages object from messages.proto file (it is done every time you compile the project..)
-    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
-
-    #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
-
-    #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} Protobuf)
 
 else () #if on unix
     set(LIB_PATH "/usr/local")
-    set(CFLAGS "-I${LIB_PATH}/include")
-    set(LIBS "-L${LIB_PATH}/lib -lm")
-    set(STATIC_LIB "${LIB_PATH}/lib/libwolfssl.la")
-    set(DYN_LIB -lwolfssl)
 
     #set some cmake flags to properly include pthreads (for std::thread)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
 
-    #find Protocol buffers package using previoulsy defined variables
-    find_package(Protobuf REQUIRED)
-
-    #include protocol buffers directories
-    include_directories(${Protobuf_INCLUDE_DIRS})
-
-    #include current binary dir
-    include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-    #generate the messages object from messages.proto file (it is done every time you compile the project..)
-    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
-
-    #print a simple message
-    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on linux")
-
-    #add all source files to project executable + message objects automatically generated
-    add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
-
-    #link OpenSSL and Protobuf libraries to the project
-    #target_link_libraries(${PROJECT_NAME} Protobuf)
-    #target_link_libraries(${PROJECT_NAME} ${PROTOBUF_LIBRARIES})
-    target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} ${PROTOBUF_LIBRARIES})
-
-    #print a simple message
-    message(STATUS "Using OpenSSL on linux")
+        #print a simple message
+    message(STATUS "Using wolfSSL on linux")
 
 endif ()
+
+set(CFLAGS "-I${LIB_PATH}/include")
+set(LIBS "-L${LIB_PATH}/lib -lm")
+set(STATIC_LIB "${LIB_PATH}/lib/libwolfssl.la")
+set(DYN_LIB -lwolfssl)
+
+#find Protocol buffers package using previoulsy defined variables
+find_package(Protobuf REQUIRED)
+
+#print a simple message
+message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on windows")
+
+#include protocol buffers directories
+include_directories(${Protobuf_INCLUDE_DIRS})
+
+#include current binary dir
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+#generate the messages object from messages.proto file (it is done every time you compile the project..)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
+
+#add all source files to project executable + message objects automatically generated
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
+
+#link OpenSSL and Protobuf libraries to the project
+target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} ${PROTOBUF_LIBRARIES})
 
 find_package(SQLite3)
 include_directories(${SQLite3_INCLUDE_DIRS})
