@@ -12,13 +12,13 @@
 
 #define MAXBUFFSIZE 1024
 
-ProtocolManager::ProtocolManager(Socket &s, int ver, const std::string &basePath) : s(s), protocolVersion(ver), basePath(basePath) {
+server::ProtocolManager::ProtocolManager(Socket &s, int ver, const std::string &basePath) : s(s), protocolVersion(ver), basePath(basePath) {
     //TODO get from config
     password_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
     db = Database::getInstance(DATABASE_PATH);
 };
 
-void ProtocolManager::errorHandler(protocolManagerError code){
+void server::ProtocolManager::errorHandler(protocolManagerError code){
     serverMessage.set_version(protocolVersion); //TODO properly get version
     serverMessage.set_type(messages::ServerMessage_Type_ERR);
     serverMessage.set_code(static_cast<int>(code));  //TODO error code
@@ -32,7 +32,7 @@ void ProtocolManager::errorHandler(protocolManagerError code){
     throw ProtocolManagerException("Message type not expected", code); //TODO error code
 }
 
-void ProtocolManager::authenticate() {
+void server::ProtocolManager::authenticate() {
     std::string message = s.recvString();
     clientMessage.ParseFromString(message);
 
@@ -75,10 +75,10 @@ void ProtocolManager::authenticate() {
     clientMessage.Clear();
 };
 
-void ProtocolManager::recoverFromDB() {
+void server::ProtocolManager::recoverFromDB() {
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
     f = [this](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-        auto element = Directory_entry(basePath + path, path, size, type, lastWriteTime, Hash(hash));
+        auto element = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
         elements.insert({path, element}); //TODO check base path
     };
     db->forAll(username, mac, f);
@@ -175,11 +175,11 @@ bool removeFile(messages::ClientMessage &c, std::unordered_map<std::string, Dire
         return false;
 
     //remove the file
-    std::filesystem::remove(el->second.getAbsolutePath();   //true if the file was removed, false if it did not exist
+    std::filesystem::remove(el->second.getAbsolutePath());   //true if the file was removed, false if it did not exist
     return true;
 }
 
-void ProtocolManager::receive(){
+void server::ProtocolManager::receive(){
     //get client request
     std::string message = s.recvString();
 
@@ -218,7 +218,7 @@ void ProtocolManager::receive(){
         case messages::ClientMessage_Type_STOR:
         {
             serverMessage.set_version(protocolVersion);
-            Directory_entry element{basePath + clientMessage.path(), clientMessage.path(), clientMessage.filesize(), "file", clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
+            Directory_entry element{basePath, clientMessage.path(), clientMessage.filesize(), "file", clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
 
             if(storeFile(s, clientMessage, basePath)){
                 //the file has been created

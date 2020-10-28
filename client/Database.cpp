@@ -10,8 +10,8 @@
  */
 
 //static variable definition
-std::weak_ptr<Database> Database::database_;
-std::mutex Database::mutex_;
+std::weak_ptr<client::Database> client::Database::database_;
+std::mutex client::Database::mutex_;
 
 /**
  * Database class singleton instance getter
@@ -23,7 +23,7 @@ std::mutex Database::mutex_;
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<Database> Database::getInstance(const std::string &path) {
+std::shared_ptr<client::Database> client::Database::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if(database_.expired()) //first time, or when it was released from everybody
         database_ = std::shared_ptr<Database>(new Database(path));  //create the database object
@@ -39,7 +39,7 @@ std::shared_ptr<Database> Database::getInstance(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-Database::Database(std::string path) : path_(std::move(path)) {
+client::Database::Database(std::string path) : path_(std::move(path)) {
     open(path_);
 }
 
@@ -52,7 +52,7 @@ Database::Database(std::string path) : path_(std::move(path)) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::open(const std::string &path) {
+void client::Database::open(const std::string &path) {
     int rc;
     //check if the db already exists before opening it (open will create a new db if none is found)
     bool create = !std::filesystem::directory_entry(path).exists();
@@ -107,7 +107,7 @@ void Database::open(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::forAll(std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
+void client::Database::forAll(std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
     int rc;
     char *zErrMsg = nullptr;
     //statement handle
@@ -188,7 +188,7 @@ std::string quotesql( const std::string& s ) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
+void client::Database::insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -221,7 +221,7 @@ void Database::insert(const std::string &path, const std::string &type, uintmax_
  *
  * @author Michele Crepaldi s269551
  */
-void Database::insert(Directory_entry &d) {
+void client::Database::insert(Directory_entry &d) {
     std::string type;
     if(d.getType() == Directory_entry_TYPE::file)
         type = "file";
@@ -239,7 +239,7 @@ void Database::insert(Directory_entry &d) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::remove(const std::string &path) {
+void client::Database::remove(const std::string &path) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -270,7 +270,7 @@ void Database::remove(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
+void client::Database::update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -302,7 +302,7 @@ void Database::update(const std::string &path, const std::string &type, uintmax_
  *
  * @author Michele Crepaldi s269551
  */
-void Database::update(Directory_entry &d) {
+void client::Database::update(Directory_entry &d) {
     std::string type;
     if(d.getType() == Directory_entry_TYPE::file)
         type = "file";

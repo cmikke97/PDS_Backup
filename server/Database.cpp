@@ -10,8 +10,8 @@
  */
 
 //static variable definition
-std::weak_ptr<Database> Database::database_;
-std::mutex Database::mutex_;
+std::weak_ptr<server::Database> server::Database::database_;
+std::mutex server::Database::mutex_;
 
 /**
  * Database class singleton instance getter
@@ -23,7 +23,7 @@ std::mutex Database::mutex_;
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<Database> Database::getInstance(const std::string &path) {
+std::shared_ptr<server::Database> server::Database::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if(database_.expired()) //first time, or when it was released from everybody
         database_ = std::shared_ptr<Database>(new Database(path));  //create the database object
@@ -39,7 +39,7 @@ std::shared_ptr<Database> Database::getInstance(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-Database::Database(std::string path) : path_(std::move(path)) {
+server::Database::Database(std::string path) : path_(std::move(path)) {
     open(path_);
 }
 
@@ -52,7 +52,7 @@ Database::Database(std::string path) : path_(std::move(path)) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::open(const std::string &path) {
+void server::Database::open(const std::string &path) {
     int rc;
     //check if the db already exists before opening it (open will create a new db if none is found)
     bool create = !std::filesystem::directory_entry(path).exists();
@@ -123,7 +123,7 @@ std::string quotesql( const std::string& s ) {
  *
  * @author Michele Crepaldi s269551
  */
-void Database::forAll(std::string &username, std::string &mac, std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
+void server::Database::forAll(std::string &username, std::string &mac, std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
     int rc;
     char *zErrMsg = nullptr;
     //statement handle
@@ -196,7 +196,7 @@ void Database::forAll(std::string &username, std::string &mac, std::function<voi
  *
  * @author Michele Crepaldi s269551
  */
-void Database::insert(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
+void server::Database::insert(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -233,7 +233,7 @@ void Database::insert(std::string &username, std::string &mac, const std::string
  *
  * @author Michele Crepaldi s269551
  */
-void Database::insert(std::string &username, std::string &mac, Directory_entry &d) {
+void server::Database::insert(std::string &username, std::string &mac, Directory_entry &d) {
     std::string type;
     if(d.getType() == Directory_entry_TYPE::file)
         type = "file";
@@ -253,7 +253,7 @@ void Database::insert(std::string &username, std::string &mac, Directory_entry &
  *
  * @author Michele Crepaldi s269551
  */
-void Database::remove(std::string &username, std::string &mac, const std::string &path) {
+void server::Database::remove(std::string &username, std::string &mac, const std::string &path) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -288,7 +288,7 @@ void Database::remove(std::string &username, std::string &mac, const std::string
  *
  * @author Michele Crepaldi s269551
  */
-void Database::update(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
+void server::Database::update(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
     int rc;
     char *zErrMsg = nullptr;
     //Create SQL statement
@@ -324,7 +324,7 @@ void Database::update(std::string &username, std::string &mac, const std::string
  *
  * @author Michele Crepaldi s269551
  */
-void Database::update(std::string &username, std::string &mac, Directory_entry &d) {
+void server::Database::update(std::string &username, std::string &mac, Directory_entry &d) {
     std::string type;
     if(d.getType() == Directory_entry_TYPE::file)
         type = "file";

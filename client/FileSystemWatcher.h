@@ -41,7 +41,7 @@ public:
     std::chrono::duration<int, std::milli> delay;
     FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay);
     void start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop);
-    void recoverFromDB(Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);
+    void recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);
 
 private:
     std::unordered_map<std::string, Directory_entry> paths_;

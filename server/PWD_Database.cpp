@@ -10,8 +10,8 @@
  */
 
 //static variable definition
-std::weak_ptr<PWD_Database> PWD_Database::database_;
-std::mutex PWD_Database::mutex_;
+std::weak_ptr<server::PWD_Database> server::PWD_Database::database_;
+std::mutex server::PWD_Database::mutex_;
 
 /**
  * Database class singleton instance getter
@@ -23,7 +23,7 @@ std::mutex PWD_Database::mutex_;
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<PWD_Database> PWD_Database::getInstance(const std::string &path) {
+std::shared_ptr<server::PWD_Database> server::PWD_Database::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if(database_.expired()) //first time, or when it was released from everybody
         database_ = std::shared_ptr<PWD_Database>(new PWD_Database(path));  //create the database object
@@ -39,7 +39,7 @@ std::shared_ptr<PWD_Database> PWD_Database::getInstance(const std::string &path)
  *
  * @author Michele Crepaldi s269551
  */
-PWD_Database::PWD_Database(std::string path) : path_(std::move(path)) {
+server::PWD_Database::PWD_Database(std::string path) : path_(std::move(path)) {
     open(path_);
 }
 
@@ -69,7 +69,7 @@ static int countCallback(void *count, int argc, char **argv, char **azColName) {
  *
  * @author Michele Crepaldi s269551
  */
-void PWD_Database::open(const std::string &path) {
+void server::PWD_Database::open(const std::string &path) {
     int rc;
     //check if the db already exists before opening it (open will create a new db if none is found)
     bool create = !std::filesystem::directory_entry(path).exists();
@@ -164,7 +164,7 @@ static int hashCallback(void *pair, int argc, char **argv, char **azColName) {
  *
  * @author Michele Crepaldi s269551
  */
-std::pair<std::string, Hash> PWD_Database::getHash(std::string &username) {
+std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username) {
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
     char *zErrMsg = nullptr;

@@ -21,8 +21,8 @@
 #define PATH_TO_WATCH ""
 
 //static variables definition
-std::weak_ptr<Config> Config::config_;
-std::mutex Config::mutex_;
+std::weak_ptr<client::Config> client::Config::config_;
+std::mutex client::Config::mutex_;
 
 /**
  * Config class singleton instance getter
@@ -32,7 +32,7 @@ std::mutex Config::mutex_;
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<Config> Config::getInstance(const std::string &path) {
+std::shared_ptr<client::Config> client::Config::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if(config_.expired()) //first time, or when it was released from everybody
         config_ = std::shared_ptr<Config>(new Config(path));  //create the database object
@@ -46,7 +46,7 @@ std::shared_ptr<Config> Config::getInstance(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-Config::Config(std::string path) : path_(path) {
+client::Config::Config(std::string path) : path_(path) {
     load(path_);
 }
 
@@ -57,7 +57,7 @@ Config::Config(std::string path) : path_(path) {
  *
  * @author Michele Crepaldi s269551
  */
-void Config::load(const std::string &configFilePath) {
+void client::Config::load(const std::string &configFilePath) {
     std::fstream file;
     std::string str, key, value;
     std::smatch m;
@@ -159,7 +159,7 @@ void Config::load(const std::string &configFilePath) {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string Config::getPathToWatch() {
+const std::string client::Config::getPathToWatch() {
     if(path_to_watch != "")
         return path_to_watch;
     else
@@ -173,7 +173,7 @@ const std::string Config::getPathToWatch() {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string Config::getDatabasePath() {
+const std::string client::Config::getDatabasePath() {
     if(database_path != "")
         return database_path;
     else
@@ -187,7 +187,7 @@ const std::string Config::getDatabasePath() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getMillisFilesystemWatcher() {
+int client::Config::getMillisFilesystemWatcher() {
     if(millis_filesystem_watcher != 0)
         return millis_filesystem_watcher;
     else
@@ -201,7 +201,7 @@ int Config::getMillisFilesystemWatcher() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getEventQueueSize() {
+int client::Config::getEventQueueSize() {
     if(event_queue_size != 0)
         return event_queue_size;
     else
@@ -215,7 +215,7 @@ int Config::getEventQueueSize() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getSecondsBetweenReconnections() {
+int client::Config::getSecondsBetweenReconnections() {
     if(seconds_between_reconnections != 0)
         return seconds_between_reconnections;
     else
@@ -229,7 +229,7 @@ int Config::getSecondsBetweenReconnections() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getMaxConnectionRetries() {
+int client::Config::getMaxConnectionRetries() {
     if(max_connection_retries != 0)
         return max_connection_retries;
     else
@@ -243,7 +243,7 @@ int Config::getMaxConnectionRetries() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getMaxServerErrorRetries() {
+int client::Config::getMaxServerErrorRetries() {
     if(max_server_error_retries != 0)
         return max_server_error_retries;
     else
@@ -257,7 +257,7 @@ int Config::getMaxServerErrorRetries() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getMaxAuthErrorRetries() {
+int client::Config::getMaxAuthErrorRetries() {
     if(max_auth_error_retries != 0)
         return max_auth_error_retries;
     else
@@ -271,7 +271,7 @@ int Config::getMaxAuthErrorRetries() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getTimeoutSeconds() {
+int client::Config::getTimeoutSeconds() {
     if(timeout_seconds != 0)
         return timeout_seconds;
     else
@@ -285,7 +285,7 @@ int Config::getTimeoutSeconds() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getSelectTimeoutSeconds() {
+int client::Config::getSelectTimeoutSeconds() {
     if(select_timeout_seconds != 0)
         return select_timeout_seconds;
     else
@@ -299,7 +299,7 @@ int Config::getSelectTimeoutSeconds() {
  *
  * @author Michele Crepaldi s269551
  */
-int Config::getMaxResponseWaiting() {
+int client::Config::getMaxResponseWaiting() {
     if(max_response_waiting != 0)
         return max_response_waiting;
     else

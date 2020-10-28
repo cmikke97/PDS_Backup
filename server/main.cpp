@@ -39,8 +39,8 @@ int main(int argc, char** argv) {
         int port = std::stoi(serverPort);
 
         //TODO get config
-        auto pass_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
-        auto db = Database::getInstance(DATABASE_PATH);
+        auto pass_db = server::PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
+        auto db = server::Database::getInstance(DATABASE_PATH);
 
         ServerSocket server{port, LISTEN_QUEUE, socketType::TCP};   //initialize server socket with port
         TSCircular_vector<Socket> sockets{SOCKET_QUEUE_SIZE};
@@ -75,11 +75,11 @@ int main(int argc, char** argv) {
                 return 1;
         }
     }
-    catch (PWT_DatabaseException &e) {
+    catch (server::PWT_DatabaseException &e) {
         std::cerr << e.what() << std::endl;
         return 1;
     }
-    catch (DatabaseException &e) {
+    catch (server::DatabaseException &e) {
         std::cerr << e.what() << std::endl;
         return 1;
     }
@@ -97,7 +97,7 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
         fd_set read_fds;
         int timeWaited = 0;
         bool loop = true;
-        ProtocolManager pm{sock, VERSION, SERVER_PATH};
+        server::ProtocolManager pm{sock, VERSION, SERVER_PATH};
 
         try{
             //authenticate the connected client

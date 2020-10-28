@@ -139,7 +139,7 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-namespace my {
+namespace server {
     template<class T>
     struct DeleterOf;
 
@@ -171,8 +171,8 @@ namespace my {
  */
 class TLS_Socket : public virtual SocketBridge {
     std::unique_ptr<TCP_Socket> sock;
-    my::UniquePtr<WOLFSSL_CTX> ctx;
-    my::UniquePtr<WOLFSSL> ssl;
+    server::UniquePtr<WOLFSSL_CTX> ctx;
+    server::UniquePtr<WOLFSSL> ssl;
 
     explicit TLS_Socket(int sockfd, WOLFSSL *ssl);
     friend class TLS_ServerSocket;

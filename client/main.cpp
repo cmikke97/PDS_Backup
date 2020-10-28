@@ -40,9 +40,9 @@ int main(int argc, char **argv) {
 
     try {
         //get the configuration
-        auto config = Config::getInstance(std::string(CONFIG_FILE_PATH));
+        auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
         //get the database instance and open the database (and if not previously there create also the needed table)
-        auto db = Database::getInstance(config->getDatabasePath());
+        auto db = client::Database::getInstance(config->getDatabasePath());
 
         // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
@@ -80,18 +80,18 @@ int main(int argc, char **argv) {
         }, fileWatcher_stop);
 
     }
-    catch (DatabaseException &e) {
+    catch (client::DatabaseException &e) {
         //in case of database exceptions show message and return
         std::cerr << e.what() << std::endl;
         return 1;
     }
-    catch (ConfigException &e) {
-        if (e.getCode() == configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
+    catch (client::ConfigException &e) {
+        if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
             std::cout << e.what() << std::endl;
             std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
             std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
         }
-        else if(e.getCode() == configError::open){  //if there were some errors in opening the configuration file return
+        else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
             std::cerr << e.what() << std::endl;
         }
 
@@ -122,10 +122,10 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         Socket client_socket(socketType::TCP);
 
         //get the configuration
-        auto config = Config::getInstance(std::string(CONFIG_FILE_PATH));
+        auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
 
         //initialize protocol manager
-        ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries());
+        client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
 
         //for select
         fd_set read_fds;
@@ -260,7 +260,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         return;
                 }
             }
-            catch (ProtocolManagerException &e) {
+            catch (client::ProtocolManagerException &e) {
                 switch (e.getErrorCode()) {
                     case -1: //unsupported message type error
                     case 0: //unknown server error
@@ -317,7 +317,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         return;
                 }
             }
-            catch (DatabaseException &e) {
+            catch (client::DatabaseException &e) {
                 //in case of a database exception the only thing we can do is to close the program
                 std::cerr << e.what() << std::endl;
 
@@ -337,7 +337,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         fileWatcher_stop.store(true);
         return;
     }
-    catch (DatabaseException &e){
+    catch (client::DatabaseException &e){
         //we are here if the Database class couldn't open the database
         std::cerr << e.what() << std::endl;
 
@@ -345,13 +345,13 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         fileWatcher_stop.store(true);
         return;
     }
-    catch (ConfigException &e) {
-        if (e.getCode() == configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
+    catch (client::ConfigException &e) {
+        if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
             std::cout << e.what() << std::endl;
             std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
             std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
         }
-        else if(e.getCode() == configError::open){  //if there were some errors in opening the configuration file return
+        else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
             std::cerr << e.what() << std::endl;
         }
 
