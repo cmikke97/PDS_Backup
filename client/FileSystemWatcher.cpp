@@ -11,8 +11,6 @@
      * @author Michele Crepaldi s269551
      */
 FileSystemWatcher::FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
-    //set directory entry class base directory to the path to watch
-    Directory_entry::setBaseDir(this->path_to_watch);
 }
 
 /**
@@ -43,7 +41,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
         // Check if a file/directory was created
         //TODO check if the path_to_watch exists
         for(const auto& file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
-            auto current_file = Directory_entry(file);
+            auto current_file = Directory_entry(path_to_watch, file);
 
             if(current_file.getType() == Directory_entry_TYPE::notAType) //if it is not a file nor a directory don't do anything and go on
                 continue;
@@ -81,10 +79,10 @@ bool FileSystemWatcher::contains(const std::string &key) {
  *
  * @author Michele Crepaldi s269551
  */
-void FileSystemWatcher::recoverFromDB(Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action) {
+void FileSystemWatcher::recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action) {
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
     f = [this, action](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-        auto element = Directory_entry(path, size, type, lastWriteTime, Hash(hash));
+        auto element = Directory_entry(path_to_watch, path, size, type, lastWriteTime, Hash(hash));
         paths_.insert({path, element});
         action(element, FileSystemStatus::created);
     };

@@ -21,17 +21,21 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
 /**
  * constructor with a filesystem::path as input
  *
+ * @param basePath base path of the entry
  * @param entry std::filesystem::path of the element to be represented
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string &basePath, const std::string &path) :
-        Directory_entry(basePath, std::filesystem::directory_entry(path)){
+Directory_entry::Directory_entry(const std::string &basePath, const std::string &absolutePath) :
+        Directory_entry(
+                basePath,
+                std::filesystem::directory_entry(absolutePath)){
 }
 
 /**
  * constructor with a filesystem::directory_entry as input
  *
+ * @param basePath base path of the entry
  * @param entry std::filesystem::directory_entry to be represented
  *
  * @author Michele Crepaldi s269551
@@ -48,6 +52,7 @@ Directory_entry::Directory_entry(const std::string &basePath, const std::filesys
 /**
  * constructor with all the parameters
  *
+ * @param basePath base path of the entry
  * @param path absolute path of the directory entry
  * @param size size of the file (only to be used if this is a file)
  * @param type type od the entry: file or directory
@@ -58,7 +63,8 @@ Directory_entry::Directory_entry(const std::string &basePath, const std::filesys
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::string& basePath, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
-                                 absolutePath(absolutePath), type(type){
+        absolutePath(absolutePath),
+        type(type){
 
     //get relative path from absolutePath and baseDir
     std::smatch m;
@@ -108,6 +114,7 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
 /**
  * alternative constructor useful when handling data retrieved from a db
  *
+ * @param basePath base path of the entry
  * @param relativePath relative path of the entry
  * @param size size of the entry
  * @param type type of the entry (file or directory)
@@ -115,18 +122,49 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string &relativePath, uintmax_t size, const std::string &type, std::string lastWriteTime, Hash h) :
-                                Directory_entry(baseDir + relativePath, relativePath, size, type, std::move(lastWriteTime), h){
-}
+Directory_entry::Directory_entry(const std::string& basePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h):
+        relativePath(relativePath),
+        absolutePath(basePath + relativePath),
+        last_write_time(std::move(lastWriteTime)),
+        size(size),
+        hash(h){
 
-Directory_entry::Directory_entry(const std::string& absolutePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h):
-        relativePath(relativePath), absolutePath(absolutePath), last_write_time(std::move(lastWriteTime)), size(size), hash(h){
     if(type == "file")
         this->type = Directory_entry_TYPE::file;
     else if(type == "directory")
         this->type = Directory_entry_TYPE::directory;
     else
         this->type = Directory_entry_TYPE::notAType;
+}
+
+/**
+ * operator == redefinition for the Directory_entry class
+ *
+ * @param other the other Directory_entry to compare this to
+ * @return true if the two Directory entries are equal, false otherwise
+ *
+ * @author Michele Crepaldi s269551
+ */
+bool Directory_entry::operator==(Directory_entry &other){
+    if(this->getType() != other.getType())
+        return false;
+
+    if(this->getAbsolutePath() != other.getAbsolutePath())
+        return false;
+
+    if(this->getRelativePath() != other.getRelativePath())
+        return false;
+
+    if(this->getSize() != other.getSize())
+        return false;
+
+    if(this->getLastWriteTime() != other.getLastWriteTime())
+        return false;
+
+    if(this->getHash() != other.getHash())
+        return false;
+
+    return true;
 }
 
 /**

@@ -26,7 +26,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-namespace my {
+namespace client {
     template<class T>
     struct DeleterOf;
 
@@ -37,7 +37,6 @@ namespace my {
 
     template<class sqlite3Type>
     using UniquePtr = std::unique_ptr<sqlite3Type, DeleterOf<sqlite3Type>>;
-}
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -49,33 +48,44 @@ namespace my {
  *
  * @author Michele Crepaldi s269551
  */
-class Database {
-    my::UniquePtr<sqlite3> db;
+    class Database {
+        UniquePtr<sqlite3> db;
 
-    void open(const std::string &path);
+        void open(const std::string &path);
 
-protected:
-    explicit Database(std::string  path);
+    protected:
+        explicit Database(std::string path);
 
-    //to sincronize threads during the first creation of the Singleton object
-    static std::mutex mutex_;
-    //singleton instance
-    static std::weak_ptr<Database> database_;
-    std::string path_;
+        //to sincronize threads during the first creation of the Singleton object
+        static std::mutex mutex_;
+        //singleton instance
+        static std::weak_ptr<Database> database_;
+        std::string path_;
 
-public:
-    Database(Database *other) = delete;
-    void operator=(const Database &) = delete;
-    static std::shared_ptr<Database> getInstance(const std::string &path);
+    public:
+        Database(Database *other) = delete;
 
-    ~Database() = default;
-    void forAll(std::function<void (const std::string&, const std::string&, uintmax_t, const std::string&, const std::string&)> &f);
-    void insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
-    void insert(Directory_entry &d);
-    void remove(const std::string &path);
-    void update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
-    void update(Directory_entry &d);
-};
+        void operator=(const Database &) = delete;
+
+        static std::shared_ptr<Database> getInstance(const std::string &path);
+
+        ~Database() = default;
+
+        void forAll(std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
+                                       const std::string &)> &f);
+
+        void insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime,
+                    const std::string &hash);
+
+        void insert(Directory_entry &d);
+
+        void remove(const std::string &path);
+
+        void update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime,
+                    const std::string &hash);
+
+        void update(Directory_entry &d);
+    };
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -87,46 +97,48 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-enum class databaseError{open, create, prepare, read, insert, remove, update};
+    enum class databaseError {
+        open, create, prepare, read, insert, remove, update
+    };
 
 /**
  * exceptions for the database class
  *
  * @author Michele Crepaldi s269551
  */
-class DatabaseException : public std::runtime_error {
-    databaseError code;
-public:
+    class DatabaseException : public std::runtime_error {
+        databaseError code;
+    public:
 
-    /**
-     * database exception constructor
-     *
-     * @param msg the error message
-     *
-     * @author Michele Crepaldi s269551
-     */
-    explicit DatabaseException(const std::string& msg, databaseError code):
-            std::runtime_error(msg), code(code){
-    }
+        /**
+         * database exception constructor
+         *
+         * @param msg the error message
+         *
+         * @author Michele Crepaldi s269551
+         */
+        explicit DatabaseException(const std::string &msg, databaseError code) :
+                std::runtime_error(msg), code(code) {
+        }
 
-    /**
-     * database exception destructor.
-     *
-     * @author Michele Crepaldi s269551
-     */
-    ~DatabaseException() noexcept override = default;
+        /**
+         * database exception destructor.
+         *
+         * @author Michele Crepaldi s269551
+         */
+        ~DatabaseException() noexcept override = default;
 
-    /**
-    * function to retrieve the error code from the exception
-    *
-    * @return error code
-    *
-    * @author Michele Crepaldi s269551
-    */
-    databaseError getCode() const noexcept{
-        return code;
-    }
-};
-
+        /**
+        * function to retrieve the error code from the exception
+        *
+        * @return error code
+        *
+        * @author Michele Crepaldi s269551
+        */
+        databaseError getCode() const noexcept {
+            return code;
+        }
+    };
+}
 
 #endif //CLIENT_DATABASE_H

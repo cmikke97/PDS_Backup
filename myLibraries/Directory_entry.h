@@ -51,8 +51,9 @@ public:
     explicit Directory_entry(const std::string&, const std::filesystem::directory_entry&);
 
     Directory_entry(const std::string &base, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
-    Directory_entry(const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
-    Directory_entry(const std::string& absolutePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
+    Directory_entry(const std::string &base, const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
+
+    bool operator==(Directory_entry &other);
 
     std::string getRelativePath();
     std::string getAbsolutePath();
