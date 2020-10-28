@@ -56,13 +56,17 @@ if (CYGWIN) #if on windows
     target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} Protobuf)
 
 else () #if on unix
+    set(LIB_PATH "/usr/local")
+    set(CFLAGS "-I${LIB_PATH}/include")
+    set(LIBS "-L${LIB_PATH}/lib -lm")
+    set(STATIC_LIB "${LIB_PATH}/lib/libwolfssl.la")
+    set(DYN_LIB -lwolfssl)
+
     #set some cmake flags to properly include pthreads (for std::thread)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread -lprotobuf -lwolfssl")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
 
-    find_package(Protobuf)
-
-    #print a simple message
-    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on linux")
+    #find Protocol buffers package using previoulsy defined variables
+    find_package(Protobuf REQUIRED)
 
     #include protocol buffers directories
     include_directories(${Protobuf_INCLUDE_DIRS})
@@ -73,11 +77,16 @@ else () #if on unix
     #generate the messages object from messages.proto file (it is done every time you compile the project..)
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 
+    #print a simple message
+    message(STATUS "Using Protocol buffers ${Protobuf_VERSION} on linux")
+
     #add all source files to project executable + message objects automatically generated
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
 
     #link OpenSSL and Protobuf libraries to the project
-    target_link_libraries(${PROJECT_NAME} Protobuf)
+    #target_link_libraries(${PROJECT_NAME} Protobuf)
+    #target_link_libraries(${PROJECT_NAME} ${PROTOBUF_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} ${PROTOBUF_LIBRARIES})
 
     #print a simple message
     message(STATUS "Using OpenSSL on linux")
