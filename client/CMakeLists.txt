@@ -9,10 +9,10 @@ set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Event.cpp Da
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Directory_entry.cpp ../myLibraries/Directory_entry.h)
 
-#now we want to include wolfSSL and protocol buffers
+#now we want to include wolfSSL, protocol buffers and sqlite3
 if (CYGWIN) #if on windows
 
-    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
+    #convert a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} WSSL_ROOT_DIR)
     #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" WSSL_ROOT_DIR ${WSSL_ROOT_DIR})
@@ -22,7 +22,7 @@ if (CYGWIN) #if on windows
     #print a simple message
     message(STATUS "Using wolfSSL on windows")
 
-    #converts a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
+    #convert a native <path> into a cmake-style path with forward-slashes (/); in this case convert the CYGWIN_ROOT env variable to a cmake-style path representation
     file(TO_CMAKE_PATH $ENV{CYGWIN_ROOT} PROTOC_ROOT_DIR)
     #replace the sequence "C/" to "/cygdrive/c/"
     string(REGEX REPLACE "C/" "/cygdrive/c/" PROTOC_ROOT_DIR ${PROTOC_ROOT_DIR})
@@ -37,17 +37,18 @@ else () #if on unix
     #set some cmake flags to properly include pthreads (for std::thread)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
 
-        #print a simple message
+    #print a simple message
     message(STATUS "Using wolfSSL on linux")
 
 endif ()
 
+#set some variables
 set(CFLAGS "-I${LIB_PATH}/include")
 set(LIBS "-L${LIB_PATH}/lib -lm")
 set(STATIC_LIB "${LIB_PATH}/lib/libwolfssl.la")
 set(DYN_LIB -lwolfssl)
 
-#find Protocol buffers package using previoulsy defined variables
+#find Protocol buffers package using previously defined variables
 find_package(Protobuf REQUIRED)
 
 #print a simple message
@@ -65,10 +66,13 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../myProtos/messages.proto)
 #add all source files to project executable + message objects automatically generated
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${MYLIBRARY} ${PROTO_SRCS} ${PROTO_HDRS})
 
-#link OpenSSL and Protobuf libraries to the project
+#link wolfSSL and Protobuf libraries to the project
 target_link_libraries(${PROJECT_NAME} ${CFLAGS} ${LIBS} ${DYN_LIB} ${PROTOBUF_LIBRARIES})
 
+#find sqlite3
 find_package(SQLite3)
+#include its directories
 include_directories(${SQLite3_INCLUDE_DIRS})
+#link sqlite3
 target_link_libraries (${PROJECT_NAME} SQLite::SQLite3)
 message(STATUS "Using SQLite3 version ${SQLite3_VERSION}")
