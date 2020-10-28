@@ -38,7 +38,6 @@ std::time_t to_time_t(TP tp)
 class Directory_entry {
 
 private:
-    static inline std::string baseDir;
     std::string relativePath;
     std::string absolutePath;
     uintmax_t size{};
@@ -48,15 +47,12 @@ private:
 
 public:
     Directory_entry();
-    explicit Directory_entry(const std::string&);
-    explicit Directory_entry(const std::filesystem::directory_entry&);
+    explicit Directory_entry(const std::string&, const std::string&);
+    explicit Directory_entry(const std::string&, const std::filesystem::directory_entry&);
 
-    Directory_entry(const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
+    Directory_entry(const std::string &base, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
     Directory_entry(const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
     Directory_entry(const std::string& absolutePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
-
-
-    static void setBaseDir(const std::string& dir);
 
     std::string getRelativePath();
     std::string getAbsolutePath();

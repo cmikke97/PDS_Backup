@@ -25,8 +25,8 @@ Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string &path) :
-        Directory_entry(std::filesystem::directory_entry(path)){
+Directory_entry::Directory_entry(const std::string &basePath, const std::string &path) :
+        Directory_entry(basePath, std::filesystem::directory_entry(path)){
 }
 
 /**
@@ -36,8 +36,9 @@ Directory_entry::Directory_entry(const std::string &path) :
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry) :
+Directory_entry::Directory_entry(const std::string &basePath, const std::filesystem::directory_entry& entry) :
         Directory_entry(
+                basePath,
                 entry.path(),
                 entry.is_regular_file()?entry.file_size():0,
                 entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType),
@@ -56,12 +57,12 @@ Directory_entry::Directory_entry(const std::filesystem::directory_entry& entry) 
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
+Directory_entry::Directory_entry(const std::string& basePath, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
                                  absolutePath(absolutePath), type(type){
 
     //get relative path from absolutePath and baseDir
     std::smatch m;
-    std::regex e ("(" + std::regex_replace(baseDir, std::regex("\\/"), "\\/") + ")(.*)");
+    std::regex e ("(" + std::regex_replace(basePath, std::regex("\\/"), "\\/") + ")(.*)");
 
     if(std::regex_match (absolutePath,m,e))
         relativePath = m[2];
@@ -77,10 +78,8 @@ Directory_entry::Directory_entry(const std::string& absolutePath, uintmax_t size
     std::tm *gmt = std::gmtime(&tt);
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
+    //buffer >> std::get_time(gmt, "%Y/%m/%d-%H:%M:%S"); //inverse operation
     this->last_write_time = buffer.str();
-
-    std::stringstream sizeStr;
-    sizeStr << this->size;
 
     if(type == Directory_entry_TYPE::file){
         //calculate hash
@@ -214,15 +213,4 @@ bool Directory_entry::is_directory() {
  */
 Hash& Directory_entry::getHash() {
     return hash;
-}
-
-/**
- * set the base directory as the one given as argument
- *
- * @param dir
- *
- * @author Michele Crepaldi s269551
- */
-void Directory_entry::setBaseDir(const std::string& dir) {
-    baseDir = dir;
 }
