@@ -73,7 +73,7 @@ bool Hash::operator==(Hash &other) {
     auto myHash = this->str();  //get my hash value
     auto otherHash = other.str();   //get the other's hash value
     if(myHash.size() == otherHash.size()) //if the size is the same (they should be unless there are errors)
-        return CRYPTO_memcmp(myHash.c_str(), otherHash.c_str(), myHash.length()); //then compare the two hashes in constant time
+        return !CRYPTO_memcmp(myHash.c_str(), otherHash.c_str(), myHash.length()); //then compare the two hashes in constant time
     return false;
 }
 

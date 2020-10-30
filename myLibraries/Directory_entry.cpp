@@ -45,8 +45,7 @@ Directory_entry::Directory_entry(const std::string &basePath, const std::filesys
                 basePath,
                 entry.path(),
                 entry.is_regular_file()?entry.file_size():0,
-                entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType),
-                entry.last_write_time()){
+                entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType)){
 }
 
 /**
@@ -62,7 +61,7 @@ Directory_entry::Directory_entry(const std::string &basePath, const std::filesys
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string& basePath, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime) :
+Directory_entry::Directory_entry(const std::string& basePath, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type) :
         absolutePath(absolutePath),
         type(type){
 
@@ -78,14 +77,8 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
     //if it is a file then set its size, if it is a directory then size is 0
     this->size = type==Directory_entry_TYPE::file?size:0;
 
-    //convert file time to string
-    //lastWriteTime.time_since_epoch().count();
-    std::time_t tt = to_time_t(lastWriteTime);
-    std::tm *gmt = std::gmtime(&tt);
-    std::stringstream buffer;
-    buffer << std::put_time(gmt, "%Y/%m/%d-%H:%M:%S");
-    //buffer >> std::get_time(gmt, "%Y/%m/%d-%H:%M:%S"); //inverse operation
-    this->last_write_time = buffer.str();
+    //get last write time from the file and convert it to string
+    this->last_write_time = get_time_from_file();
 
     if(type == Directory_entry_TYPE::file){
         //calculate hash
@@ -96,12 +89,12 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
         hm.update(sizeStr.str());
         hm.update(this->last_write_time);
         */
-        char buf[MAXBUFFSIZE];
 
         std::ifstream infile;
         infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
         if(infile.is_open()){
             while(infile){
+                char buf[MAXBUFFSIZE] = {0};
                 infile.getline(buf, MAXBUFFSIZE);
                 hm.update(buf, MAXBUFFSIZE);
             }
@@ -251,4 +244,58 @@ bool Directory_entry::is_directory() {
  */
 Hash& Directory_entry::getHash() {
     return hash;
+}
+
+/**
+ * Utility function to get the last write (modify) time of a file as string;
+ * <p> It is needed until c++20 because until then the lastWriteTime function of std::filesystem returns a file_time_type
+ * variable which cannot be portably converted to a time_t nor to a string and then back
+ *
+ * @param path of the file to get the last write time of
+ * @return string (readable) representation of the time got
+ *
+ * @throw runtime_error in case of errors with stat function
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::string Directory_entry::get_time_from_file(){
+    struct stat buf{};
+    if(stat(absolutePath.data(), &buf) != 0)    //get file info
+        throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
+
+    std::time_t tt = buf.st_mtime;  //get file last modified time
+    std::tm *gmt = std::localtime(&tt);
+    std::stringstream buffer;
+    buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M"); //convert it as a readable string
+    return buffer.str();
+}
+
+/**
+ * Utility function to set the last write (modify) time of a file given as string (readable);
+ * <p> It is needed until c++20 because until then the lastWriteTime function of std::filesystem returns a file_time_type
+ * variable which cannot be portably converted to a time_t nor to a string and then back
+ *
+ * @param absolutePath of the file to get the last write time of
+ * @param time string (readable) representation of the time to use
+ *
+ * @throw runtime_error in case of errors with stat or utime functions
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Directory_entry::set_time_to_file(std::string &time){
+    struct stat buf{};
+    if(stat(absolutePath.data(), &buf) != 0)    //get file info
+        throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
+
+    std::tm gmt{};
+    std::stringstream buffer;
+    buffer << time;
+    buffer >> std::get_time(&gmt, "%A, %d %B %Y %H:%M");    //convert from readable string to std::tm
+    std::time_t tt = mktime(&gmt);  //convert std::tm to time_t
+
+    struct utimbuf new_times{};
+    new_times.actime = buf.st_atime; //keep atime unchanged
+    new_times.modtime = tt; //set mtime to the time given as input
+    if(utime(absolutePath.data(), &new_times) != 0) //set the new times for the file
+        throw std::runtime_error("Error in setting file time"); //throw exception in case of errors
 }

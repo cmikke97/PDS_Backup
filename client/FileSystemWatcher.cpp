@@ -5,11 +5,14 @@
 #include "FileSystemWatcher.h"
 
 /**
-     * constructor function for this class:
-     * Keep a record of files from the base directory and their last modification time
-     *
-     * @author Michele Crepaldi s269551
-     */
+ * constructor function for this class:
+ * Keep a record of files from the base directory and their last modification time
+ *
+ * @param path_to_watch path this FileSystemWatcher has to watch
+ * @param delay amount of time to wait between polls
+ *
+ * @author Michele Crepaldi s269551
+ */
 FileSystemWatcher::FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay) : path_to_watch{std::move(path_to_watch)}, delay{delay} {
 }
 
@@ -17,16 +20,17 @@ FileSystemWatcher::FileSystemWatcher(std::string path_to_watch, std::chrono::dur
  * Monitor "path_to_watch" for changes and in case of a change execute the user supplied "action" function
  *
  * @param action to be performed
+ * @param stop atomic boolean to make this FileSystemWatcher to stop (set to true by the communication thread in case of exceptions)
  *
  * @author Michele Crepaldi s269551
  */
 void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop) {
 
-    while(!stop.load()) {
-        // Wait for "delay" milliseconds
+    while(!stop.load()) {   //loop until I am told to stop
+        //Wait for "delay" milliseconds
         std::this_thread::sleep_for(delay);
 
-        // check if a file/directory was deleted
+        //check if a file/directory was deleted
         //TODO check if the files belong to the path to watch set
         auto it = paths_.begin();
         while (it != paths_.end()) {
@@ -38,42 +42,35 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
                 it++;
             }
         }
-        // Check if a file/directory was created
+        //Check if a file/directory was created
         //TODO check if the path_to_watch exists
         for(const auto& file : std::filesystem::recursive_directory_iterator(path_to_watch)) {
-            auto current_file = Directory_entry(path_to_watch, file);
+            auto current = Directory_entry(path_to_watch, file);
 
-            if(current_file.getType() == Directory_entry_TYPE::notAType) //if it is not a file nor a directory don't do anything and go on
+            if(!current.is_directory() && !current.is_regular_file()) //if it is not a file nor a directory don't do anything and go on
                 continue;
 
-            if(!contains(file.path().string())) { //file creation
-                if(action(current_file, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
-                    paths_[current_file.getAbsolutePath()] = std::move(current_file);
-            }else if(paths_[current_file.getAbsolutePath()].getLastWriteTime() != current_file.getLastWriteTime()) { //file modify
-                if(action(current_file, FileSystemStatus::modified))
-                    paths_[current_file.getAbsolutePath()] = std::move(current_file);
+            auto old = paths_.find(file.path().string());
+            if(old == paths_.end()) { //file creation
+                if(action(current, FileSystemStatus::created)) //if the action was successful then add the element to paths_; otherwise this element will be added later
+                    paths_[current.getAbsolutePath()] = std::move(current);
+            }else {
+                auto el = old->second;
+                if (el.getLastWriteTime() != current.getLastWriteTime() || el.getType() != current.getType() ||
+                        el.getSize() != current.getSize() || el.getHash() != current.getHash()) { //file modify
+                    if (action(current, FileSystemStatus::modified))
+                        el = std::move(current);
+                }
             }
         }
     }
 }
 
 /**
- * Check if "paths_" contains a given key
- *
- * @param key
- * @return whether the paths_ map contains key in the set of keys
- *
- * @author Michele Crepaldi s269551
- */
-bool FileSystemWatcher::contains(const std::string &key) {
-    auto el = paths_.find(key);
-    return el != paths_.end();
-}
-
-/**
  * function used by this class to retrieve previously save data (about the entries) from the db
  *
  * @param db db to retrieve data from
+ * @param action action to perform for each row of the db
  *
  * @throw runtime exception in case of db errors
  *

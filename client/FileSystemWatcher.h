@@ -18,8 +18,6 @@
 #include "Database.h"
 #include <sqlite3.h>
 
-using namespace std::chrono_literals;
-
 /**
  * define all possible filesystem modifications to be watched
  *
@@ -39,6 +37,7 @@ public:
 
     // Time interval at which we check the base folder for changes
     std::chrono::duration<int, std::milli> delay;
+
     FileSystemWatcher(std::string path_to_watch, std::chrono::duration<int, std::milli> delay);
     void start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop);
     void recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);

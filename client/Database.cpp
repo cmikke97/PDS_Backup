@@ -10,7 +10,7 @@
  */
 
 //static variable definition
-std::weak_ptr<client::Database> client::Database::database_;
+std::shared_ptr<client::Database> client::Database::database_;
 std::mutex client::Database::mutex_;
 
 /**
@@ -25,9 +25,9 @@ std::mutex client::Database::mutex_;
  */
 std::shared_ptr<client::Database> client::Database::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if(database_.expired()) //first time, or when it was released from everybody
+    if(database_ == nullptr) //first time, or when it was released from everybody
         database_ = std::shared_ptr<Database>(new Database(path));  //create the database object
-    return database_.lock();
+    return database_;
 }
 
 /**

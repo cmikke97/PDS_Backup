@@ -12,7 +12,7 @@
 #include "../Event.h"
 #include "Config.h"
 
-#define CONFIG_FILE_PATH "./config.txt"
+#define CONFIG_FILE_PATH "../config.txt"
 #define MAXBUFFSIZE 1024
 
 namespace client {
