@@ -10,24 +10,10 @@
 #include <filesystem>
 #include <iostream>
 #include <utility>
+#include <utime.h>
 #include "Hash.h"
 
 enum class Directory_entry_TYPE {directory, file, notAType};
-
-/**
- * function to used to convert std::filesystem::file_time_type to std::time_t
- *
- * @tparam TP
- * @param tp time as std::filesystem::file_time_type
- * @return std::time_t representation of the input time
- */
-template <typename TP>
-std::time_t to_time_t(TP tp)
-{
-    using namespace std::chrono;
-    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now() + system_clock::now());
-    return system_clock::to_time_t(sctp);
-}
 
 /**
  * class to represent a directory entry and its important fields
@@ -50,7 +36,7 @@ public:
     explicit Directory_entry(const std::string&, const std::string&);
     explicit Directory_entry(const std::string&, const std::filesystem::directory_entry&);
 
-    Directory_entry(const std::string &base, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type, std::filesystem::file_time_type lastWriteTime);
+    Directory_entry(const std::string &base, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type);
     Directory_entry(const std::string &base, const std::string& realtivePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h);
 
     bool operator==(Directory_entry &other);
@@ -63,6 +49,8 @@ public:
     bool is_regular_file();
     bool is_directory();
     Hash& getHash();
+    std::string get_time_from_file();
+    void set_time_to_file(std::string &time);
 };
 
 

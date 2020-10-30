@@ -59,7 +59,7 @@ namespace client {
         //to sincronize threads during the first creation of the Singleton object
         static std::mutex mutex_;
         //singleton instance
-        static std::weak_ptr<Database> database_;
+        static std::shared_ptr<Database> database_;
         std::string path_;
 
     public:

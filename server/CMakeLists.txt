@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.17)
 project(server)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 #set some variables
 set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp ProtocolManager.h ProtocolManager.cpp PWD_Database.cpp
@@ -36,7 +36,7 @@ else () #if on unix
     set(LIB_PATH "/usr/local")
 
     #set some cmake flags to properly include pthreads (for std::thread)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -pthread")
 
     #print a simple message
     message(STATUS "Using wolfSSL on linux")

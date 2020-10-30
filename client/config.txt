@@ -1,6 +1,8 @@
 #Configuration file for the client of PDS_Backup project
 #- in case of empty fields default values will be used -
+#(these are comments)
 
+#-REQUIRED-
 path_to_watch = C:/Users/michele/Desktop/programmazione_di_sistema_backup
 database_path = C:/Users/michele/CLionProjects/PDS_Backup/client/clientDB/clientDB.sqlite
 

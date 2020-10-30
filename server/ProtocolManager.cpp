@@ -112,8 +112,6 @@ bool storeFile(Socket &s, messages::ClientMessage &cm, const std::string &basePa
     Hash h{cm.hash()};
     cm.Clear();
 
-    HashMaker hm;
-
     //TODO decide if to permit overwrite
     std::ofstream out;
     out.open(basePath + path, std::ofstream::out | std::ofstream::binary);
@@ -137,21 +135,20 @@ bool storeFile(Socket &s, messages::ClientMessage &cm, const std::string &basePa
             // it in the destination folder if it is ok
             std::string data = cm.data();
             out.write(data.data(), data.size());
-            hm.update(data.data(), data.size());    //update the calculated hash
 
             cm.Clear();
         }
         while(loop);
 
-        //TODO change last write time for the file
-        std::filesystem::directory_entry element(basePath + path);
-        //element.last_write_time();
+        Directory_entry element(basePath, basePath + path);
+        //change last write time for the file
+        element.set_time_to_file(lastwriteTime);
 
         //if the written file has a different size from what expected
-        if(element.file_size() != size)
+        if(element.getSize() != size)
             return false;
 
-        Hash hash = hm.get();
+        Hash hash = element.getHash();
         if(hash != h)   //if the calculated hash is different from what expected
             return false;
 
@@ -161,7 +158,7 @@ bool storeFile(Socket &s, messages::ClientMessage &cm, const std::string &basePa
 }
 
 bool removeFile(messages::ClientMessage &c, std::unordered_map<std::string, Directory_entry> &els){
-    std::string path = c.path();
+    const std::string& path = c.path();
     Hash h{c.hash()};
 
     auto el = els.find(c.path());

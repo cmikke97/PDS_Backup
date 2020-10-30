@@ -21,7 +21,7 @@
 #define PATH_TO_WATCH ""
 
 //static variables definition
-std::weak_ptr<client::Config> client::Config::config_;
+std::shared_ptr<client::Config> client::Config::config_;
 std::mutex client::Config::mutex_;
 
 /**
@@ -34,9 +34,9 @@ std::mutex client::Config::mutex_;
  */
 std::shared_ptr<client::Config> client::Config::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if(config_.expired()) //first time, or when it was released from everybody
+    if(config_ == nullptr)
         config_ = std::shared_ptr<Config>(new Config(path));  //create the database object
-    return config_.lock();
+    return config_;
 }
 
 /**

@@ -16,17 +16,23 @@ Event::Event(Directory_entry& element, FileSystemStatus status) : element(elemen
 }
 
 /**
- * default constructor
+ * function to get the element from this event
+ *
+ * @return directory entry element
  *
  * @author Michele Crepaldi s269551
  */
-Event::Event() : element(), status() {
-}
-
 Directory_entry & Event::getElement() {
     return element;
 }
 
+/**
+ * function to get the status from this event
+ *
+ * @return status of this event
+ *
+ * @author Michele Crepaldi s269551
+ */
 FileSystemStatus Event::getStatus() {
     return status;
 }

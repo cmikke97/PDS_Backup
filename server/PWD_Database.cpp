@@ -10,7 +10,7 @@
  */
 
 //static variable definition
-std::weak_ptr<server::PWD_Database> server::PWD_Database::database_;
+std::shared_ptr<server::PWD_Database> server::PWD_Database::database_;
 std::mutex server::PWD_Database::mutex_;
 
 /**
@@ -25,9 +25,9 @@ std::mutex server::PWD_Database::mutex_;
  */
 std::shared_ptr<server::PWD_Database> server::PWD_Database::getInstance(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if(database_.expired()) //first time, or when it was released from everybody
+    if(database_ == nullptr) //first time, or when it was released from everybody
         database_ = std::shared_ptr<PWD_Database>(new PWD_Database(path));  //create the database object
-    return database_.lock();
+    return database_;
 }
 
 /**

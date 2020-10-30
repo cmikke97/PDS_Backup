@@ -18,7 +18,7 @@ class Event {
     FileSystemStatus status;
 
 public:
-    Event();
+    Event() = default;
     Event(Directory_entry&  element, FileSystemStatus status);
     Directory_entry& getElement();
     FileSystemStatus getStatus();

@@ -15,11 +15,11 @@
  */
 
 namespace client {
-/**
- * Config class; used to retrive the configuration for the execution of the program from file (singleton)
- *
- * @author Michele Crepaldi s269551
- */
+    /**
+     * Config class; used to retrive the configuration for the execution of the program from file (singleton)
+     *
+     * @author Michele Crepaldi s269551
+     */
     class Config {
         std::string path_to_watch;
         std::string database_path;
@@ -41,7 +41,7 @@ namespace client {
         //to sincronize threads during the first creation of the Singleton object
         static std::mutex mutex_;
         //singleton instance
-        static std::weak_ptr<Config> config_;
+        static std::shared_ptr<Config> config_;
         std::string path_;
 
     public:
@@ -74,25 +74,25 @@ namespace client {
         int getMaxResponseWaiting();
     };
 
-/*
- * +-------------------------------------------------------------------------------------------------------------------+
- * ConfigException class
- */
+    /*
+     * +-------------------------------------------------------------------------------------------------------------------+
+     * ConfigException class
+     */
 
-/**
- * configError class: it describes (enumerically) all the possible config errors
- *
- * @author Michele Crepaldi s269551
- */
+    /**
+     * configError class: it describes (enumerically) all the possible config errors
+     *
+     * @author Michele Crepaldi s269551
+     */
     enum class configError {
         open, fileCreated
     };
 
-/**
- * exceptions for the config class
- *
- * @author Michele Crepaldi s269551
- */
+    /**
+     * exceptions for the config class
+     *
+     * @author Michele Crepaldi s269551
+     */
     class ConfigException : public std::runtime_error {
         configError code;
     public:
