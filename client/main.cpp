@@ -137,8 +137,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             try {
 
                 //wait until there is at least one event in the event queue (blocking wait)
-                if (!eventQueue.waitForCondition(
-                        thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
+                if (!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
                     return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
                 //connect with server

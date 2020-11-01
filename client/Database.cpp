@@ -2,6 +2,7 @@
 // Created by michele on 28/09/2020.
 //
 
+#include <fstream>
 #include "Database.h"
 
 /*
@@ -57,12 +58,18 @@ void client::Database::open(const std::string &path) {
     //check if the db already exists before opening it (open will create a new db if none is found)
     bool create = !std::filesystem::directory_entry(path).exists();
 
-    //open the database
-    sqlite3 *dbTmp;
-    rc = sqlite3_open(path_.c_str(), &dbTmp);
+    if(create){ //if the file does not exist create it
+        std::ofstream f;
+        std::filesystem::path p{path};
+        auto parent = p.parent_path();  //get the parent path of the path
+        std::filesystem::create_directories(parent);    //create all the directories (if they do not already exist) of the parent path
+        f.open(path, std::ios::out | std::ios::trunc);  //create the file
+        f.close();  //close the file
+    }
 
-    //db = my::UniquePtr<sqlite3>(dbTmp);
-    db.reset(dbTmp);
+    sqlite3 *dbTmp;
+    rc = sqlite3_open(path_.c_str(), &dbTmp);   //open the database
+    db.reset(dbTmp);    //assign it to the current db pointer
 
     //in case of errors throw an exception
     if(rc) {
@@ -75,15 +82,14 @@ void client::Database::open(const std::string &path) {
     if(create){
         char *zErrMsg = nullptr;
         //Create SQL statement
-        std::string sql = "CREATE TABLE \"savedFiles\" (/"
-                          "\"id\" INTEGER,/"
-                          "\"path\" TEXT UNIQUE,/"
-                          "\"size\" INTEGER,/"
-                          "\"type\" TEXT,/"
-                          "\"lastWriteTime\" TEXT,/"
-                          "\"hash\" TEXT,/"
-                          "PRIMARY KEY(\"id\" AUTOINCREMENT)/"
-                          ");";
+        std::string sql = "CREATE TABLE savedFiles("
+                          "id INTEGER,"
+                          "path TEXT UNIQUE,"
+                          "size INTEGER,"
+                          "type TEXT,"
+                          "lastWriteTime TEXT,"
+                          "hash TEXT,"
+                          "PRIMARY KEY(id AUTOINCREMENT));";
 
         //Execute SQL statement
         rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);

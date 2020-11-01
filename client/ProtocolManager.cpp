@@ -44,6 +44,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
 
     //authenticate user
     //compute message
+    clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_AUTH);
     clientMessage.set_username(username);
     clientMessage.set_password(password);

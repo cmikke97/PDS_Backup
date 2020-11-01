@@ -65,27 +65,16 @@ namespace server {
 
     public:
         Database(Database *other) = delete;
-
         void operator=(const Database &) = delete;
 
         static std::shared_ptr<Database> getInstance(const std::string &path);
 
         ~Database() = default;
-
-        void forAll(std::string &username, std::string &mac,
-                    std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
-                                       const std::string &)> &f);
-
-        void insert(std::string &username, std::string &mac, const std::string &path, const std::string &type,
-                    uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
-
+        void forAll(std::string &username, std::string &mac, std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f);
+        void insert(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
         void insert(std::string &username, std::string &mac, Directory_entry &d);
-
         void remove(std::string &username, std::string &mac, const std::string &path);
-
-        void update(std::string &username, std::string &mac, const std::string &path, const std::string &type,
-                    uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
-
+        void update(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
         void update(std::string &username, std::string &mac, Directory_entry &d);
     };
 

@@ -2,6 +2,7 @@
 // Created by michele on 21/10/2020.
 //
 
+#include <fstream>
 #include "Database.h"
 
 /*
@@ -57,6 +58,15 @@ void server::Database::open(const std::string &path) {
     //check if the db already exists before opening it (open will create a new db if none is found)
     bool create = !std::filesystem::directory_entry(path).exists();
 
+    if(create){ //if the file does not exist create it
+        std::ofstream f;
+        std::filesystem::path p{path};
+        auto parent = p.parent_path();  //get the parent path of the path
+        std::filesystem::create_directories(parent);    //create all the directories (if they do not already exist) of the parent path
+        f.open(path, std::ios::out | std::ios::trunc);  //create the file
+        f.close();  //close the file
+    }
+
     //open the database
     sqlite3 *dbTmp;
     rc = sqlite3_open(path_.c_str(), &dbTmp);
@@ -75,17 +85,16 @@ void server::Database::open(const std::string &path) {
     if(create){
         char *zErrMsg = nullptr;
         //Create SQL statement
-        std::string sql = "CREATE TABLE \"savedFiles\" (/"
-                          "\"id\" INTEGER,/"
-                          "\"username\" TEXT,/"
-                          "\"mac\" TEXT,/"
-                          "\"path\" TEXT UNIQUE,/"
-                          "\"size\" INTEGER,/"
-                          "\"type\" TEXT,/"
-                          "\"lastWriteTime\" TEXT,/"
-                          "\"hash\" TEXT,/"
-                          "PRIMARY KEY(\"id\" AUTOINCREMENT)/"
-                          ");";
+        std::string sql = "CREATE TABLE savedFiles ("
+                          "id INTEGER,"
+                          "username TEXT,"
+                          "mac TEXT,"
+                          "path TEXT UNIQUE,"
+                          "size INTEGER,"
+                          "type TEXT,"
+                          "lastWriteTime TEXT,"
+                          "hash TEXT,"
+                          "PRIMARY KEY(id AUTOINCREMENT));";
 
         //Execute SQL statement
         rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
@@ -108,7 +117,7 @@ void server::Database::open(const std::string &path) {
  *
  * @author Michele Crepaldi s269551
  */
-std::string quotesql( const std::string& s ) {
+std::string quote( const std::string& s ) {
     return std::string("'") + s + std::string("'");
 }
 
@@ -131,7 +140,7 @@ void server::Database::forAll(std::string &username, std::string &mac, std::func
     //Create SQL statement
     std::stringstream sql;
     sql << "SELECT path, size, type, lastWriteTime FROM savedFiles WHERE username=";
-    sql << quotesql(username) << " AND mac=" << quotesql(mac) << ";";
+    sql << quote(username) << " AND mac=" << quote(mac) << ";";
 
     //Prepare SQL statement
     rc = sqlite3_prepare(db.get(), sql.str().c_str(), -1, &stmt, nullptr);
@@ -201,13 +210,13 @@ void server::Database::insert(std::string &username, std::string &mac, const std
     char *zErrMsg = nullptr;
     //Create SQL statement
     std::string sql =   "INSERT INTO savedFiles (username, mac, path, size, type, lastWriteTime, hash) VALUES ("
-                        + quotesql(username) + ","
-                        + quotesql(mac) + ","
-                        + quotesql(path) + ","
-                        + quotesql(std::to_string(size)) + ","
-                        + quotesql(type) + ","
-                        + quotesql(lastWriteTime) + ","
-                        + quotesql(hash) + ","
+                        + quote(username) + ","
+                        + quote(mac) + ","
+                        + quote(path) + ","
+                        + quote(std::to_string(size)) + ","
+                        + quote(type) + ","
+                        + quote(lastWriteTime) + ","
+                        + quote(hash) + ","
                         + ");";
 
     // Execute SQL statement
@@ -258,9 +267,9 @@ void server::Database::remove(std::string &username, std::string &mac, const std
     char *zErrMsg = nullptr;
     //Create SQL statement
     std::string sql =   "DELETE FROM savedFiles WHERE path="
-                        + quotesql(path) + " AND username="
-                        + quotesql(username) + "AND mac="
-                        + quotesql(mac) + ";";
+                        + quote(path) + " AND username="
+                        + quote(username) + "AND mac="
+                        + quote(mac) + ";";
 
     // Execute SQL statement
     rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
@@ -293,13 +302,13 @@ void server::Database::update(std::string &username, std::string &mac, const std
     char *zErrMsg = nullptr;
     //Create SQL statement
     std::string sql =   "UPDATE savedFiles SET size="
-                        + quotesql(std::to_string(size)) + ", type="
-                        + quotesql(type) + ", lastWriteTime="
-                        + quotesql(lastWriteTime) + ", hash="
-                        + quotesql(hash) + " WHERE path="
-                        + quotesql(path) + " AND username="
-                        + quotesql(username) + " AND mac="
-                        + quotesql(mac) + ";";
+                        + quote(std::to_string(size)) + ", type="
+                        + quote(type) + ", lastWriteTime="
+                        + quote(lastWriteTime) + ", hash="
+                        + quote(hash) + " WHERE path="
+                        + quote(path) + " AND username="
+                        + quote(username) + " AND mac="
+                        + quote(mac) + ";";
 
     // Execute SQL statement
     rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);

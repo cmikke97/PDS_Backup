@@ -94,7 +94,7 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
         infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
         if(infile.is_open()){
             while(infile){
-                char buf[MAXBUFFSIZE] = {0};
+                char buf[MAXBUFFSIZE] = {0};    //I need this buffer to be all 0s for every line
                 infile.getline(buf, MAXBUFFSIZE);
                 hm.update(buf, MAXBUFFSIZE);
             }
