@@ -14,7 +14,7 @@
 #include <utility>
 #include <mutex>
 #include "../myLibraries/Hash.h"
-
+#include "../myLibraries/RandomNumberGenerator.h"
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -73,7 +73,10 @@ namespace server {
         ~PWD_Database() = default;
 
         std::pair<std::string, Hash> getHash(std::string &username);
-        //TODO get salt and hash from username
+        void addUser(const std::string &username, const std::string &password);
+        void updateUser(const std::string &username, const std::string &password);
+        void removeUser(const std::string &username);
+        void forAll(std::function<void(const std::string &)> &f);
     };
 
     /*
@@ -86,8 +89,8 @@ namespace server {
      *
      * @author Michele Crepaldi s269551
      */
-    enum class pwt_databaseError {
-        open, create, read
+    enum class PWT_databaseError {
+        open, create, read, insert, update, remove, prepare, hash
     };
 
     /**
@@ -96,7 +99,7 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     class PWT_DatabaseException : public std::runtime_error {
-        pwt_databaseError code;
+        PWT_databaseError code;
     public:
 
         /**
@@ -106,7 +109,7 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        explicit PWT_DatabaseException(const std::string &msg, pwt_databaseError code) :
+        explicit PWT_DatabaseException(const std::string &msg, PWT_databaseError code) :
                 std::runtime_error(msg), code(code) {
         }
 
@@ -124,7 +127,7 @@ namespace server {
         *
         * @author Michele Crepaldi s269551
         */
-        pwt_databaseError getCode() const noexcept {
+        PWT_databaseError getCode() const noexcept {
             return code;
         }
     };

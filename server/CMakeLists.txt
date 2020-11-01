@@ -8,7 +8,7 @@ set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp ProtocolManager.h Prot
         PWD_Database.h Database.h Database.cpp)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Directory_entry.cpp
-        ../myLibraries/Directory_entry.h)
+        ../myLibraries/Directory_entry.h ../myLibraries/RandomNumberGenerator.h ../myLibraries/RandomNumberGenerator.cpp)
 
 #now we want to include wolfSSL, protocol buffers and sqlite3
 if (CYGWIN) #if on windows

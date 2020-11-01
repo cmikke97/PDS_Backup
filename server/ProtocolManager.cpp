@@ -61,15 +61,19 @@ void server::ProtocolManager::authenticate() {
         if(pwdHash != pair.second){ //compare the computed hash with the user hash
             //if they are different then the password is not correct (authentication error)
             errorHandler(protocolManagerError::auth); //TODO error code
+            //TODO reply (err) to the client
         }
+
+        //TODO reply to the client
     }
     else{
         //error, message not expected
         errorHandler(protocolManagerError::unknown);    //TODO error code
+        //TODO reply (err) to the client
     }
 
     std::stringstream tmp;
-    tmp << basePath << "/" << username << "_" << "mac" << "/";
+    tmp << basePath << "/" << username << "_" << mac << "/";
     basePath = tmp.str();
 
     clientMessage.Clear();
