@@ -296,9 +296,12 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
                 //TODO continue with these
                 case server::protocolManagerError::auth:    //the current user failed authentication
                 case server::protocolManagerError::version: //the current client uses a different version
+                    continue;
+
                 case server::protocolManagerError::unsupported: //a message from the client was of an unsupported type
                 case server::protocolManagerError::client:  //there was an error in a message from the client
                     continue;   //the error is in the current socket, continue with the next one
+
                 case server::protocolManagerError::internal: //there was an internal server error -> Fatal error
                 case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
                 default:
