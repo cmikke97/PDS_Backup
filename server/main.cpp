@@ -21,6 +21,8 @@
 #define PASSWORD_DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverfiles/passwordDB.sqlite"
 #define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverfiles/serverDB.sqlite"
 #define SERVER_PATH "C:/Users/michele/Desktop/server_folder"
+#define TEMP_PATH "C:/Users/michele/Desktop/server_folder/temp"
+#define TEMP_FILE_NAME_SIZE 8
 
 #define PORT 8081
 //TODO put these constants into the config object
@@ -223,7 +225,7 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
         fd_set read_fds;
         int timeWaited = 0;
         bool loop = true;
-        server::ProtocolManager pm{sock, VERSION, SERVER_PATH};
+        server::ProtocolManager pm{sock, VERSION, SERVER_PATH, TEMP_PATH, TEMP_FILE_NAME_SIZE};
 
         try{
             //authenticate the connected client

@@ -15,12 +15,17 @@
 class RandomNumberGenerator {
     RNG rng{};
 
+    static int hex_value(unsigned char hex_digit);
+
 public:
     RandomNumberGenerator();
     ~RandomNumberGenerator();
 
     void getRandom(char *buf, int size);
     std::string getRandomString(int size);
+    std::string getHexString(int size);
+    static std::string string_to_hex(const std::string& input);
+    static std::string hex_to_string(const std::string& input);
 };
 
 /*

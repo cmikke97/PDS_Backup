@@ -201,6 +201,8 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
     char *zErrMsg = nullptr;
     int rc;
 
+    //TODO convert from hex (in db) to byte string the salt and the hash
+
     std::string salt, hash;
 
     //statement handle
@@ -280,6 +282,8 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
     hm.update(salt);
     Hash passwordHash = hm.get();
 
+    //TODO convert from byte string to hex the salt and the hash before putting them in the database
+
     //statement handle
     sqlite3_stmt* stmt;
 
@@ -337,6 +341,8 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
     HashMaker hm{password};
     hm.update(salt);
     Hash passwordHash = hm.get();
+
+    //TODO convert from byte string to hex the salt and the hash before putting them in the database
 
     //statement handle
     sqlite3_stmt* stmt;

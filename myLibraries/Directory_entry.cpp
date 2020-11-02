@@ -78,13 +78,13 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
     this->size = type==Directory_entry_TYPE::file?size:0;
 
     //get last write time from the file and convert it to string
-    this->last_write_time = get_time_from_file();
+    last_write_time = get_time_from_file();
 
     if(type == Directory_entry_TYPE::file){
         //calculate hash
         HashMaker hm;
 
-        /*
+        /* TODO evaluate if to add these
         hm.update(relativePath);
         hm.update(sizeStr.str());
         hm.update(this->last_write_time);
@@ -282,7 +282,7 @@ std::string Directory_entry::get_time_from_file(){
  *
  * @author Michele Crepaldi s269551
  */
-void Directory_entry::set_time_to_file(std::string &time){
+void Directory_entry::set_time_to_file(const std::string &time){
     struct stat buf{};
     if(stat(absolutePath.data(), &buf) != 0)    //get file info
         throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
@@ -298,4 +298,47 @@ void Directory_entry::set_time_to_file(std::string &time){
     new_times.modtime = tt; //set mtime to the time given as input
     if(utime(absolutePath.data(), &new_times) != 0) //set the new times for the file
         throw std::runtime_error("Error in setting file time"); //throw exception in case of errors
+
+
+    //TODO choose between these 2
+    //update the current value of last_write_time
+    //last_write_time = time;
+    //get last write time from the file and convert it to string
+    last_write_time = get_time_from_file();
+}
+
+bool Directory_entry::exists(){
+    return std::filesystem::exists(absolutePath);
+}
+
+void Directory_entry::updateValues(){
+    std::filesystem::directory_entry entry{absolutePath};
+    size = entry.is_regular_file()?entry.file_size():0;
+    type = entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType);
+
+    //get last write time from the file and convert it to string
+    last_write_time = get_time_from_file();
+
+    if(type == Directory_entry_TYPE::file){
+        //calculate hash
+        HashMaker hm;
+
+        /* TODO evaluate if to add these
+        hm.update(relativePath);
+        hm.update(sizeStr.str());
+        hm.update(this->last_write_time);
+        */
+
+        std::ifstream infile;
+        infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
+        if(infile.is_open()){
+            while(infile){
+                char buf[MAXBUFFSIZE] = {0};    //I need this buffer to be all 0s for every line
+                infile.getline(buf, MAXBUFFSIZE);
+                hm.update(buf, MAXBUFFSIZE);
+            }
+        }
+
+        hash = hm.get();
+    }
 }
