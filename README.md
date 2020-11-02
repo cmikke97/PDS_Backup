@@ -137,7 +137,7 @@ type | meaning | content | description | effects
 --- | --- | --- | --- | ---
 NOOP | No operation | version, type | fake message (needed to properly use protocol buffers, the first message type needs to be a NOOP | no effects
 OK | ok (prev command finished) | version, type, code | message used to inform the client of the successful application of the previous command (the code may be used to inform of some particular conditions like a directory deletion command of a not existant folder) | the client will proceed with the next commands (sliding window moved) 
-SEND | send file | version, type, path, fileSize, lastWriteTime, hash | message used by the server in case if, after a previous PROB message, the server does not have the file described in its filesystem to make the client send the file | the client will send the STOR message followed by a number of DATA messages (blocks of the file) 
+SEND | send file | version, type, path, hash | message used by the server in case if, after a previous PROB message, the server does not have the file described in its filesystem to make the client send the file | the client will send the STOR message followed by a number of DATA messages (blocks of the file) 
 ERR | error | version, type, code | message used to signal an error happened in the server side to the client | the client, based on the error code, will re-send the message, end or do something else. 
 VER | version change | version, type, newVersion | message used to inform the client that the previous authentication message was of a version not supported by the server (it may be used also after any other message) | the client will retry the authentication with a different version if possible (not implemented)
 

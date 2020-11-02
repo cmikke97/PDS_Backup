@@ -54,13 +54,21 @@ namespace client {
         void sendFile(const std::filesystem::path &path);
     };
 
-/**
- * exceptions for the protocol manager class
- *
- * @author Michele Crepaldi s269551
- */
+    /**
+     *
+     */
+    enum class protocolManagerError {
+        unknown, auth, internal, version, unsupported
+    };
+
+    /**
+     * exceptions for the protocol manager class
+     *
+     * @author Michele Crepaldi s269551
+     */
     class ProtocolManagerException : public std::runtime_error {
-        int code, data;
+        protocolManagerError code;
+        int data;
 
     public:
 
@@ -71,7 +79,7 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        ProtocolManagerException(const std::string &msg, int errorCode, int data) :
+        ProtocolManagerException(const std::string &msg, protocolManagerError errorCode, int data) :
                 std::runtime_error(msg), code(errorCode), data(data) {
         }
 
@@ -89,7 +97,7 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        int getErrorCode() const noexcept {
+        protocolManagerError getErrorCode() const noexcept {
             return code;
         }
 

@@ -260,9 +260,9 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (client::ProtocolManagerException &e) {
                 switch (e.getErrorCode()) {
-                    case -1: //unsupported message type error
-                    case 0: //unknown server error
-                    case 401: //authentication error
+                    case client::protocolManagerError::unsupported: //unsupported message type error
+                    case client::protocolManagerError::unknown: //unknown server error
+                    case client::protocolManagerError::auth: //authentication error
                         std::cerr << e.what() << std::endl;
 
                         //connection will be closed automatically by the socket destructor
@@ -271,7 +271,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         fileWatcher_stop.store(true);
                         return;
 
-                    case 505: //version not supported error
+                    case client::protocolManagerError::version: //version not supported error
                         std::cerr << e.what() << "; try with version" << e.getData() << std::endl;
 
                         //connection will be closed automatically by the socket destructor
@@ -280,7 +280,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         fileWatcher_stop.store(true);
                         return;
 
-                    case 500: //internal server error
+                    case client::protocolManagerError::internal: //internal server error
 
                         if (e.getData() == 0) { //internal server error while NOT authenticated
                             //retry the authentication x times

@@ -20,9 +20,9 @@ server::ProtocolManager::ProtocolManager(Socket &s, int ver, std::string basePat
 };
 
 void server::ProtocolManager::errorHandler(const std::string & msg, protocolManagerError code){
-    serverMessage.set_version(protocolVersion); //TODO properly get version
+    serverMessage.set_version(protocolVersion);
     serverMessage.set_type(messages::ServerMessage_Type_ERR);
-    serverMessage.set_code(static_cast<int>(code));  //TODO error code
+    serverMessage.set_code(static_cast<int>(code));
 
     //send error message
     std::string tmp = serverMessage.SerializeAsString();
@@ -30,7 +30,7 @@ void server::ProtocolManager::errorHandler(const std::string & msg, protocolMana
     s.sendString(tmp);
 
     //throw exception
-    throw ProtocolManagerException(msg, code); //TODO error code
+    throw ProtocolManagerException(msg, code);
 }
 
 void server::ProtocolManager::authenticate() {
@@ -38,8 +38,20 @@ void server::ProtocolManager::authenticate() {
     clientMessage.ParseFromString(message);
 
     //check version
-    if(protocolVersion != clientMessage.version())
+    if(protocolVersion != clientMessage.version()) {
         std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
+        serverMessage.set_version(protocolVersion);
+        serverMessage.set_type(messages::ServerMessage_Type_VER);
+        serverMessage.set_newversion(protocolVersion);
+
+        //send error message
+        std::string tmp = serverMessage.SerializeAsString();
+        serverMessage.Clear();
+        s.sendString(tmp);
+
+        //throw exception
+        throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
+    }
 
     if(clientMessage.type() == messages::ClientMessage_Type_AUTH) {
 
@@ -64,7 +76,15 @@ void server::ProtocolManager::authenticate() {
             errorHandler( "Authentication Error",protocolManagerError::auth); //TODO error code
         }
 
-        //TODO reply to the client
+        //prepare response
+        serverMessage.set_version(protocolVersion);
+        serverMessage.set_type(messages::ServerMessage_Type_OK);
+        serverMessage.set_code(0);
+
+        //send error message
+        std::string tmp = serverMessage.SerializeAsString();
+        serverMessage.Clear();
+        s.sendString(tmp);
     }
     else{
         //error, message not expected
@@ -99,11 +119,13 @@ bool probe(messages::ClientMessage &c, std::unordered_map<std::string, Directory
     if(el->second.getHash() != h)   //if the file hash does not correspond
         return false;
 
+    /* TODO evaluate if to add these
     if(el->second.getSize() != c.filesize())    //if the filesize does not correspond
         return false;
 
     if(el->second.getLastWriteTime() != c.lastwritetime())  //if the last write time does not correspond
         return false;
+    */
 
     return true;
 }
@@ -194,9 +216,9 @@ void server::ProtocolManager::receive(){
     std::string tmp;
     switch(clientMessage.type()) {
         case messages::ClientMessage_Type_PROB:
-            serverMessage.set_version(protocolVersion);
+            serverMessage.set_version(protocolVersion);     //prepare response message
 
-            if (probe(clientMessage, elements)) {
+            if (probe(clientMessage, elements)) {   //probe the elements list for the element in client message
                 //the file has been found
                 serverMessage.set_type(messages::ServerMessage_Type_OK);
                 serverMessage.set_code(0);

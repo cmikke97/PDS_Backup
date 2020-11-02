@@ -15,7 +15,7 @@
 namespace server {
 
     enum class protocolManagerError {
-        unknown, auth
+        unknown, auth, internal, version, unsupported
     };
 
     class ProtocolManager {

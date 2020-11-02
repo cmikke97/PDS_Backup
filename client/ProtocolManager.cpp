@@ -47,8 +47,8 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_AUTH);
     clientMessage.set_username(username);
-    clientMessage.set_password(password);
     clientMessage.set_macaddress(macAddress);
+    clientMessage.set_password(password);
     std::string client_temp = clientMessage.SerializeAsString();
     //send message to server
     s.sendString(client_temp);
@@ -61,7 +61,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
 
     //parse server response
     serverMessage.ParseFromString(server_temp);
-    std::cout << serverMessage.type();
+    //std::cout << serverMessage.type();
 
     int code;
 
@@ -74,27 +74,28 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
         case messages::ServerMessage_Type_ERR:
             //retrieve error code
             code = serverMessage.code();
-            std::cerr << "Error: code " << code << std::endl;
+            //std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            switch(code){
-                case 401:
-                    throw ProtocolManagerException("Authentication error", code, 0);
-                case 500:
-                    throw ProtocolManagerException("Internal server error", code, 0); //internal server error while NOT authenticated -> data = 0
+            switch(static_cast<client::protocolManagerError>(code)){
+                case client::protocolManagerError::auth:
+                    throw ProtocolManagerException("Authentication error", client::protocolManagerError::auth, 0);
+                case client::protocolManagerError::internal:
+                    throw ProtocolManagerException("Internal server error", client::protocolManagerError::internal, 0); //internal server error while NOT authenticated -> data = 0
+                case client::protocolManagerError::unknown:
                 default:
-                    throw ProtocolManagerException("Unknown server error", 0, 0);
+                    throw ProtocolManagerException("Unknown server error", client::protocolManagerError::unknown, 0);
             }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
             std::cout << "change version to: " << serverMessage.newversion() << std::endl;
             //for future use (not implemented now, to implement when a new version is written)
             //for now terminate the program
-            throw ProtocolManagerException("Version not supported", 505, serverMessage.newversion());
+            throw ProtocolManagerException("Version not supported", client::protocolManagerError::version, serverMessage.newversion());
 
         default: //i should never arrive here
             std::cerr << "Unsupported message type" << std::endl;
-            throw ProtocolManagerException("Unsupported message type error", -1, 0);
+            throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported, 0);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
@@ -170,6 +171,7 @@ void client::ProtocolManager::receive() {
     //parse server response
     serverMessage.ParseFromString(server_temp);
 
+    //get the first event on the waiting list -> this is the message we received a response for
     Event e = waitingForResponse[start];
 
     //clear the server message
@@ -186,7 +188,14 @@ void client::ProtocolManager::receive() {
             if(e.getElement().is_regular_file() && (e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified)){
                 //send file
 
-                //if(start != end) this condition is true if I receive something
+                /* TODO evaluate if to add this
+                //check if the SEND MESSAGE actually refers to the first waiting event; if not then there was an error
+                if(serverMessage.path() != e.getElement().getRelativePath() || serverMessage.filesize() != e.getElement().getSize() ||
+                   serverMessage.lastwritetime() != e.getElement().getLastWriteTime() || Hash(serverMessage.hash()) != e.getElement().getHash())
+                    throw ProtocolManagerException("Response SEND message does not match the current event", client::protocolManagerError::unknown, 0);
+                */
+
+                //if(start != end), this condition is true if I receive something
                 //pop the (create) event element (it was successful)
                 start = (start+1)%size;
                 //reset the tries variable (i popped a message)
@@ -257,27 +266,32 @@ void client::ProtocolManager::receive() {
             std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            switch(code){
-                case 500:   //TODO change error codes to some more easy to remember (or to constants or enum)
+            switch(static_cast<client::protocolManagerError>(code)){
+                case client::protocolManagerError::internal:
                     tries++;
 
                     //if I exceed the number of re-tries throw an exception and close the program
                     if(tries > maxTries)
-                        throw ProtocolManagerException("Internal server error", 500, 1); //internal server error while authenticated -> data = 1
+                        throw ProtocolManagerException("Internal server error", client::protocolManagerError::internal, 1); //internal server error while authenticated -> data = 1
 
                     //otherwise try to recover from the error
                     recoverFromError();
                     break;
 
+                case client::protocolManagerError::unknown:
+                case client::protocolManagerError::unsupported:     //this message should is not expected
+                case client::protocolManagerError::version: //this message should is not expected
+                case client::protocolManagerError::auth:    //this message should is not expected
                 default:
-                    throw ProtocolManagerException("Unknown server error", 0, 0);
+                    throw ProtocolManagerException("Unknown server error", client::protocolManagerError::unknown, 0);
             }
             break;
 
+        case messages::ServerMessage_Type_VER:  //message not expected
         default:
             //unrecognised message type
             std::cerr << "Unsupported message type" << std::endl;
-            throw ProtocolManagerException("Unsupported message type error", -1, 0);
+            throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported, 0);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
@@ -402,6 +416,7 @@ void client::ProtocolManager::composeMessage(Event &e) {
                 //create message
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_DELE);
+                clientMessage.set_path(e.getElement().getRelativePath());
                 clientMessage.set_hash(e.getElement().getHash().get().first,
                                        e.getElement().getHash().get().second);
                 break;
@@ -432,8 +447,6 @@ void client::ProtocolManager::composeMessage(Event &e) {
                 clientMessage.set_type(messages::ClientMessage_Type_MKD);
                 clientMessage.set_path(e.getElement().getRelativePath());
                 clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
@@ -442,8 +455,7 @@ void client::ProtocolManager::composeMessage(Event &e) {
                 //create message
                 clientMessage.set_version(protocolVersion);
                 clientMessage.set_type(messages::ClientMessage_Type_RMD);
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
+                clientMessage.set_path(e.getElement().getRelativePath());
                 break;
 
             default:    //I should never arrive here
