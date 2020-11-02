@@ -3,6 +3,7 @@
 //
 
 #include <fstream>
+#include <utility>
 #include "ProtocolManager.h"
 
 //TODO i will get these from config
@@ -12,13 +13,13 @@
 
 #define MAXBUFFSIZE 1024
 
-server::ProtocolManager::ProtocolManager(Socket &s, int ver, const std::string &basePath) : s(s), protocolVersion(ver), basePath(basePath) {
+server::ProtocolManager::ProtocolManager(Socket &s, int ver, std::string basePath) : s(s), protocolVersion(ver), basePath(std::move(basePath)) {
     //TODO get from config
     password_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
     db = Database::getInstance(DATABASE_PATH);
 };
 
-void server::ProtocolManager::errorHandler(protocolManagerError code){
+void server::ProtocolManager::errorHandler(const std::string & msg, protocolManagerError code){
     serverMessage.set_version(protocolVersion); //TODO properly get version
     serverMessage.set_type(messages::ServerMessage_Type_ERR);
     serverMessage.set_code(static_cast<int>(code));  //TODO error code
@@ -29,7 +30,7 @@ void server::ProtocolManager::errorHandler(protocolManagerError code){
     s.sendString(tmp);
 
     //throw exception
-    throw ProtocolManagerException("Message type not expected", code); //TODO error code
+    throw ProtocolManagerException(msg, code); //TODO error code
 }
 
 void server::ProtocolManager::authenticate() {
@@ -60,16 +61,14 @@ void server::ProtocolManager::authenticate() {
 
         if(pwdHash != pair.second){ //compare the computed hash with the user hash
             //if they are different then the password is not correct (authentication error)
-            errorHandler(protocolManagerError::auth); //TODO error code
-            //TODO reply (err) to the client
+            errorHandler( "Authentication Error",protocolManagerError::auth); //TODO error code
         }
 
         //TODO reply to the client
     }
     else{
         //error, message not expected
-        errorHandler(protocolManagerError::unknown);    //TODO error code
-        //TODO reply (err) to the client
+        errorHandler("Message Error, not expected.",protocolManagerError::unknown);    //TODO error code
     }
 
     std::stringstream tmp;
