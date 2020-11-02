@@ -15,7 +15,15 @@
 namespace server {
 
     enum class protocolManagerError {
-        unknown, auth, internal, version, unsupported
+        unknown, auth, internal, client, version, unsupported
+    };
+
+    enum class errCode{
+        notAFile, unexpected, store, remove, notADir, auth, exception
+    };
+
+    enum class okCode {
+        found, created, notThere, removed, authenticated
     };
 
     class ProtocolManager {
@@ -31,9 +39,9 @@ namespace server {
         //TODO i have a database of directory entries (also with info about their owner username and mac);
         //TODO so these elements will be the ones related to the username and mac of this instance of the pm (we know them after authentication)
 
-        void send_OK(int code);
+        void send_OK(okCode code);
         void send_SEND();
-        void send_ERR(protocolManagerError code);
+        void send_ERR(errCode code);
         void send_VER();
         void errorHandler(const std::string &msg, protocolManagerError code);
         void probe();
@@ -52,11 +60,11 @@ namespace server {
 
     };
 
-/**
- * exceptions for the protocol manager class
- *
- * @author Michele Crepaldi s269551
- */
+    /**
+     * exceptions for the protocol manager class
+     *
+     * @author Michele Crepaldi s269551
+     */
     class ProtocolManagerException : public std::runtime_error {
         protocolManagerError code;
 
@@ -69,8 +77,8 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        ProtocolManagerException(const std::string &msg, protocolManagerError errorCode) :
-                std::runtime_error(msg), code(errorCode) {
+        ProtocolManagerException(const std::string &msg, protocolManagerError code) :
+                std::runtime_error(msg), code(code) {
         }
 
         /**
@@ -87,7 +95,7 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        protocolManagerError getErrorCode() const noexcept {
+        protocolManagerError getCode() const noexcept {
             return code;
         }
     };

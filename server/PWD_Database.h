@@ -91,8 +91,8 @@ namespace server {
      *
      * @author Michele Crepaldi s269551
      */
-    enum class PWT_databaseError {
-        open, create, read, insert, update, remove, prepare, hash
+    enum class pwd_databaseError {
+        open, create, read, insert, update, remove, prepare, finalize, hash
     };
 
     /**
@@ -100,8 +100,8 @@ namespace server {
      *
      * @author Michele Crepaldi s269551
      */
-    class PWT_DatabaseException : public std::runtime_error {
-        PWT_databaseError code;
+    class PWD_DatabaseException : public std::runtime_error {
+        pwd_databaseError code;
     public:
 
         /**
@@ -111,7 +111,7 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        explicit PWT_DatabaseException(const std::string &msg, PWT_databaseError code) :
+        explicit PWD_DatabaseException(const std::string &msg, pwd_databaseError code) :
                 std::runtime_error(msg), code(code) {
         }
 
@@ -120,7 +120,7 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        ~PWT_DatabaseException() noexcept override = default;
+        ~PWD_DatabaseException() noexcept override = default;
 
         /**
         * function to retrieve the error code from the exception
@@ -129,7 +129,7 @@ namespace server {
         *
         * @author Michele Crepaldi s269551
         */
-        PWT_databaseError getCode() const noexcept {
+        pwd_databaseError getCode() const noexcept {
             return code;
         }
     };
