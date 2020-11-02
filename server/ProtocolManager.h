@@ -32,15 +32,12 @@ namespace server {
         //TODO i have a database of directory entries (also with info about their owner username and mac);
         //TODO so these elements will be the ones related to the username and mac of this instance of the pm (we know them after authentication)
 
-        void errorHandler(protocolManagerError code);
+        void errorHandler(const std::string &msg, protocolManagerError code);
 
     public:
-        explicit ProtocolManager(Socket &s, int ver, const std::string &basePath);
-
+        explicit ProtocolManager(Socket &s, int ver, std::string basePath);
         void recoverFromDB();
-
         void authenticate();
-
         void receive();
 
     };
