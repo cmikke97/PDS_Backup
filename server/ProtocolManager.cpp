@@ -543,6 +543,14 @@ void server::ProtocolManager::receive(){
                 throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
         }
     }
+    catch (ProtocolManagerException &e) {
+        //TODO continue this
+
+        //TODO switch on e.getCode()
+
+        //re-throw the exception
+        throw ProtocolManagerException(e.what(), e.getCode());
+    }
     catch (std::exception &e) {
         //internal error
 
