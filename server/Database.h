@@ -44,6 +44,7 @@ namespace server {
      */
 
     //TODO it needs to be thread safe in queries
+    //TODO modify it to have prepare etc..
 
     /**
      * class which represents a sqlite3 database (singleton)
