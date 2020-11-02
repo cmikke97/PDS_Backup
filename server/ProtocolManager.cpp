@@ -13,22 +13,23 @@
 
 #define MAXBUFFSIZE 1024
 
-server::ProtocolManager::ProtocolManager(Socket &s, int ver, std::string basePath) : s(s), protocolVersion(ver), basePath(std::move(basePath)) {
+server::ProtocolManager::ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize) :
+    s(s),
+    protocolVersion(ver),
+    basePath(std::move(basePath)),
+    temporaryPath(std::move(tempPath)),
+    tempNameSize(tempSize){
+
     //TODO get from config
     password_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
     db = Database::getInstance(DATABASE_PATH);
 };
 
 void server::ProtocolManager::errorHandler(const std::string & msg, protocolManagerError code){
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_ERR);
-    serverMessage.set_code(static_cast<int>(code));
+    //send error
+    send_ERR(code);
 
-    //send error message
-    std::string tmp = serverMessage.SerializeAsString();
-    serverMessage.Clear();
-    s.sendString(tmp);
-
+    //TODO decide what to do
     //throw exception
     throw ProtocolManagerException(msg, code);
 }
@@ -40,14 +41,7 @@ void server::ProtocolManager::authenticate() {
     //check version
     if(protocolVersion != clientMessage.version()) {
         std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
-        serverMessage.set_version(protocolVersion);
-        serverMessage.set_type(messages::ServerMessage_Type_VER);
-        serverMessage.set_newversion(protocolVersion);
-
-        //send error message
-        std::string tmp = serverMessage.SerializeAsString();
-        serverMessage.Clear();
-        s.sendString(tmp);
+        send_VER();
 
         //throw exception
         throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
@@ -76,15 +70,8 @@ void server::ProtocolManager::authenticate() {
             errorHandler( "Authentication Error",protocolManagerError::auth); //TODO error code
         }
 
-        //prepare response
-        serverMessage.set_version(protocolVersion);
-        serverMessage.set_type(messages::ServerMessage_Type_OK);
-        serverMessage.set_code(0);
-
-        //send error message
-        std::string tmp = serverMessage.SerializeAsString();
-        serverMessage.Clear();
-        s.sendString(tmp);
+        //the authentication was successful
+        send_OK(0); //TODO OK code
     }
     else{
         //error, message not expected
@@ -94,8 +81,6 @@ void server::ProtocolManager::authenticate() {
     std::stringstream tmp;
     tmp << basePath << "/" << username << "_" << mac << "/";
     basePath = tmp.str();
-
-    clientMessage.Clear();
 };
 
 void server::ProtocolManager::recoverFromDB() {
@@ -107,17 +92,77 @@ void server::ProtocolManager::recoverFromDB() {
     db->forAll(username, mac, f);
 }
 
-bool probe(messages::ClientMessage &c, std::unordered_map<std::string, Directory_entry> &els){
-    auto el = els.find(c.path());
-    if(el == els.end()) //if i cannot find the element
-        return false;
+void server::ProtocolManager::send_OK(int code){
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_OK);
+    serverMessage.set_code(code);
 
-    if(!el->second.is_regular_file())   //if the element is not a file
-        return false;
+    std::string tmp = serverMessage.SerializeAsString();    //crete string
+    s.sendString(tmp);      //send response message
+    serverMessage.Clear();
+}
 
-    Hash h = Hash(c.hash());
-    if(el->second.getHash() != h)   //if the file hash does not correspond
-        return false;
+void server::ProtocolManager::send_SEND(){
+    //the file was not there -> SEND message
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_SEND);
+    serverMessage.set_path(clientMessage.path());
+
+    //TODO evaluate if to add these
+    //serverMessage.set_filesize(clientMessage.filesize());
+    //serverMessage.set_lastwritetime(clientMessage.lastwritetime());
+    //serverMessage.set_path(clientMessage.path());
+
+    serverMessage.set_hash(clientMessage.hash());
+
+    std::string tmp = serverMessage.SerializeAsString();    //crete string
+    s.sendString(tmp);      //send response message
+    serverMessage.Clear();
+}
+
+void server::ProtocolManager::send_ERR(protocolManagerError code){
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_ERR);
+    serverMessage.set_code(static_cast<int>(code));
+
+    std::string tmp = serverMessage.SerializeAsString();    //crete string
+    s.sendString(tmp);      //send response message
+    serverMessage.Clear();
+}
+
+void server::ProtocolManager::send_VER(){
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_VER);
+    serverMessage.set_newversion(protocolVersion);
+
+    std::string tmp = serverMessage.SerializeAsString(); //crete string
+    serverMessage.Clear();  //send response message
+    s.sendString(tmp);
+}
+
+/**
+ *
+ */
+void server::ProtocolManager::probe() {
+    std::string path = clientMessage.path();
+    Hash h = Hash(clientMessage.hash());
+    clientMessage.Clear();
+
+    auto el = elements.find(path);
+    if(el == elements.end()) { //if i cannot find the element
+        send_SEND();
+        return;
+    }
+
+    if(!el->second.is_regular_file()) {  //if the element is not a file
+        send_SEND();
+        return;
+    }
+
+    if(el->second.getHash() != h) {   //if the file hash does not correspond
+        send_SEND();
+        return;
+    }
 
     /* TODO evaluate if to add these
     if(el->second.getSize() != c.filesize())    //if the filesize does not correspond
@@ -127,80 +172,197 @@ bool probe(messages::ClientMessage &c, std::unordered_map<std::string, Directory
         return false;
     */
 
-    return true;
+    //the file has been found -> OK message
+    send_OK(0); //TODO OK CODE
 }
 
-bool storeFile(Socket &s, messages::ClientMessage &cm, const std::string &basePath){
-    const std::string& path = cm.path();
-    uintmax_t size = cm.filesize();
-    std::string lastwriteTime = cm.lastwritetime();
-    Hash h{cm.hash()};
-    cm.Clear();
+/**
+ *
+ * @param expected
+ * @return
+ */
+void server::ProtocolManager::storeFile(){
+    //create expected Directory entry element from the client message
+    Directory_entry expected{basePath, clientMessage.path(), clientMessage.filesize(), "file",
+                            clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
+    clientMessage.Clear();  //clear the client message
 
-    //TODO decide if to permit overwrite
+    //create a random temporary name for the file
+    RandomNumberGenerator rng;
+    std::string tmpFileName = "/" + rng.getHexString(tempNameSize) + ".tmp";
+
+    //check if the temporary folder already exists
+    bool create = !std::filesystem::directory_entry(temporaryPath).exists();
+
+    if(create)  //if the directory does not already exist
+        std::filesystem::create_directories(temporaryPath);    //create all the directories (if they do not already exist) up to the temporary path
+
     std::ofstream out;
-    out.open(basePath + path, std::ofstream::out | std::ofstream::binary);
+    out.open( temporaryPath + tmpFileName, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
     if(out.is_open()){
         bool loop = true;
         do{
             std::string message = s.recvString();
-            cm.ParseFromString(message);
+            clientMessage.ParseFromString(message);
 
-            if(cm.version() != protocol_version){
+            if(clientMessage.version() != protocol_version){
                 //TODO manage this error
             }
 
-            if(cm.type() != messages::ClientMessage_Type_DATA){
+            if(clientMessage.type() != messages::ClientMessage_Type_DATA){
                 //TODO error, throw exception
             }
 
-            loop = !cm.last();  //is this the last data packet? if yes stop the loop
+            loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
 
-            //TODO it may be better to write the file in a temporary folder, check it at the end and then move
-            // it in the destination folder if it is ok
-            std::string data = cm.data();
+            std::string data = clientMessage.data();
             out.write(data.data(), data.size());
 
-            cm.Clear();
+            clientMessage.Clear();
         }
         while(loop);
 
-        Directory_entry element(basePath, basePath + path);
+        //create a Directory entry which represents the newly created file
+        Directory_entry newFile{temporaryPath, std::filesystem::directory_entry(temporaryPath + tmpFileName)};
         //change last write time for the file
-        element.set_time_to_file(lastwriteTime);
+        newFile.set_time_to_file(expected.getLastWriteTime());
+        Hash hash = newFile.getHash();
 
-        //if the written file has a different size from what expected
-        if(element.getSize() != size)
-            return false;
+        //if the written file has a different size from what expected OR if the calculated hash is different from what expected OR if the lastWriteTime for the file was not successfully set
+        if(newFile.getSize() != expected.getSize() || hash != expected.getHash() || newFile.getLastWriteTime() != expected.getLastWriteTime()) {
+            std::filesystem::remove(temporaryPath + tmpFileName);    //delete temporary file
 
-        Hash hash = element.getHash();
-        if(hash != h)   //if the calculated hash is different from what expected
-            return false;
+            //some error occurred
+            errorHandler("Internal Server Error", protocolManagerError::internal);
+            return;
+        }
 
+        //If we are here then the file was successfully transferred and its copy on the server is as expected
+        //so move then it can be moved to the final destination
+        std::filesystem::rename(temporaryPath + tmpFileName, expected.getAbsolutePath());
+
+        //the file has been created
+        send_OK(0); //TODO OK CODE
+
+        //add to the elements map
+        elements.emplace(expected.getRelativePath(), expected);
+
+        //add to db
+        db->insert(username, mac, expected);
+
+        return;
     }
 
-    return true;
+    //some error occurred
+    errorHandler("Internal Server Error", protocolManagerError::internal);
 }
 
-bool removeFile(messages::ClientMessage &c, std::unordered_map<std::string, Directory_entry> &els){
-    const std::string& path = c.path();
-    Hash h{c.hash()};
+/**
+ *
+ * @return
+ */
+void server::ProtocolManager::removeFile(){
+    const std::string path = clientMessage.path();
+    Hash h{clientMessage.hash()};
+    clientMessage.Clear();
 
-    auto el = els.find(c.path());
-    if(el == els.end()) //if i cannot find the element -> element does not exist, i don't have to remove it
-        return true;
+    auto el = elements.find(path);
+    if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
+        //the file did not exist, the result is the same
+        send_OK(0); //TODO OK CODE
+        return;
+    }
 
-    if(!el->second.is_regular_file()) //if it is not a file
-        return false;
-
-    if(el->second.getHash() != h)   //if the file hash does not correspond
-        return false;
+    //if it is not a file OR if the file hash does not correspond
+    if(!el->second.is_regular_file() || el->second.getHash() != h){
+        errorHandler("Internal Server Error", protocolManagerError::internal);
+        return;
+    }
 
     //remove the file
     std::filesystem::remove(el->second.getAbsolutePath());   //true if the file was removed, false if it did not exist
-    return true;
+
+    //remove the element from the elements map
+    elements.erase(el->second.getAbsolutePath());
+
+    //remove element from db
+    db->remove(username, mac, el->second.getRelativePath());
+
+    //the file has been removed
+    send_OK(0); //TODO OK CODE
 }
 
+void server::ProtocolManager::makeDir(){
+    const std::string path = clientMessage.path();
+    const std::string lastWriteTime = clientMessage.lastwritetime();
+    clientMessage.Clear();
+
+    //check if the folder already exists
+    bool create = !std::filesystem::directory_entry(basePath + path).exists();
+
+    if(create)  //if the directory does not already exist
+        std::filesystem::create_directories(basePath + path);    //create all the directories (if they do not already exist) up to the temporary path
+
+    if(!std::filesystem::is_directory(basePath + path)){
+        //the element is not a directory! -> error
+        errorHandler("Internal Server Error", protocolManagerError::internal);
+        return;
+    }
+
+    //create a Directory entry which represents the newly created folder (or to the already present one)
+    Directory_entry newDir{basePath, std::filesystem::directory_entry(basePath + path)};
+    //change last write time for the file
+    newDir.set_time_to_file(lastWriteTime);
+
+    //add to the elements map
+    elements.emplace(newDir.getRelativePath(), newDir);
+
+    //add to db
+    db->insert(username, mac, newDir);
+
+    //the directory has been created/modified
+    send_OK(0); //TODO OK CODE
+}
+
+void server::ProtocolManager::removeDir(){
+    const std::string path = clientMessage.path();
+    clientMessage.Clear();
+
+    auto el = elements.find(path);
+    if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
+        //the file did not exist, the result is the same
+        send_OK(0); //TODO OK CODE
+        return;
+    }
+
+    if(!el->second.is_directory()){
+        //the element is not a directory! -> error
+        errorHandler("Internal Server Error", protocolManagerError::internal);
+        return;
+    }
+
+    //remove the directory
+    std::filesystem::remove(el->second.getAbsolutePath()); //it throws an exception if the dir is not empty
+    //TODO descide if to use this instead which removes also subdirectories
+    //int n_removed = std::filesystem::remove_all(el->second.getAbsolutePath());
+
+    //remove the element from the elements map
+    elements.erase(el->second.getAbsolutePath());
+
+    //remove element from db
+    db->remove(username, mac, el->second.getRelativePath());
+
+    //the file has been removed
+    send_OK(0); //TODO OK CODE
+}
+
+void server::ProtocolManager::quit(){
+    //TODO decide what to do
+}
+
+/**
+ *
+ */
 void server::ProtocolManager::receive(){
     //get client request
     std::string message = s.recvString();
@@ -213,90 +375,59 @@ void server::ProtocolManager::receive(){
         std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
 
     //TODO go on
-    std::string tmp;
-    switch(clientMessage.type()) {
-        case messages::ClientMessage_Type_PROB:
-            serverMessage.set_version(protocolVersion);     //prepare response message
+    try {
+        std::string tmp;
+        switch (clientMessage.type()) {
+            case messages::ClientMessage_Type_PROB:
 
-            if (probe(clientMessage, elements)) {   //probe the elements list for the element in client message
-                //the file has been found
-                serverMessage.set_type(messages::ServerMessage_Type_OK);
-                serverMessage.set_code(0);
-            } else {
-                //the file was not there
-                serverMessage.set_type(messages::ServerMessage_Type_SEND);
-                serverMessage.set_path(clientMessage.path());
-                serverMessage.set_filesize(clientMessage.filesize());
-                serverMessage.set_lastwritetime(clientMessage.lastwritetime());
-                serverMessage.set_path(clientMessage.path());
-                serverMessage.set_hash(clientMessage.hash());
+                probe();    //probe the elements list for the element in client message
+
+                break;
+            case messages::ClientMessage_Type_STOR: {
+
+                storeFile();    //store the file in the server filesystem
+
+                break;
             }
+            case messages::ClientMessage_Type_DELE:
 
-            tmp = serverMessage.SerializeAsString();
-            s.sendString(tmp);
-            serverMessage.Clear();
+                removeFile();
 
-            break;
-        case messages::ClientMessage_Type_STOR:
-        {
-            serverMessage.set_version(protocolVersion);
-            Directory_entry element{basePath, clientMessage.path(), clientMessage.filesize(), "file", clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
+                break;
+            case messages::ClientMessage_Type_MKD:
 
-            if(storeFile(s, clientMessage, basePath)){
-                //the file has been created
-                serverMessage.set_type(messages::ServerMessage_Type_OK);
-                serverMessage.set_code(0);
+                makeDir();
 
-                //add to the queue
-                elements.emplace(element.getRelativePath(), element);
+                break;
+            case messages::ClientMessage_Type_RMD:
 
-                //add to db
-                db->insert(username, mac, element);
-            }
-            else{
-                //some error occured
-                serverMessage.set_type(messages::ServerMessage_Type_ERR);
-                serverMessage.set_code(100);    //TODO error code
-            }
-            tmp = serverMessage.SerializeAsString();
-            s.sendString(tmp);
-            serverMessage.Clear();
-            //TODO get all data messages from client and create file on filesystem, db and map
-            break;
+                removeDir();
+
+                break;
+            case messages::ClientMessage_Type_QUIT:
+
+                quit();
+
+                break;
+            default:
+                throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
         }
-        case messages::ClientMessage_Type_DELE:
-            serverMessage.set_version(protocolVersion);
 
-            if(removeFile(clientMessage, elements)){
-                //the file has been removed
-                serverMessage.set_type(messages::ServerMessage_Type_OK);
-                serverMessage.set_code(0);
-            }
-            else{
-                //some error occured
-                serverMessage.set_type(messages::ServerMessage_Type_ERR);
-                serverMessage.set_code(100);    //TODO error code
-            }
-
-            tmp = serverMessage.SerializeAsString();
-            s.sendString(tmp);
-            serverMessage.Clear();
-            //TODO delete element from elements map, from filesystem and from db (do nothing if the element does
-            // not exist
-            break;
-        case messages::ClientMessage_Type_MKD:
-            //TODO add element in elements map (if not already there), create dir in filesystem (modify last write
-            // time if already there), add element to db
-            break;
-        case messages::ClientMessage_Type_RMD:
-            //TODO remove directory from db, filesystem and map
-            break;
-        case messages::ClientMessage_Type_QUIT:
-            //TODO close connection
-            break;
-        default:
-            throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
+        clientMessage.Clear();
     }
+    catch (std::exception &e) {
+        //internal error
+        clientMessage.Clear();
 
-    clientMessage.Clear();
+        //send error message to the client
+        serverMessage.set_version(protocolVersion);
+        serverMessage.set_type(messages::ServerMessage_Type_ERR);
+        serverMessage.set_code(static_cast<int>(protocolManagerError::internal));
+
+        std::string tmp = serverMessage.SerializeAsString();    //crete string
+        s.sendString(tmp);      //send response message
+        serverMessage.Clear();
+
+        //TODO decide what to do
+    }
 }

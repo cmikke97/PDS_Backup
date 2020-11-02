@@ -50,7 +50,9 @@ public:
     bool is_directory();
     Hash& getHash();
     std::string get_time_from_file();
-    void set_time_to_file(std::string &time);
+    void set_time_to_file(const std::string &time);
+    bool exists();
+    void updateValues();
 };
 
 

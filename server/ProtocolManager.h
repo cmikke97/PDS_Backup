@@ -24,18 +24,28 @@ namespace server {
         std::shared_ptr<PWD_Database> password_db;
         messages::ClientMessage clientMessage;
         messages::ServerMessage serverMessage;
-        std::string username, mac, basePath;
-
-        int protocolVersion;
+        std::string username, mac, basePath, temporaryPath;
+        int tempNameSize, protocolVersion;
 
         std::unordered_map<std::string, Directory_entry> elements;
         //TODO i have a database of directory entries (also with info about their owner username and mac);
         //TODO so these elements will be the ones related to the username and mac of this instance of the pm (we know them after authentication)
 
+        void send_OK(int code);
+        void send_SEND();
+        void send_ERR(protocolManagerError code);
+        void send_VER();
         void errorHandler(const std::string &msg, protocolManagerError code);
+        void probe();
+        void storeFile();
+        void removeFile();
+        void makeDir();
+        void removeDir();
+        void quit();
+
 
     public:
-        explicit ProtocolManager(Socket &s, int ver, std::string basePath);
+        explicit ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize);
         void recoverFromDB();
         void authenticate();
         void receive();
