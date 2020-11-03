@@ -45,7 +45,7 @@ public:
 private:
     std::unordered_map<std::string, Directory_entry> paths_;
 
-    bool contains(const std::string &key);
+    //bool contains(const std::string &key);
 };
 
 
