@@ -85,23 +85,6 @@ void server::ProtocolManager::send_VER(){
 }
 
 /**
- * error handler function for the Protocol Manager; it sends an error message and then throws an exception
- *
- * @param msg message to put in the exception
- * @param code to send in the message and to put in the exception
- *
- * @throw ProtocolManagerException
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::errorHandler(const std::string & msg, protocolManagerError code){
-
-    //TODO decide what to do
-    //throw exception
-    throw ProtocolManagerException(msg, code);
-}
-
-/**
  * function to probe the server elements map for the file got in clientMessage
  *
  * @throw ProtocolManagerException if the element is not a file
@@ -122,7 +105,7 @@ void server::ProtocolManager::probe() {
     if(!el->second.is_regular_file()) {  //if the element is not a file
         //there is something with the same name which is not a file -> error
         send_ERR(errCode::notAFile);    //send error message with cause
-        errorHandler("Internal Server Error", protocolManagerError::internal);      //TODO error code
+        throw ProtocolManagerException("Probed something which is not a file.", protocolManagerError::client);      //TODO error code
         return;
     }
 
@@ -195,16 +178,16 @@ void server::ProtocolManager::storeFile(){
             }
 
             if(clientMessage.type() != messages::ClientMessage_Type_DATA){
-                //no data message with last bool set was encountered before this message, error!
-                send_ERR(errCode::unexpected);    //send error message with cause
-
                 //close the file
                 out.close();
 
                 //delete temporary file
                 std::filesystem::remove(temporaryPath + tmpFileName);
 
-                errorHandler("Client Message Error", protocolManagerError::client);
+                //no data message with last bool set was encountered before this message, error!
+                send_ERR(errCode::unexpected);    //send error message with cause
+
+                throw ProtocolManagerException("Unexpected message, DATA transfer was not done.", protocolManagerError::client);
             }
 
             loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
@@ -231,8 +214,7 @@ void server::ProtocolManager::storeFile(){
 
             //some error occurred
             send_ERR(errCode::store);    //send error message with cause
-            errorHandler("Client Message Error", protocolManagerError::client);
-            return;
+            throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::client);
         }
 
         //If we are here then the file was successfully transferred and its copy on the server is as expected
@@ -253,8 +235,8 @@ void server::ProtocolManager::storeFile(){
     }
 
     //some error occurred
-    send_ERR(errCode::store);    //send error message with cause
-    errorHandler("Internal Server Error", protocolManagerError::internal);
+    send_ERR(errCode::exception);    //send error message with cause
+    throw ProtocolManagerException("Could not open file or something else happened.", protocolManagerError::internal);
 }
 
 /**
@@ -279,8 +261,7 @@ void server::ProtocolManager::removeFile(){
     //if it is not a file OR if the file hash does not correspond
     if(!el->second.is_regular_file() || el->second.getHash() != h){
         send_ERR(errCode::remove);    //send error message with cause
-        errorHandler("Internal Server Error", protocolManagerError::internal); //TODO decide if internal or client
-        return;
+        throw ProtocolManagerException("Tried to remove something which is not a file or file hash does not correspond.", protocolManagerError::client);
     }
 
     //remove the file
@@ -315,10 +296,10 @@ void server::ProtocolManager::makeDir(){
         std::filesystem::create_directories(basePath + path);    //create all the directories (if they do not already exist) up to the temporary path
 
     if(!std::filesystem::is_directory(basePath + path)){
-        //the element is not a directory! -> error
+        //the element is not a directory! (in case of a modify) -> error
 
         send_ERR(errCode::notADir);    //send error message with cause
-        errorHandler("Internal Server Error", protocolManagerError::internal); //TODO decide if internal or client
+        throw ProtocolManagerException("Tried to modify something which is not a directory.", protocolManagerError::client);
         return;
     }
 
@@ -359,7 +340,7 @@ void server::ProtocolManager::removeDir(){
     if(!el->second.is_directory()){
         //the element is not a directory! -> error
         send_ERR(errCode::notADir);    //send error message with cause
-        errorHandler("Internal Server Error", protocolManagerError::internal); //TODO decide if internal or client
+        throw ProtocolManagerException("Tried to remove something which is not a directory.", protocolManagerError::client);
         return;
     }
 
@@ -384,7 +365,8 @@ void server::ProtocolManager::removeDir(){
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::quit(){
-    //TODO decide what to do
+    s.closeConnection();    //close the connection with the client
+    //TODO verify if something else is needed
 }
 
 /**
@@ -427,8 +409,7 @@ void server::ProtocolManager::authenticate() {
 
     //check version
     if(protocolVersion != clientMessage.version()) {
-        std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
-        send_VER();
+        send_VER(); //send version message
 
         //throw exception
         throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
@@ -455,7 +436,7 @@ void server::ProtocolManager::authenticate() {
         if(pwdHash != pair.second){ //compare the computed hash with the user hash
             //if they are different then the password is not correct (authentication error)
             send_ERR(errCode::auth);    //send error message with cause
-            errorHandler( "Authentication Error",protocolManagerError::auth); //TODO error code
+            throw ProtocolManagerException( "Authentication Error",protocolManagerError::auth);
         }
 
         //the authentication was successful
@@ -464,7 +445,7 @@ void server::ProtocolManager::authenticate() {
     else{
         //error, message not expected
         send_ERR(errCode::unexpected);    //send error message with cause
-        errorHandler("Message Error, not expected.",protocolManagerError::unknown);    //TODO error code
+        throw ProtocolManagerException("Message Error, not expected.",protocolManagerError::unknown);
     }
 
     std::stringstream tmp;
@@ -501,10 +482,15 @@ void server::ProtocolManager::receive(){
     clientMessage.ParseFromString(message);
 
     //check version
-    if(protocolVersion != clientMessage.version())
-        std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
+    if(protocolVersion != clientMessage.version()) {
+        clientMessage.Clear();
 
-    //TODO go on
+        send_VER(); //send version message
+
+        //throw exception
+        throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
+    }
+
     try {
         std::string tmp;
         switch (clientMessage.type()) {
@@ -544,18 +530,37 @@ void server::ProtocolManager::receive(){
         }
     }
     catch (ProtocolManagerException &e) {
-        //TODO continue this
+        switch (e.getCode()) {
+            //in these 2 cases the errors may be temporary or just related to this particular message
+            //so keep connection and skip the faulty message
+            case server::protocolManagerError::unsupported: //a message from the client was of an unsupported type
+            case server::protocolManagerError::client:  //there was an error in a message from the client
+                //keep connection, skip this message
+                return;
 
-        //TODO switch on e.getCode()
-
-        //re-throw the exception
-        throw ProtocolManagerException(e.what(), e.getCode());
+            //these next cases will be handled from main
+            case server::protocolManagerError::auth:    //the current user failed authentication
+            case server::protocolManagerError::version: //the current client uses a different version
+            case server::protocolManagerError::internal: //there was an internal server error -> Fatal error
+            case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
+            default:
+                throw ProtocolManagerException(e.what(),e.getCode());
+        }
     }
+    catch (SocketException &e){
+        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+    }
+    catch (server::PWD_DatabaseException &e){
+        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+    }
+    catch (server::DatabaseException &e){
+        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+    }
+    //TODO catch config exception
     catch (std::exception &e) {
         //internal error
-
         send_ERR(errCode::exception);    //send error message with cause
 
-        //TODO decide what to do
+        throw ProtocolManagerException(e.what(),server::protocolManagerError::internal);
     }
 }

@@ -15,6 +15,7 @@
 #include <utility>
 #include <mutex>
 #include "../myLibraries/Directory_entry.h"
+#include "../myLibraries/RandomNumberGenerator.h"
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -43,9 +44,6 @@ namespace server {
      * Database class
      */
 
-    //TODO it needs to be thread safe in queries
-    //TODO modify it to have prepare etc..
-
     /**
      * class which represents a sqlite3 database (singleton)
      *
@@ -53,7 +51,7 @@ namespace server {
      */
     class Database {
         UniquePtr<sqlite3> db;
-        std::mutex access_m;
+        std::mutex access_mutex;
 
         void open(const std::string &path);
 
@@ -92,7 +90,7 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class databaseError {
-        open, create, prepare, read, insert, remove, update
+        open, create, read, insert, update, remove, prepare, finalize
     };
 
     /**

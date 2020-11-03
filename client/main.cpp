@@ -130,7 +130,8 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         fd_set read_fds;
         fd_set write_fds;
         //variable used to count number of consecutive connection re-tries (connection error)
-        int tries = 0, authTries = 0;
+        int tries = 0;
+        bool authenticated = false;
 
         // this thread will loop until it will be told to stop
         while (!thread_stop.load()) {
@@ -147,8 +148,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                 //authenticate user
                 pm.authenticate(username, password, client_socket.getMAC());
-                //if the authentication is successful reset tries
-                authTries = 0;
+                authenticated = true;
 
                 //if there was an exception then resend all unacknowledged messages
                 pm.recoverFromError();
@@ -260,9 +260,11 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (client::ProtocolManagerException &e) {
                 switch (e.getErrorCode()) {
-                    case client::protocolManagerError::unsupported: //unsupported message type error
                     case client::protocolManagerError::unknown: //unknown server error
                     case client::protocolManagerError::auth: //authentication error
+                    case client::protocolManagerError::internal: //internal server error (exception)
+                    case client::protocolManagerError::version: //version not supported error
+                    case client::protocolManagerError::unsupported: //unsupported message type error
                         std::cerr << e.what() << std::endl;
 
                         //connection will be closed automatically by the socket destructor
@@ -271,32 +273,9 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         fileWatcher_stop.store(true);
                         return;
 
-                    case client::protocolManagerError::version: //version not supported error
-                        std::cerr << e.what() << "; try with version" << e.getData() << std::endl;
-
-                        //connection will be closed automatically by the socket destructor
-
-                        //terminate filesystem watcher and close program
-                        fileWatcher_stop.store(true);
-                        return;
-
-                    case client::protocolManagerError::internal: //internal server error
-
-                        if (e.getData() == 0) { //internal server error while NOT authenticated
-                            //retry the authentication x times
-
-                            //close connection
-                            client_socket.closeConnection();
-
-                            if (authTries > config->getMaxAuthErrorRetries()) {
-                                //terminate filesystem watcher and close program
-                                fileWatcher_stop.store(true);
-                                return;
-                            }
-
-                            authTries++;
-                        } else { //internal server error while authenticated (in receive)
-                            //retries are already exceeded (the protocol manager handles retries)
+                    case client::protocolManagerError::unexpected: //unexpected message error
+                        if(!authenticated){  //if I am not authenticated any unexpected message means error
+                            std::cerr << e.what() << std::endl;
 
                             //connection will be closed automatically by the socket destructor
 
@@ -304,6 +283,10 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             fileWatcher_stop.store(true);
                             return;
                         }
+
+                        //otherwise
+                    case client::protocolManagerError::client: //client message error
+                    //TODO go on -> skip the current message
 
                     default: //for unrecognised exception codes
                         std::cerr << "Unrecognised exception code" << std::endl;
