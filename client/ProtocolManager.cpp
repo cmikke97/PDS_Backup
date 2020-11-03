@@ -301,7 +301,6 @@ void client::ProtocolManager::receive() {
     serverMessage.Clear();
 }
 
-//TODO go on from this
 /**
  * function to use to know if the protocol manager can send a message (it has a list of messages waiting to receive their response)
  *
@@ -322,12 +321,12 @@ bool client::ProtocolManager::canSend() const {
  */
 void client::ProtocolManager::recoverFromError() {
     for(int i = start; i != end; i = (i+1)%size){
-        Event e = waitingForResponse[i];
+        Event e = waitingForResponse[i];    //get the element from the queue
 
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
-            //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
-            //then it means that the file was deleted or modified --> I can't send it anymore
-            std::filesystem::path ap = e.getElement().getAbsolutePath();
+            //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of
+            //the file present in the filesystem then it means that the file was deleted or modified --> I can't send it anymore
+            std::string ap = e.getElement().getAbsolutePath();
             if(!std::filesystem::directory_entry(ap).exists() || Directory_entry(path_to_watch, ap).getHash() != e.getElement().getHash())
                 break;
         }
@@ -335,17 +334,8 @@ void client::ProtocolManager::recoverFromError() {
         //compose message based on event
         composeMessage(e);
 
-        //compute message
-        std::string client_temp = clientMessage.SerializeAsString();
-
-        //send message to server
-        s.sendString(client_temp);
-
-        //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-        clientMessage.Clear();
-
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
-            sendFile(e.getElement().getAbsolutePath());
+            sendFile(e.getElement().getAbsolutePath()); //send the actual file
         }
     }
 }
@@ -362,6 +352,7 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
     //initialize variables
     std::ifstream file;
     std::filesystem::directory_entry element(path);
+    uint64_t fsz = element.file_size(), curr = 0;
     char buff[MAXBUFFSIZE];
 
     //open input file
@@ -370,13 +361,20 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
     if(file.is_open()){
         //read file in MAXBUFFSIZE-wide blocks
         while(file.read(buff, MAXBUFFSIZE)) {
+            auto bytesRead = file.gcount();
             clientMessage.set_version(protocolVersion);
             clientMessage.set_type(messages::ClientMessage_Type_DATA);
-            clientMessage.set_data(buff, file.gcount());    //insert file block in message
+            clientMessage.set_data(buff, bytesRead);    //insert file block in message
 
+            //mark the last data block
+            if(curr + MAXBUFFSIZE >= fsz)
+                clientMessage.set_last(true);
+
+            /*
             //mark the last data block
             if(file.gcount() != MAXBUFFSIZE)
                 clientMessage.set_last(true);
+            */
 
             //send message
             std::string client_message = clientMessage.SerializeAsString();
@@ -384,8 +382,12 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
 
             //clear the message
             clientMessage.Clear();
+
+            //update the # of bytes already sent
+            curr += bytesRead;
         }
     }
+    //TODO throw exception in case the file could not be opened
 
     //close the input file
     file.close();
