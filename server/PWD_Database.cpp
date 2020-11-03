@@ -15,12 +15,12 @@ std::shared_ptr<server::PWD_Database> server::PWD_Database::database_;
 std::mutex server::PWD_Database::mutex_;
 
 /**
- * Database class singleton instance getter
+ * PWD_Database class singleton instance getter
  *
  * @param path path of the database on disk
- * @return Database instance
+ * @return PWD_Database instance
  *
- * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
+ * @throw PWD_DatabaseException in case of pwt_database errors (cannot open database or cannot create table)
  *
  * @author Michele Crepaldi s269551
  */
@@ -32,11 +32,11 @@ std::shared_ptr<server::PWD_Database> server::PWD_Database::getInstance(const st
 }
 
 /**
- * private constructor for class Database
+ * private constructor for class PWD_Database
  *
- * @param path path of the database on disk
+ * @param path path of the password database on disk
  *
- * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
+ * @throw PWD_DatabaseException in case of database errors (cannot open pwd_database or cannot create table)
  *
  * @author Michele Crepaldi s269551
  */
@@ -45,28 +45,11 @@ server::PWD_Database::PWD_Database(std::string path) : path_(std::move(path)) {
 }
 
 /**
- * function used in select count(*) statement to get the result
- *
- * @param count count to be returned
- * @param argc number of db row elements
- * @param argv db row elements
- * @param azColName names of the row elements
- * @return callback error code
- *
- * @author Michele Crepaldi s269551
- */
-static int countCallback(void *count, int argc, char **argv, char **azColName) {
-    int *c = static_cast<int *>(count);
-    *c = std::stoi(argv[0]);
-    return 0;
-}
-
-/**
  * function used to open the connection to a sqlite3 database; if the database already existed then it opens it, otherwise it also creates the needed table
  *
- * @param path path of the database in the filesystem
+ * @param path path of the password database in the filesystem
  *
- * @throw DatabaseException in case of database errors (cannot open database or cannot create table)
+ * @throw PWD_DatabaseException in case of database errors (cannot open database or cannot create table)
  *
  * @author Michele Crepaldi s269551
  */
@@ -84,6 +67,7 @@ void server::PWD_Database::open(const std::string &path) {
         f.close();  //close the file
     }
 
+    //open the database
     sqlite3 *dbTmp;
     rc = sqlite3_open(path_.c_str(), &dbTmp); //open the database
     db.reset(dbTmp);    //assign the newly opened db
@@ -142,15 +126,15 @@ void server::PWD_Database::open(const std::string &path) {
 }
 
 /**
- * utility function used to handel the SQL errors
+ * utility function used to handle the SQL errors
  *
  * @param rc code returned from the SQLite function
  * @param check code to check the returned code against
  * @param message eventual error message to print
  * @param zErrMsg error string returned from the SQLite function
- * @param err PWT_databaseError to insert into the exception
+ * @param err pwd_databaseError to insert into the exception
  *
- * @throw PWT_DatabaseException in case rc != check
+ * @throw PWD_DatabaseException in case rc != check
  *
  * @author Michele Crepaldi s269551
  */
@@ -164,33 +148,12 @@ void handleSQLError(int rc, int check, std::string &&message, char *zErrMsg, ser
 }
 
 /**
- * function used in select salt and hash statement to get the result
- *
- * @param pair pair to be returned
- * @param argc number of db row elements
- * @param argv db row elements
- * @param azColName names of the row elements
- * @return callback error code
- *
- * @throw HashException in case the hash retrieved is of wrong size
- *
- * @author Michele Crepaldi s269551
- */
-static int hashCallback(void *pair, int argc, char **argv, char **azColName) {
-    auto *c = static_cast<std::pair<std::string, Hash> *>(pair);
-    std::string tmp1 = std::string(argv[0]);
-    std::string tmp2 = std::string(argv[1]);
-    *c = std::make_pair(argv[0], Hash(argv[1]));
-    return 0;
-}
-
-/**
  * function used to get the salt and hash associated to a user
  *
  * @param username username of the user to retrieve info of
  * @return pair with salt and hash
  *
- * @throw DatabaseException in case it cannot read from db
+ * @throw PWD_DatabaseException in case of database errors (cannot prepare, get hash or finalize)
  * @throw HashException in case the hash retrieved is of wrong size
  *
  * @author Michele Crepaldi s269551
@@ -203,7 +166,7 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
 
     //TODO convert from hex (in db) to byte string the salt and the hash
 
-    std::string salt, hash;
+    std::string saltHex, hashHex;
 
     //statement handle
     sqlite3_stmt* stmt;
@@ -229,8 +192,8 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
         switch (sqlite3_step (stmt)) {
             case SQLITE_ROW:    //in case of a row
                 //convert columns
-                salt = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
-                hash = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
+                saltHex = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
+                hashHex = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
                 break;
 
             case SQLITE_DONE:   //in case there are no more rows
@@ -260,6 +223,8 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
     handleSQLError(rc, SQLITE_OK, "Cannot read from database: ", zErrMsg, PWT_databaseError::read); //if there was an error throw an exception
     return hashPair;
     */
+    std::string salt = RandomNumberGenerator::hex_to_string(saltHex);
+    std::string hash = RandomNumberGenerator::hex_to_string(hashHex);
     return std::make_pair(salt, Hash(hash));
 }
 
@@ -269,18 +234,23 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
  * @param username username of the user to insert
  * @param password password to associate to the user
  *
- * @throw PWT_DatabaseException in case the user cannot be inserted
+ * @throw PWD_DatabaseException in case of database errors (cannot prepare, insert or finalize)
  *
  * @author Michele Crepaldi s269551
  */
 void server::PWD_Database::addUser(const std::string &username, const std::string &password){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
     int rc;
     char *zErrMsg = nullptr;
     RandomNumberGenerator rng;
     std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
     HashMaker hm{password};
     hm.update(salt);
-    Hash passwordHash = hm.get();
+
+    //convert salt and hash to hex representation (to be stored)
+    std::string saltHex = RandomNumberGenerator::string_to_hex(salt);
+    std::string hashHex = RandomNumberGenerator::string_to_hex(hm.get().str());
 
     //TODO convert from byte string to hex the salt and the hash before putting them in the database
 
@@ -301,26 +271,20 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
     //bind parameters
     sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
-    sqlite3_bind_text(stmt,2,salt.c_str(),salt.length(),SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,2,saltHex.c_str(),saltHex.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
-    sqlite3_bind_text(stmt,3,passwordHash.str().c_str(),passwordHash.str().length(),SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,3,hashHex.c_str(),hashHex.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
 
     // Execute SQL statement
     rc = sqlite3_step(stmt);
-    handleSQLError(rc, SQLITE_DONE, "Cannot add user to password table: ", zErrMsg, pwd_databaseError::remove); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_DONE, "Cannot add user to password table: ", zErrMsg, pwd_databaseError::insert); //if there was an error throw an exception
 
     //End the transaction.
     rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
     handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
-
-    /*
-    // Execute SQL statement
-    rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot insert into password table: ", zErrMsg, PWT_databaseError::insert); //if there was an error throw an exception
-    */
 }
 
 /**
@@ -329,18 +293,23 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
  * @param username username of the user to insert
  * @param password password to associate to the user
  *
- * @throw PWT_DatabaseException in case the user cannot be inserted
+ * @throw PWD_DatabaseException in case of database errors (cannot prepare, update or finalize)
  *
  * @author Michele Crepaldi s269551
  */
 void server::PWD_Database::updateUser(const std::string &username, const std::string &password){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
     int rc;
     char *zErrMsg = nullptr;
     RandomNumberGenerator rng;
     std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
     HashMaker hm{password};
     hm.update(salt);
-    Hash passwordHash = hm.get();
+
+    //convert salt and hash to hex representation (to be stored)
+    std::string saltHex = RandomNumberGenerator::string_to_hex(salt);
+    std::string hashHex = RandomNumberGenerator::string_to_hex(hm.get().str());
 
     //TODO convert from byte string to hex the salt and the hash before putting them in the database
 
@@ -359,28 +328,22 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
     handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
 
     //bind parameters
-    sqlite3_bind_text(stmt,1,salt.c_str(),salt.length(),SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,1,saltHex.c_str(),saltHex.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
-    sqlite3_bind_text(stmt,2,passwordHash.str().c_str(),passwordHash.str().length(),SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,2,hashHex.c_str(),hashHex.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
     sqlite3_bind_text(stmt,3,username.c_str(),username.length(),SQLITE_TRANSIENT);
     handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
 
     // Execute SQL statement
     rc = sqlite3_step(stmt);
-    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", zErrMsg, pwd_databaseError::remove); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", zErrMsg, pwd_databaseError::update); //if there was an error throw an exception
 
     //End the transaction.
     rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
     handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
-
-    /*
-    // Execute SQL statement
-    rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot update username into password table: ", zErrMsg, PWT_databaseError::update); //if there was an error throw an exception
-    */
 }
 
 /**
@@ -389,11 +352,13 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
  * @param username username of the user to insert
  * @param password password to associate to the user
  *
- * @throw PWT_DatabaseException in case the user cannot be inserted
+ * @throw PWD_DatabaseException in case of database errors (cannot prepare, remove or finalize)
  *
  * @author Michele Crepaldi s269551
  */
 void server::PWD_Database::removeUser(const std::string &username){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
     int rc;
     char *zErrMsg = nullptr;
     //statement handle
@@ -430,11 +395,13 @@ void server::PWD_Database::removeUser(const std::string &username){
  *
  * @param f function to be used for each row extracted from the database
  *
- * @throw PWT_DatabaseException in case of database errors (cannot prepare or read)
+ * @throw PWD_DatabaseException in case of database errors (cannot prepare, read or finalize)
  *
  * @author Michele Crepaldi s269551
  */
 void server::PWD_Database::forAll(std::function<void (const std::string &)> &f) {
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
     int rc;
     char *zErrMsg = nullptr;
     //statement handle

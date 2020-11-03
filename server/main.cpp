@@ -210,25 +210,39 @@ int main(int argc, char** argv) {
     }
     catch (server::PWD_DatabaseException &e) {
         switch(e.getCode()){
+            case server::pwd_databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+                std::cerr << "User already exists." << std::endl;
             case server::pwd_databaseError::create: //could not create the table in the database -> (fatal) terminate server
             case server::pwd_databaseError::open:   //could not open the database -> (fatal) terminate server
             case server::pwd_databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
             case server::pwd_databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
-            case server::pwd_databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
             case server::pwd_databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
             case server::pwd_databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
             case server::pwd_databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
             case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
             default:
+                //Fatal error -> close the server
                 std::cerr << e.what() << std::endl;
 
                 return 1; //return -> the thread guard will stop and join all the server threads
         }
     }
     catch (server::DatabaseException &e) {
-        std::cerr << e.what() << std::endl;
-        //TODO switch on e.getCode();
-        return 1;
+        switch(e.getCode()){
+            case server::databaseError::create: //could not create the table in the database -> (fatal) terminate server
+            case server::databaseError::open:   //could not open the database -> (fatal) terminate server
+            case server::databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+            case server::databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+            case server::databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+            case server::databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
+            case server::databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
+            case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
+            default:
+                //Fatal error -> close the server
+                std::cerr << e.what() << std::endl;
+
+                return 1; //return -> the thread guard will stop and join all the server threads
+        }
     }
     //TODO catch ConfigException and switch on e.getCode();
     catch (std::exception &e) {
@@ -293,20 +307,25 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
         }
         catch (server::ProtocolManagerException &e) {
             switch(e.getCode()){
-                //TODO continue with these
-                case server::protocolManagerError::auth:    //the current user failed authentication
-                case server::protocolManagerError::version: //the current client uses a different version
-                    continue;
-
+                //these 2 cases are handled directly by the protocol manager -> keep connection and skip message;
+                //anyway if they appear here close connection and continue with the next socket
                 case server::protocolManagerError::unsupported: //a message from the client was of an unsupported type
                 case server::protocolManagerError::client:  //there was an error in a message from the client
+
+                //in these 2 cases connection with the client is not valid and needs to be closed
+                case server::protocolManagerError::auth:    //the current user failed authentication
+                case server::protocolManagerError::version: //the current client uses a different version
+                    sock.closeConnection(); //close the connection with the client
                     continue;   //the error is in the current socket, continue with the next one
 
+                //in these 2 cases (and default) the errors are so important that they require the closing of the whole program
                 case server::protocolManagerError::internal: //there was an internal server error -> Fatal error
                 case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
                 default:
                     //Fatal error -> close the server
                     std::cerr << e.what() << std::endl;
+
+                    sock.closeConnection(); //close the connection with the client
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
@@ -346,6 +365,7 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
         }
         catch (server::PWD_DatabaseException &e) {
             switch(e.getCode()){
+                //these errors were added for completeness but will never be triggered in the server threads
                 case server::pwd_databaseError::create: //could not create the table in the database -> (fatal) terminate server
                 case server::pwd_databaseError::open:   //could not open the database -> (fatal) terminate server
                 case server::pwd_databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
@@ -355,11 +375,13 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
                 case server::pwd_databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
                 case server::pwd_databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
 
-                //the previous ones were added for completeness but will never be triggered in the server threads
+                //this is the only PWT_Database error that could happen in the server threads
                 case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
                 default:
                     //Fatal error -> close the server
                     std::cerr << e.what() << std::endl;
+
+                    sock.closeConnection(); //close the connection with the client
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
@@ -372,23 +394,37 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
             }
         }
         catch (server::DatabaseException &e) {
-            //Fatal error -> close the server
-            //TODO switch on e.getCode();
-            std::cerr << e.what() << std::endl;
+            switch(e.getCode()){
+                case server::databaseError::create: //could not create the table in the database -> (fatal) terminate server
+                case server::databaseError::open:   //could not open the database -> (fatal) terminate server
+                case server::databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+                case server::databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+                case server::databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+                case server::databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
+                case server::databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
+                case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
+                default:
+                    //Fatal error -> close the server
+                    std::cerr << e.what() << std::endl;
 
-            server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
+                    sock.closeConnection(); //close the connection with the client
 
-            Socket tmp{socketType::TCP};
-            tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
+                    server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-            tmp.closeConnection();
+                    Socket tmp{socketType::TCP};
+                    tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
-            return; //then return
+                    tmp.closeConnection();
+
+                    return; //then return
+            }
         }
         //TODO catch ConfigException and switch on e.getCode();
         catch (std::exception &e) {
             //Fatal error -> close the server
             std::cerr << e.what() << std::endl;
+
+            sock.closeConnection(); //close the connection with the client
 
             server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 

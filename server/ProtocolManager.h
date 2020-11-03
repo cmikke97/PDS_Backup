@@ -14,18 +14,39 @@
 
 namespace server {
 
+    /**
+     * enumerator class to represetn all possible protocolManager errors
+     *
+     * @author Michele Crepaldi s269551
+     */
     enum class protocolManagerError {
         unknown, auth, internal, client, version, unsupported
     };
 
+    /**
+     * enumerator class to represent all possible errorCodes
+     *
+     * @author Michele Crepaldi s269551
+     */
     enum class errCode{
         notAFile, unexpected, store, remove, notADir, auth, exception
     };
 
+    /**
+     * enumerator class to represent all possible ok codes
+     *
+     * @author Michele Crepaldi s269551
+     */
     enum class okCode {
         found, created, notThere, removed, authenticated
     };
 
+    /**
+     * Protocol Manager class for the server. It manages the communication with the client interpreting the messages,
+     * executing the related actions and responding back to the client.
+     *
+     * @author Michele Crepaldi s269551
+     */
     class ProtocolManager {
         Socket &s;
         std::shared_ptr<Database> db;
@@ -36,21 +57,17 @@ namespace server {
         int tempNameSize, protocolVersion;
 
         std::unordered_map<std::string, Directory_entry> elements;
-        //TODO i have a database of directory entries (also with info about their owner username and mac);
-        //TODO so these elements will be the ones related to the username and mac of this instance of the pm (we know them after authentication)
 
         void send_OK(okCode code);
         void send_SEND();
         void send_ERR(errCode code);
         void send_VER();
-        void errorHandler(const std::string &msg, protocolManagerError code);
         void probe();
         void storeFile();
         void removeFile();
         void makeDir();
         void removeDir();
         void quit();
-
 
     public:
         explicit ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize);

@@ -17,11 +17,38 @@
 
 namespace client {
 
-/**
- * class used to manage the interactions with the server
- *
- * @author Michele Crepaldi
- */
+    /**
+     * enumerator class to represetn all possible protocolManager errors
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class protocolManagerError {
+        unknown, auth, internal, client, version, unsupported, unexpected
+    };
+
+    /**
+     * enumerator class to represent all possible errorCodes
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class errCode{
+        notAFile, unexpected, store, remove, notADir, auth, exception
+    };
+
+    /**
+     * enumerator class to represent all possible ok codes
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class okCode {
+        found, created, notThere, removed, authenticated
+    };
+
+    /**
+     * class used to manage the interactions with the server
+     *
+     * @author Michele Crepaldi
+     */
     class ProtocolManager {
         Socket &s;
         std::shared_ptr<Database> db;
@@ -34,6 +61,13 @@ namespace client {
         int start, end, size, protocolVersion;
         int tries, maxTries;
 
+        void send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password);
+        void send_QUIT();
+        void send_PROB(Directory_entry &e);
+        void send_DELE(Directory_entry &e);
+        void send_STOR(Directory_entry &e);
+        void send_MKD(Directory_entry &e);
+        void send_RMD(Directory_entry &e);
         void composeMessage(Event &e);
 
     public:
@@ -55,20 +89,12 @@ namespace client {
     };
 
     /**
-     *
-     */
-    enum class protocolManagerError {
-        unknown, auth, internal, version, unsupported
-    };
-
-    /**
      * exceptions for the protocol manager class
      *
      * @author Michele Crepaldi s269551
      */
     class ProtocolManagerException : public std::runtime_error {
         protocolManagerError code;
-        int data;
 
     public:
 
@@ -79,8 +105,8 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        ProtocolManagerException(const std::string &msg, protocolManagerError errorCode, int data) :
-                std::runtime_error(msg), code(errorCode), data(data) {
+        ProtocolManagerException(const std::string &msg, protocolManagerError errorCode) :
+                std::runtime_error(msg), code(errorCode) {
         }
 
         /**
@@ -99,17 +125,6 @@ namespace client {
          */
         protocolManagerError getErrorCode() const noexcept {
             return code;
-        }
-
-        /**
-         * function to retrieve the data associated to the error code from the exception
-         *
-         * @return data
-         *
-         * @author Michele Crepaldi s269551
-         */
-        int getData() const noexcept {
-            return data;
         }
     };
 }

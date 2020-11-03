@@ -42,19 +42,8 @@ client::ProtocolManager::ProtocolManager(Socket &s, int max, int ver, int maxTri
  */
 void client::ProtocolManager::authenticate(const std::string& username, const std::string& password, const std::string& macAddress) {
 
-    //authenticate user
-    //compute message
-    clientMessage.set_version(protocolVersion);
-    clientMessage.set_type(messages::ClientMessage_Type_AUTH);
-    clientMessage.set_username(username);
-    clientMessage.set_macaddress(macAddress);
-    clientMessage.set_password(password);
-    std::string client_temp = clientMessage.SerializeAsString();
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    clientMessage.Clear();
+    //send authentication message to server
+    send_AUTH(username, macAddress, password);
 
     //get server response
     std::string server_temp = s.recvString();
@@ -64,38 +53,51 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
     //std::cout << serverMessage.type();
 
     int code;
-
     switch (serverMessage.type()) {
         case messages::ServerMessage_Type_OK:
             //authentication ok
             code = serverMessage.code();
-            std::cout << "authenticated, code " << code << std::endl;
-            break;
+            switch(static_cast<client::okCode>(code)) {
+                case okCode::authenticated: //user authentication successful
+                    std::cout << "authenticated, code " << code << std::endl;
+                    break;
+                case okCode::found: //probe file found the file
+                case okCode::created:   //file/directory create was successful
+                case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
+                case okCode::removed:   //file/directory remove was successful
+                default:
+                    throw ProtocolManagerException("Unexpected code", protocolManagerError::unexpected);
+
+            }
         case messages::ServerMessage_Type_ERR:
             //retrieve error code
             code = serverMessage.code();
-            //std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            switch(static_cast<client::protocolManagerError>(code)){
-                case client::protocolManagerError::auth:
-                    throw ProtocolManagerException("Authentication error", client::protocolManagerError::auth, 0);
-                case client::protocolManagerError::internal:
-                    throw ProtocolManagerException("Internal server error", client::protocolManagerError::internal, 0); //internal server error while NOT authenticated -> data = 0
-                case client::protocolManagerError::unknown:
-                default:
-                    throw ProtocolManagerException("Unknown server error", client::protocolManagerError::unknown, 0);
+            switch(static_cast<client::errCode>(code)){
+                case errCode::auth: //authentication error
+                    throw ProtocolManagerException("Authentication error", protocolManagerError::auth);
+                case errCode::exception:    //there was an exception in the server
+                    throw ProtocolManagerException("Internal server error", protocolManagerError::internal);
+                case errCode::unexpected:   //unexpected message type
+                case errCode::notAFile: //error in PROB -> the element is not a file
+                case errCode::store:    //error in STOR -> the written file is different from what expected (different size, hash or lastWriteTime)
+                case errCode::remove:   //error in DELE -> the element is not a file or the hash does not correspond
+                case errCode::notADir:  //error in RMD/MKD -> the element is not a directory
+                    throw ProtocolManagerException("Unexpected error code", protocolManagerError::unexpected);
+                default:    //unknown server error
+                    throw ProtocolManagerException("Unknown server error", protocolManagerError::unknown);
             }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
-            std::cout << "change version to: " << serverMessage.newversion() << std::endl;
+            std::cout << "Change version to: " << serverMessage.newversion() << std::endl;
             //for future use (not implemented now, to implement when a new version is written)
             //for now terminate the program
-            throw ProtocolManagerException("Version not supported", client::protocolManagerError::version, serverMessage.newversion());
+            throw ProtocolManagerException("Version not supported", protocolManagerError::version);
 
         default: //i should never arrive here
             std::cerr << "Unsupported message type" << std::endl;
-            throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported, 0);
+            throw ProtocolManagerException("Unsupported message type error", protocolManagerError::unsupported);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
@@ -109,17 +111,9 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
  */
 void client::ProtocolManager::quit() {
     //create message
-    clientMessage.set_version(protocolVersion);
-    clientMessage.set_type(messages::ClientMessage_Type_QUIT);
+    send_QUIT();
 
-    //compute message
-    std::string client_temp = clientMessage.SerializeAsString();
-
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    clientMessage.Clear();
+    //TODO decide if to get a message back or not
 }
 
 /**
@@ -140,16 +134,7 @@ void client::ProtocolManager::send(Event &e) {
     //compose the message based on event
     composeMessage(e);
 
-    //compute message
-    std::string client_temp = clientMessage.SerializeAsString();
-
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    clientMessage.Clear();
-
-    //save a copy of the event in a local list (to then wait for its respose)
+    //save a copy of the event in a local list (to then wait for its response)
     waitingForResponse[end] = e;
     end = (end+1)%size;
 }
@@ -179,7 +164,7 @@ void client::ProtocolManager::receive() {
 
     //check version
     if(protocolVersion != serverMessage.version())
-        std::cerr << "different protocol version!" << std::endl; //TODO decide if to keep this and in case yes handle it
+        throw ProtocolManagerException("Different protocol version!", client::protocolManagerError::version); //TODO decide if to keep this
 
     int code;
     switch (serverMessage.type()) {
@@ -209,7 +194,8 @@ void client::ProtocolManager::receive() {
 
                 //otherwise send file
 
-                //distinguish between file creation and modification
+                //distinguish between file creation and modification in the waiting queue (in order to know what to do later)
+                //TODO reconsider this
                 Event tmp;
                 if(e.getStatus() == FileSystemStatus::created)
                     tmp = Event(e.getElement(), FileSystemStatus::storeSent); //file created
@@ -219,24 +205,15 @@ void client::ProtocolManager::receive() {
                 //compose the message based on send event
                 composeMessage(tmp);
 
-                //save the send event in a local list (to then wait for its respose)
+                //save the send event in a local list (to then wait for its response)
                 waitingForResponse[end] = std::move(tmp);
                 end = (end+1)%size;
-
-
-                //compute message
-                std::string client_temp = clientMessage.SerializeAsString();
-
-                //send message to server
-                s.sendString(client_temp);
-
-                //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-                clientMessage.Clear();
 
                 sendFile(e.getElement().getAbsolutePath());
                 break;
             }
             //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
+            //TODO throw exception
             std::cerr << "protocol error" << std::endl;
             break;
         case messages::ServerMessage_Type_OK:
@@ -246,7 +223,29 @@ void client::ProtocolManager::receive() {
             //reset the tries variable (i popped a message)
             tries = 0;
 
-            std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been sent to server: " << serverMessage.code() << std::endl;
+            std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been execute in server: " << serverMessage.code() << std::endl;
+
+            code = serverMessage.code();
+
+            switch(static_cast<client::okCode>(code)) {
+                case okCode::found:     //probe file found the file
+                    std::cout << "Command successful: PROB of " << e.getElement().getRelativePath() << std::endl;
+                    break;
+
+                case okCode::created:   //file/directory create was successful
+                    std::cout << "Command successful: STOR/MKD of " << e.getElement().getRelativePath() << std::endl;
+                    break;
+
+                case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
+                case okCode::removed:   //file/directory remove was successful
+                    std::cout << "Command successful: DELE/RMD of " << e.getElement().getRelativePath() << std::endl;
+                    break;
+
+                case okCode::authenticated: //user authentication successful
+                default:
+                    throw ProtocolManagerException("Unexpected code", protocolManagerError::unexpected);
+
+            }
 
             if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified){
                 //insert or update element in db
@@ -266,38 +265,43 @@ void client::ProtocolManager::receive() {
             std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
-            switch(static_cast<client::protocolManagerError>(code)){
-                case client::protocolManagerError::internal:
+            switch(static_cast<client::errCode>(code)){
+                case errCode::notAFile: //error in PROB -> the element is not a file
+                case errCode::store:    //error in STOR -> the written file is different from what expected (different size, hash or lastWriteTime)
+                case errCode::remove:   //error in DELE -> the element is not a file or the hash does not correspond
+                case errCode::notADir:  //error in RMD/MKD -> the element is not a directory
                     tries++;
 
                     //if I exceed the number of re-tries throw an exception and close the program
                     if(tries > maxTries)
-                        throw ProtocolManagerException("Internal server error", client::protocolManagerError::internal, 1); //internal server error while authenticated -> data = 1
+                        throw ProtocolManagerException("Error from sent message", protocolManagerError::client);
 
                     //otherwise try to recover from the error
                     recoverFromError();
                     break;
 
-                case client::protocolManagerError::unknown:
-                case client::protocolManagerError::unsupported:     //this message should is not expected
-                case client::protocolManagerError::version: //this message should is not expected
-                case client::protocolManagerError::auth:    //this message should is not expected
+                case errCode::exception:    //there was an exception in the server
+                    throw ProtocolManagerException("Internal server error", protocolManagerError::internal);
+                case errCode::auth: //authentication error
+                case errCode::unexpected:   //unexpected message type
+                    throw ProtocolManagerException("Unexpected error code", protocolManagerError::unexpected);
                 default:
-                    throw ProtocolManagerException("Unknown server error", client::protocolManagerError::unknown, 0);
+                    throw ProtocolManagerException("Unknown server error", protocolManagerError::unknown);
             }
-            break;
-
-        case messages::ServerMessage_Type_VER:  //message not expected
+        case messages::ServerMessage_Type_VER:
+            throw ProtocolManagerException("Version not supported", protocolManagerError::version);
         default:
             //unrecognised message type
             std::cerr << "Unsupported message type" << std::endl;
-            throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported, 0);
+            throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported);
     }
 
+    //TODO maybe move this
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     serverMessage.Clear();
 }
 
+//TODO go on from this
 /**
  * function to use to know if the protocol manager can send a message (it has a list of messages waiting to receive their response)
  *
@@ -387,6 +391,122 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
     file.close();
 }
 
+void client::ProtocolManager::send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password){
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_AUTH);
+    clientMessage.set_username(username);
+    clientMessage.set_macaddress(macAddress);
+    clientMessage.set_password(password);
+    std::string client_temp = clientMessage.SerializeAsString();
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_QUIT(){
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_QUIT);
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_PROB(Directory_entry &e){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_PROB);
+    clientMessage.set_path(e.getRelativePath());
+    clientMessage.set_hash(e.getHash().get().first,
+                           e.getHash().get().second);
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_DELE(Directory_entry &e){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_DELE);
+    clientMessage.set_path(e.getRelativePath());
+    clientMessage.set_hash(e.getHash().get().first,
+                           e.getHash().get().second);
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_STOR(Directory_entry &e){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_STOR);
+    clientMessage.set_path(e.getRelativePath());
+    clientMessage.set_filesize(e.getSize());
+    clientMessage.set_lastwritetime(e.getLastWriteTime());
+    clientMessage.set_hash(e.getHash().get().first, e.getHash().get().second);
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_MKD(Directory_entry &e){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_MKD);
+    clientMessage.set_path(e.getRelativePath());
+    clientMessage.set_lastwritetime(e.getLastWriteTime());
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+void client::ProtocolManager::send_RMD(Directory_entry &e){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_RMD);
+    clientMessage.set_path(e.getRelativePath());
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
 /**
  * function used to compose a clientMessage from an event
  *
@@ -402,38 +522,24 @@ void client::ProtocolManager::composeMessage(Event &e) {
             case FileSystemStatus::created: //file created
                 std::cout << "File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
 
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_PROB);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
+                send_PROB(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //file deleted
                 std::cout << "File deleted: " << e.getElement().getAbsolutePath() << std::endl;
 
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_DELE);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
+                send_DELE(e.getElement());
                 break;
 
             case FileSystemStatus::modifySent: //modify message sent
             case FileSystemStatus::storeSent: //store message sent
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_STOR);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_filesize(e.getElement().getSize());
-                clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
-                clientMessage.set_hash(e.getElement().getHash().get().first,
-                                       e.getElement().getHash().get().second);
+                std::cout << "Sending file: " << e.getElement().getAbsolutePath() << std::endl;
+
+                send_STOR(e.getElement());
                 break;
 
             default:    //I should never arrive here
+                //TODO probably throw error
                 std::cerr << "Error! Unknown file status." << std::endl;
         }
     } else { //if the element is a directory
@@ -442,23 +548,17 @@ void client::ProtocolManager::composeMessage(Event &e) {
             case FileSystemStatus::created: //directory created
                 std::cout << "Directory created: " << e.getElement().getAbsolutePath() << std::endl;
 
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_MKD);
-                clientMessage.set_path(e.getElement().getRelativePath());
-                clientMessage.set_lastwritetime(e.getElement().getLastWriteTime());
+                send_MKD(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
                 std::cout << "Directory deleted: " << e.getElement().getAbsolutePath() << std::endl;
 
-                //create message
-                clientMessage.set_version(protocolVersion);
-                clientMessage.set_type(messages::ClientMessage_Type_RMD);
-                clientMessage.set_path(e.getElement().getRelativePath());
+                send_RMD(e.getElement());
                 break;
 
             default:    //I should never arrive here
+                //TODO probably throw error
                 std::cerr << "Error! Unknown file status." << std::endl;
         }
     }

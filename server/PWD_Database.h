@@ -43,8 +43,6 @@ namespace server {
      * Password Database class
      */
 
-    //TODO it needs to be thread safe in queries
-
     /**
      * class which represents a sqlite3 database (singleton)
      *
