@@ -15,7 +15,8 @@
 #include "ProtocolManager.h"
 
 #define VERSION 1
-#define SOCKET_TYPE socketType::TLS
+#define SOCKET_TYPE socketType::TCP
+#define CA_FILE_PATH "../../TLScerts/cacert.pem"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
@@ -87,9 +88,9 @@ int main(int argc, char **argv) {
     }
     catch (client::ConfigException &e) {
         if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
-            std::cout << e.what() << std::endl;
-            std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
-            std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
+            std::cout << "[WARNING]" << e.what() << std::endl;
+            std::cout << "[WARNING]" << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
+            std::cout << "[WARNING]" << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
         }
         else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
             std::cerr << e.what() << std::endl;
@@ -121,6 +122,8 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
+
+        Socket::specifyCertificates(CA_FILE_PATH);
 
         //for select
         fd_set read_fds;
@@ -239,7 +242,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         if (tries < config->getMaxConnectionRetries()) {
                             //error in connection; retry later; wait for x seconds
                             tries++;
-                            std::cout << "Connection error. Retry (" << tries << ") in "
+                            std::cerr << "Connection error. Retry (" << tries << ") in "
                                       << config->getSecondsBetweenReconnections() << " seconds." << std::endl;
                             std::this_thread::sleep_for(std::chrono::seconds(config->getSecondsBetweenReconnections()));
                             break;
@@ -325,9 +328,9 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (client::ConfigException &e) {
         if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
-            std::cout << e.what() << std::endl;
-            std::cout << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
-            std::cout << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
+            std::cout << "[WARNING]" << e.what() << std::endl;
+            std::cout << "[WARNING]" << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
+            std::cout << "[WARNING]" << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
         }
         else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
             std::cerr << e.what() << std::endl;

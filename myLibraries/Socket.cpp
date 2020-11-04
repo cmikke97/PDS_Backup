@@ -282,7 +282,7 @@ TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
     //extract ip address in readable form
     char address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &sockaddrIn.sin_addr, address, sizeof(address));     //get address
-    std::cout << "Server opened: available at [" << address << ":" << port << "]" << std::endl;
+    std::cout << "[INFO] Server opened: available at [" << address << ":" << port << "]" << std::endl;
 }
 
 /**
@@ -341,9 +341,9 @@ TLS_Socket::TLS_Socket() {
     if (ctx.get() == nullptr)
         throw SocketException("Error in initializing wolfSSL context",socketError::create); //throw exception in case of errors
 
-    if (wolfSSL_CTX_load_verify_locations(ctx.get(),CA_FILE_PATH,nullptr) != SSL_SUCCESS) { //load verify CA from the filesystem
+    if (wolfSSL_CTX_load_verify_locations(ctx.get(),Socket::ca_file_path.c_str(),nullptr) != SSL_SUCCESS) { //load verify CA from the filesystem
         std::stringstream errorMsg;
-        errorMsg << "Error loading " << CA_FILE_PATH << ", please check the file.";
+        errorMsg << "Error loading " << Socket::ca_file_path << ", please check the file.";
         throw SocketException(errorMsg.str(),socketError::create);  //throw exception in case of errors
     }
 
@@ -567,15 +567,15 @@ TLS_ServerSocket::TLS_ServerSocket(int port, int n) {
 
     wolfSSL_CTX_SetMinVersion(ctx.get(), WOLFSSL_TLSV1_2);  //set minimum TLS version supported by the server
 
-    if (wolfSSL_CTX_use_certificate_file(ctx.get(),CERTIFICATE_PATH, SSL_FILETYPE_PEM) != SSL_SUCCESS) {    //load the server certificate
+    if (wolfSSL_CTX_use_certificate_file(ctx.get(),ServerSocket::certificate_path.c_str(), SSL_FILETYPE_PEM) != SSL_SUCCESS) {    //load the server certificate
         std::stringstream errorMsg;
-        errorMsg << "Error loading " << CERTIFICATE_PATH << ", please check the file.";
+        errorMsg << "Error loading " << ServerSocket::certificate_path << ", please check the file.";
         throw SocketException(errorMsg.str(), socketError::create);   //throw exception if there are errors
     }
 
-    if (wolfSSL_CTX_use_PrivateKey_file(ctx.get(),PRIVATEKEY_PATH, SSL_FILETYPE_PEM) != SSL_SUCCESS) {  //load the server private key
+    if (wolfSSL_CTX_use_PrivateKey_file(ctx.get(),ServerSocket::privatekey_path.c_str(), SSL_FILETYPE_PEM) != SSL_SUCCESS) {  //load the server private key
         std::stringstream errorMsg;
-        errorMsg << "Error loading " << PRIVATEKEY_PATH << ", please check the file.";
+        errorMsg << "Error loading " << ServerSocket::privatekey_path << ", please check the file.";
         throw SocketException(errorMsg.str(), socketError::create);   //throw exception if there are errors
     }
 
@@ -625,6 +625,19 @@ TLS_ServerSocket::~TLS_ServerSocket() {
  * +-------------------------------------------------------------------------------------------------------------------+
  * socket class
  */
+
+std::string Socket::ca_file_path;
+
+/**
+ * static function to set the certificate path for the client socket (TLS)
+ *
+ * @param cacert path to the CA to check the certificate
+ *
+ * @author Michele Crepaldi s269551
+ */
+void Socket::specifyCertificates(const std::string &cacert){
+    ca_file_path = cacert;
+}
 
 /**
  * Socket constructor
@@ -755,6 +768,24 @@ std::string Socket::getMAC() {
  */
 void Socket::closeConnection() {
     socket->closeConnection();
+}
+
+std::string ServerSocket::certificate_path;
+std::string ServerSocket::privatekey_path;
+
+/**
+ * static function to set the certificates paths for the server socket (TLS)
+ *
+ * @param cert path to the server certificate
+ * @param prikey path to the server private key
+ * @param cacert path to the CA to check the certificate
+ *
+ * @author Michele Crepaldi s269551
+ */
+void ServerSocket::specifyCertificates(const std::string &cert, const std::string &prikey, const std::string &cacert){
+    certificate_path = cert;
+    privatekey_path = prikey;
+    Socket::specifyCertificates(cacert);
 }
 
 /**

@@ -19,11 +19,6 @@
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
 
-#define CERTIFICATE_PATH "../../TLScerts/server_cert.pem"
-#define PRIVATEKEY_PATH "../../TLScerts/server_pkey.pem"
-
-#define CA_FILE_PATH "../../TLScerts/cacert.pem"
-
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
  * Interfaces
@@ -249,6 +244,9 @@ class Socket {
     friend class ServerSocket;
 
 public:
+    static std::string ca_file_path;
+    static void specifyCertificates(const std::string &cacert);
+
     Socket(const Socket &) = delete;
     Socket& operator=(const Socket &) = delete;
     Socket() = default;
@@ -284,6 +282,9 @@ class ServerSocket : public Socket {
     std::unique_ptr<ServerSocketBridge> serverSocket;
 
 public:
+    static std::string certificate_path, privatekey_path;
+    static void specifyCertificates(const std::string &cert, const std::string &prikey, const std::string &cacert);
+
     explicit ServerSocket(int port, int n, socketType type);
     Socket accept(struct sockaddr_in* addr, unsigned long* len);
 };

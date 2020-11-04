@@ -50,7 +50,6 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
 
     //parse server response
     serverMessage.ParseFromString(server_temp);
-    //std::cout << serverMessage.type();
 
     int code;
     switch (serverMessage.type()) {
@@ -59,7 +58,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             code = serverMessage.code();
             switch(static_cast<client::okCode>(code)) {
                 case okCode::authenticated: //user authentication successful
-                    std::cout << "authenticated, code " << code << std::endl;
+                    std::cout << "[AUTH] Authenticated." << std::endl;
                     return;
                 case okCode::found: //probe file found the file
                 case okCode::created:   //file/directory create was successful
@@ -90,7 +89,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
-            std::cout << "Change version to: " << serverMessage.newversion() << std::endl;
+            std::cout << "[VER] Change version to: " << serverMessage.newversion() << std::endl;
             //for future use (not implemented now, to implement when a new version is written)
             //for now terminate the program
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
@@ -222,22 +221,20 @@ void client::ProtocolManager::receive() {
             //reset the tries variable (i popped a message)
             tries = 0;
 
-            std::cout << "Command for " << e.getElement().getAbsolutePath() << " has been execute in server: " << serverMessage.code() << std::endl;
-
             code = serverMessage.code();
 
             switch(static_cast<client::okCode>(code)) {
                 case okCode::found:     //probe file found the file
-                    std::cout << "Command successful: PROB of " << e.getElement().getRelativePath() << std::endl;
+                    std::cout << "[SUCCESS] Command successful: PROB of " << e.getElement().getRelativePath() << std::endl;
                     break;
 
                 case okCode::created:   //file/directory create was successful
-                    std::cout << "Command successful: STOR/MKD of " << e.getElement().getRelativePath() << std::endl;
+                    std::cout << "[SUCCESS] Command successful: STOR/MKD of " << e.getElement().getRelativePath() << std::endl;
                     break;
 
                 case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
                 case okCode::removed:   //file/directory remove was successful
-                    std::cout << "Command successful: DELE/RMD of " << e.getElement().getRelativePath() << std::endl;
+                    std::cout << "[SUCCESS] Command successful: DELE/RMD of " << e.getElement().getRelativePath() << std::endl;
                     break;
 
                 case okCode::authenticated: //user authentication successful
@@ -574,20 +571,20 @@ void client::ProtocolManager::composeMessage(Event &e) {
         switch (e.getStatus()) {
             case FileSystemStatus::modified: //file modified
             case FileSystemStatus::created: //file created
-                std::cout << "File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
+                std::cout << "[EVENT] File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
 
                 send_PROB(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //file deleted
-                std::cout << "File deleted: " << e.getElement().getAbsolutePath() << std::endl;
+                std::cout << "[EVENT] File deleted: " << e.getElement().getAbsolutePath() << std::endl;
 
                 send_DELE(e.getElement());
                 break;
 
             case FileSystemStatus::modifySent: //modify message sent
             case FileSystemStatus::storeSent: //store message sent
-                std::cout << "Sending file: " << e.getElement().getAbsolutePath() << std::endl;
+                std::cout << "[SENDING] Sending file: " << e.getElement().getAbsolutePath() << std::endl;
 
                 send_STOR(e.getElement());
                 break;
@@ -600,13 +597,13 @@ void client::ProtocolManager::composeMessage(Event &e) {
         switch (e.getStatus()) {
             case FileSystemStatus::modified: //directory modified
             case FileSystemStatus::created: //directory created
-                std::cout << "Directory created: " << e.getElement().getAbsolutePath() << std::endl;
+                std::cout << "[EVENT] Directory created: " << e.getElement().getAbsolutePath() << std::endl;
 
                 send_MKD(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
-                std::cout << "Directory deleted: " << e.getElement().getAbsolutePath() << std::endl;
+                std::cout << "[EVENT] Directory deleted: " << e.getElement().getAbsolutePath() << std::endl;
 
                 send_RMD(e.getElement());
                 break;

@@ -111,6 +111,8 @@ void server::ProtocolManager::probe() {
     Hash h = Hash(clientMessage.hash());
     clientMessage.Clear();
 
+    std::cout << "[PROB] - " << address << " (" << username << ") - " << path << std::endl;
+
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element
         send_SEND();
@@ -160,6 +162,8 @@ void server::ProtocolManager::storeFile(){
                              clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
     clientMessage.Clear();  //clear the client message
 
+    std::cout << "[STOR] - " << address << " (" << username << ") - " << expected.getRelativePath() << std::endl;
+
     //create a random temporary name for the file
     RandomNumberGenerator rng;
     std::string tmpFileName = "/" + rng.getHexString(tempNameSize) + ".tmp";
@@ -204,7 +208,6 @@ void server::ProtocolManager::storeFile(){
 
                 throw ProtocolManagerException("Unexpected message, DATA transfer was not done.", protocolManagerError::client);
             }
-
             loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
 
             std::string data = clientMessage.data();    //get the data from message
@@ -253,6 +256,7 @@ void server::ProtocolManager::storeFile(){
         }
 
         //TODO handle exception
+        std::cout << "[DATA] - " << address << " (" << username << ") - " << expected.getRelativePath() << std::endl;
 
         //the file has been created
         send_OK(okCode::created);
@@ -276,6 +280,8 @@ void server::ProtocolManager::removeFile(){
     const std::string path = clientMessage.path();
     Hash h{clientMessage.hash()};
     clientMessage.Clear();
+
+    std::cout << "[DELE] - " << address << " (" << username << ") - " << path << std::endl;
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
@@ -314,6 +320,8 @@ void server::ProtocolManager::makeDir(){
     const std::string path = clientMessage.path();
     const std::string lastWriteTime = clientMessage.lastwritetime();
     clientMessage.Clear();
+
+    std::cout << "[MKD] - " << address << " (" << username << ") - " << path << std::endl;
 
     //check if the folder already exists
     bool create = !std::filesystem::directory_entry(basePath + path).exists();
@@ -365,6 +373,8 @@ void server::ProtocolManager::makeDir(){
 void server::ProtocolManager::removeDir(){
     const std::string path = clientMessage.path();
     clientMessage.Clear();
+
+    std::cout << "[RMD] - " << address << " (" << username << ") - " << path << std::endl;
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
@@ -444,8 +454,9 @@ void server::ProtocolManager::quit(){
  *
  * @author Michele Crepaldi s269551
  */
-server::ProtocolManager::ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize) :
+server::ProtocolManager::ProtocolManager(Socket &s, const std::string &address, int ver, std::string basePath, std::string tempPath, int tempSize) :
     s(s),
+    address(address),
     protocolVersion(ver),
     basePath(std::move(basePath)),
     temporaryPath(std::move(tempPath)),
@@ -513,6 +524,8 @@ void server::ProtocolManager::authenticate() {
     std::stringstream tmp;
     tmp << basePath << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
     basePath = tmp.str();
+
+    std::cout << "[EVENT] - " << address << " - authenticated as " << username  << "@" << mac << std::endl;
 };
 
 /**
@@ -523,12 +536,51 @@ void server::ProtocolManager::authenticate() {
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::recoverFromDB() {
+    std::vector<Directory_entry> toUpdate, toDelete;
+
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
-    f = [this](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-        auto element = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
-        elements.insert({path, element}); //TODO check base path
+    f = [this, &toUpdate, &toDelete](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
+        auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
+
+        //check if the file exists in the server filesystem (if the server has a copy of it)
+        if(!std::filesystem::exists(current.getAbsolutePath())){
+            //if the element does not exist then add it to the elements to delete from db
+            toDelete.push_back(current);
+
+            //then return (we don't want to add it to the elements map)
+            return;
+        }
+
+        //the file exists, check if it corresponds to the one described by the database
+        auto el = Directory_entry(basePath, current.getAbsolutePath());
+
+        if(el.getType() != current.getType() || el.getSize() != current.getSize() ||
+            el.getLastWriteTime() != current.getLastWriteTime() || el.getHash() != current.getHash()){
+
+            //if there exists an element with the same name in the db but it is different from expected
+            toUpdate.push_back(el);
+
+            //then return (we don't want to add it to the elements map)
+            return;
+        }
+
+        //if the file exists and it is the same as described in the db add it to the elements map
+        elements.insert({path, current});
     };
+    //apply the function for all the user's (and mac) elements in the db
     db->forAll(username, mac, f);
+
+    //now update all the updated elements to db
+    for(auto el: toUpdate){
+        std::cerr << "[WARNING] Element " << el.getRelativePath() << " in " << basePath << " was modified offline!" << std::endl;
+        db->update(username, mac, el);
+    }
+
+    //delete all the deleted elements from db
+    for(auto el: toDelete){
+        std::cerr << "[WARNING] Element " << el.getRelativePath() << " in " << basePath << " was removed offline!" << std::endl;
+        db->remove(username, mac, el.getRelativePath());
+    }
 }
 
 /**
