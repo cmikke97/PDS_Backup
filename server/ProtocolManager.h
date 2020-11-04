@@ -53,7 +53,7 @@ namespace server {
         std::shared_ptr<PWD_Database> password_db;
         messages::ClientMessage clientMessage;
         messages::ServerMessage serverMessage;
-        std::string username, mac, basePath, temporaryPath;
+        std::string username, mac, basePath, temporaryPath, address;
         int tempNameSize, protocolVersion;
 
         std::unordered_map<std::string, Directory_entry> elements;
@@ -71,7 +71,7 @@ namespace server {
         //void quit();
 
     public:
-        explicit ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize);
+        explicit ProtocolManager(Socket &s, const std::string &address, int ver, std::string basePath, std::string tempPath, int tempSize);
         void recoverFromDB();
         void authenticate();
         void receive();
