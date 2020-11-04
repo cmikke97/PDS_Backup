@@ -264,9 +264,9 @@ std::string Directory_entry::get_time_from_file(){
         throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
 
     std::time_t tt = buf.st_mtime;  //get file last modified time
-    std::tm *gmt = std::localtime(&tt);
+    std::tm *gmt = std::localtime(&tt); //convert std::time_t to std::tm
     std::stringstream buffer;
-    buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M"); //convert it as a readable string
+    buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M"); //convert std::tm to a readable string
     return buffer.str();
 }
 

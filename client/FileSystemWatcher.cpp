@@ -80,8 +80,8 @@ void FileSystemWatcher::recoverFromDB(client::Database *db, const std::function<
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
     f = [this, action](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
         auto element = Directory_entry(path_to_watch, path, size, type, lastWriteTime, Hash(hash));
-        paths_.insert({path, element});
-        action(element, FileSystemStatus::created);
+        action(element, FileSystemStatus::modified);
+        paths_[element.getAbsolutePath()] = std::move(element);
     };
     db->forAll(f);
 }

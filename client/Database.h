@@ -15,6 +15,7 @@
 #include <utility>
 #include <mutex>
 #include "../myLibraries/Directory_entry.h"
+#include "../myLibraries/RandomNumberGenerator.h"
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -38,20 +39,31 @@ namespace client {
     template<class sqlite3Type>
     using UniquePtr = std::unique_ptr<sqlite3Type, DeleterOf<sqlite3Type>>;
 
-/*
- * +-------------------------------------------------------------------------------------------------------------------+
- * Database class
- */
+    /**
+     * databaseError class: it describes (enumerically) all the possible database errors
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class databaseError {
+        open, create, read, insert, update, remove, prepare, finalize
+    };
 
-/**
- * class which represents a sqlite3 database (singleton)
- *
- * @author Michele Crepaldi s269551
- */
+    /*
+     * +-------------------------------------------------------------------------------------------------------------------+
+     * Database class
+     */
+
+    /**
+     * class which represents a sqlite3 database (singleton)
+     *
+     * @author Michele Crepaldi s269551
+     */
     class Database {
         UniquePtr<sqlite3> db;
+        std::mutex access_mutex;
 
         void open(const std::string &path);
+        void handleSQLError(int rc, int check, std::string &&message, databaseError err);
 
     protected:
         explicit Database(std::string path);
@@ -87,25 +99,18 @@ namespace client {
         void update(Directory_entry &d);
     };
 
-/*
- * +-------------------------------------------------------------------------------------------------------------------+
- * DatabaseException class
- */
+    /*
+     * +-------------------------------------------------------------------------------------------------------------------+
+     * DatabaseException class
+     */
 
-/**
- * databaseError class: it describes (enumerically) all the possible database errors
- *
- * @author Michele Crepaldi s269551
- */
-    enum class databaseError {
-        open, create, prepare, read, insert, remove, update
-    };
 
-/**
- * exceptions for the database class
- *
- * @author Michele Crepaldi s269551
- */
+
+    /**
+     * exceptions for the database class
+     *
+     * @author Michele Crepaldi s269551
+     */
     class DatabaseException : public std::runtime_error {
         databaseError code;
     public:

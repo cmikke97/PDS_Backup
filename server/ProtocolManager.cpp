@@ -3,7 +3,7 @@
 //
 
 #include <fstream>
-#include <utility>
+#include <regex>
 #include "ProtocolManager.h"
 
 //TODO i will get these from config
@@ -163,7 +163,7 @@ void server::ProtocolManager::storeFile(){
             std::string message = s.recvString();
             clientMessage.ParseFromString(message);
 
-            if(clientMessage.version() != protocol_version){
+            if(clientMessage.version() != protocolVersion){
                 //send the version message
                 send_VER();
 
@@ -221,11 +221,22 @@ void server::ProtocolManager::storeFile(){
         //so move then it can be moved to the final destination
         std::filesystem::rename(temporaryPath + tmpFileName, expected.getAbsolutePath());
 
-        //add to the elements map
-        elements.emplace(expected.getRelativePath(), expected);
+        auto el = elements.find(expected.getRelativePath());
+        if(el == elements.end()) {
+            //add to the elements map
+            elements.emplace(expected.getRelativePath(), expected);
 
-        //add to db
-        db->insert(username, mac, expected);
+            //add to db
+            db->insert(username, mac, expected);
+        }
+        else{
+            //update the element in elements map
+            el->second = expected;
+
+            //update into db
+            db->update(username, mac, expected);
+        }
+
         //TODO handle exception
 
         //the file has been created
@@ -308,11 +319,21 @@ void server::ProtocolManager::makeDir(){
     //change last write time for the file
     newDir.set_time_to_file(lastWriteTime);
 
-    //add to the elements map
-    elements.emplace(newDir.getRelativePath(), newDir);
+    auto el = elements.find(path);
+    if(el == elements.end()) {
+        //add to the elements map
+        elements.emplace(newDir.getRelativePath(), newDir);
 
-    //add to db
-    db->insert(username, mac, newDir);
+        //add to db
+        db->insert(username, mac, newDir);
+    }
+    else{
+        //update the element in elements map
+        el->second = newDir;
+
+        //update into db
+        db->update(username, mac, newDir);
+    }
 
     //the directory has been created/modified
     send_OK(okCode::created);
@@ -448,8 +469,9 @@ void server::ProtocolManager::authenticate() {
         throw ProtocolManagerException("Message Error, not expected.",protocolManagerError::unknown);
     }
 
+    //set the base path
     std::stringstream tmp;
-    tmp << basePath << "/" << username << "_" << mac << "/";
+    tmp << basePath << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
     basePath = tmp.str();
 };
 

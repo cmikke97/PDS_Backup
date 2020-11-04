@@ -39,6 +39,15 @@ namespace server {
     template<class sqlite3Type>
     using UniquePtr = std::unique_ptr<sqlite3Type, DeleterOf<sqlite3Type>>;
 
+    /**
+     * databaseError class: it describes (enumerically) all the possible database errors
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class databaseError {
+        open, create, read, insert, update, remove, prepare, finalize
+    };
+
     /*
      * +-------------------------------------------------------------------------------------------------------------------+
      * Database class
@@ -54,6 +63,7 @@ namespace server {
         std::mutex access_mutex;
 
         void open(const std::string &path);
+        void handleSQLError(int rc, int check, std::string &&message, databaseError err);
 
     protected:
         explicit Database(std::string path);
@@ -83,15 +93,6 @@ namespace server {
      * +-------------------------------------------------------------------------------------------------------------------+
      * DatabaseException class
      */
-
-    /**
-     * databaseError class: it describes (enumerically) all the possible database errors
-     *
-     * @author Michele Crepaldi s269551
-     */
-    enum class databaseError {
-        open, create, read, insert, update, remove, prepare, finalize
-    };
 
     /**
      * exceptions for the database class
