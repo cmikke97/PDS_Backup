@@ -10,7 +10,6 @@
 #define PASSWORD_DATABASE_PATH "./serverfiles/passwordDB.sqlite"
 #define DATABASE_PATH "./serverfiles/serverDB.sqlite"
 
-#define MAXBUFFSIZE 1024
 
 /**
  * send an OK response to the client with a code
@@ -83,6 +82,22 @@ void server::ProtocolManager::send_VER(){
     serverMessage.Clear();  //send response message
     s.sendString(tmp);
 }
+
+/**
+ * send a QUIT response to the client
+ *
+ * @author Michele Crepaldi s269551
+ */
+ /*
+void server::ProtocolManager::send_QUIT(){
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_QUIT);
+
+    std::string tmp = serverMessage.SerializeAsString(); //crete string
+    serverMessage.Clear();  //send response message
+    s.sendString(tmp);
+}
+*/
 
 /**
  * function to probe the server elements map for the file got in clientMessage
@@ -278,11 +293,11 @@ void server::ProtocolManager::removeFile(){
     //remove the file
     std::filesystem::remove(el->second.getAbsolutePath());   //true if the file was removed, false if it did not exist
 
-    //remove the element from the elements map
-    elements.erase(el->second.getAbsolutePath());
-
     //remove element from db
     db->remove(username, mac, el->second.getRelativePath());
+
+    //remove the element from the elements map
+    elements.erase(el->second.getRelativePath());
 
     //the file has been removed
     send_OK(okCode::removed);
@@ -362,19 +377,37 @@ void server::ProtocolManager::removeDir(){
         //the element is not a directory! -> error
         send_ERR(errCode::notADir);    //send error message with cause
         throw ProtocolManagerException("Tried to remove something which is not a directory.", protocolManagerError::client);
-        return;
     }
 
     //remove the directory
-    std::filesystem::remove(el->second.getAbsolutePath()); //it throws an exception if the dir is not empty
+    //std::filesystem::remove(el->second.getAbsolutePath()); //it throws an exception if the dir is not empty
     //TODO descide if to use this instead which removes also subdirectories
     //int n_removed = std::filesystem::remove_all(el->second.getAbsolutePath());
+    std::filesystem::recursive_directory_iterator iter{el->second.getAbsolutePath()};
+    std::vector<Directory_entry> elementsToRemove;
+    for(auto i: iter){
+        //I save the elements in a vector before removing them in order to be sure to save them all
+        elementsToRemove.emplace_back(basePath, i);
+    }
+    for(auto i: elementsToRemove){
+        //if the element was already deleted by a previous call then this function returns 0,
+        //otherwise it returns the number of deleted elements; in any case I want to remove the elements
+        std::filesystem::remove_all(i.getAbsolutePath());
 
-    //remove the element from the elements map
-    elements.erase(el->second.getAbsolutePath());
+        //remove element from db
+        db->remove(username, mac, i.getRelativePath());
+
+        //remove the element from the elements map
+        elements.erase(i.getRelativePath());
+    }
+    //this next call should remove just 1 element (the original directory to remove)
+    std::filesystem::remove_all(el->second.getAbsolutePath());
 
     //remove element from db
     db->remove(username, mac, el->second.getRelativePath());
+
+    //remove the element from the elements map
+    elements.erase(el->second.getRelativePath());
 
     //the file has been removed
     send_OK(okCode::removed);
@@ -385,10 +418,17 @@ void server::ProtocolManager::removeDir(){
  *
  * @author Michele Crepaldi s269551
  */
+ /*
 void server::ProtocolManager::quit(){
+    send_QUIT();    //send a quit to the client
+
     s.closeConnection();    //close the connection with the client
+    std::cout << "Client " << address << " closed connection." << std::endl;
+
+    throw ProtocolManagerException("", protocolManagerError::quit);
     //TODO verify if something else is needed
 }
+  */
 
 /**
  * protocol manager constructor
@@ -540,11 +580,6 @@ void server::ProtocolManager::receive(){
             case messages::ClientMessage_Type_RMD:
 
                 removeDir();
-
-                break;
-            case messages::ClientMessage_Type_QUIT:
-
-                quit();
 
                 break;
             default:

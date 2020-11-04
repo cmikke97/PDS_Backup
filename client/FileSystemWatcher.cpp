@@ -59,7 +59,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
                 if (el.getLastWriteTime() != current.getLastWriteTime() || el.getType() != current.getType() ||
                         el.getSize() != current.getSize() || el.getHash() != current.getHash()) { //file modify
                     if (action(current, FileSystemStatus::modified))
-                        el = std::move(current);
+                        old->second = std::move(current);
                 }
             }
         }

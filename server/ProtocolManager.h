@@ -62,12 +62,13 @@ namespace server {
         void send_SEND();
         void send_ERR(errCode code);
         void send_VER();
+        //void send_QUIT();
         void probe();
         void storeFile();
         void removeFile();
         void makeDir();
         void removeDir();
-        void quit();
+        //void quit();
 
     public:
         explicit ProtocolManager(Socket &s, int ver, std::string basePath, std::string tempPath, int tempSize);

@@ -109,12 +109,14 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
  *
  * @author Michele Crepaldi s269551
  */
+ /*
 void client::ProtocolManager::quit() {
     //create message
     send_QUIT();
 
     //TODO decide if to get a message back or not
 }
+*/
 
 /**
  * function used to send a message relative to an event to the server
@@ -399,6 +401,7 @@ void client::ProtocolManager::send_AUTH(const std::string &username, const std::
  *
  * @author Michele Crepaldi s269551
  */
+ /*
 void client::ProtocolManager::send_QUIT(){
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_QUIT);
@@ -412,6 +415,7 @@ void client::ProtocolManager::send_QUIT(){
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     clientMessage.Clear();
 }
+*/
 
 /**
  * send the PROB message to the server
@@ -497,7 +501,7 @@ void client::ProtocolManager::send_STOR(Directory_entry &e){
  *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::send_DATA(char *buff, int len){
+void client::ProtocolManager::send_DATA(char *buff, uint64_t len){
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_DATA);
     clientMessage.set_data(buff, len);    //insert file block in message
