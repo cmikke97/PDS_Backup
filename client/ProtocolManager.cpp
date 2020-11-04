@@ -60,7 +60,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             switch(static_cast<client::okCode>(code)) {
                 case okCode::authenticated: //user authentication successful
                     std::cout << "authenticated, code " << code << std::endl;
-                    break;
+                    return;
                 case okCode::found: //probe file found the file
                 case okCode::created:   //file/directory create was successful
                 case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
@@ -101,7 +101,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    serverMessage.Clear();
+    //serverMessage.Clear();
 }
 
 /**
@@ -158,9 +158,6 @@ void client::ProtocolManager::receive() {
 
     //get the first event on the waiting list -> this is the message we received a response for
     Event e = waitingForResponse[start];
-
-    //clear the server message
-    serverMessage.Clear();
 
     //check version
     if(protocolVersion != serverMessage.version())
@@ -247,9 +244,11 @@ void client::ProtocolManager::receive() {
 
             }
 
-            if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified){
+            if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified ||
+                e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
+
                 //insert or update element in db
-                if(e.getStatus() == FileSystemStatus::created)
+                if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::storeSent)
                     db->insert(e.getElement()); //insert element into db
                 else
                     db->update(e.getElement()); //update element in db
@@ -352,40 +351,19 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
     //initialize variables
     std::ifstream file;
     std::filesystem::directory_entry element(path);
-    uint64_t fsz = element.file_size(), curr = 0;
+    uint64_t bytesRead;
     char buff[MAXBUFFSIZE];
 
     //open input file
     file.open(path, std::ios::in | std::ios::binary);
 
     if(file.is_open()){
-        //read file in MAXBUFFSIZE-wide blocks
-        while(file.read(buff, MAXBUFFSIZE)) {
-            auto bytesRead = file.gcount();
-            clientMessage.set_version(protocolVersion);
-            clientMessage.set_type(messages::ClientMessage_Type_DATA);
-            clientMessage.set_data(buff, bytesRead);    //insert file block in message
+        while(file.read(buff, MAXBUFFSIZE)) //read file in MAXBUFFSIZE-wide blocks
+            send_DATA(buff, file.gcount()); //send the block
 
-            //mark the last data block
-            if(curr + MAXBUFFSIZE >= fsz)
-                clientMessage.set_last(true);
+        clientMessage.set_last(true);   //mark the last data block
 
-            /*
-            //mark the last data block
-            if(file.gcount() != MAXBUFFSIZE)
-                clientMessage.set_last(true);
-            */
-
-            //send message
-            std::string client_message = clientMessage.SerializeAsString();
-            s.sendString(client_message);
-
-            //clear the message
-            clientMessage.Clear();
-
-            //update the # of bytes already sent
-            curr += bytesRead;
-        }
+        send_DATA(buff, file.gcount()); //send the last block
     }
     //TODO throw exception in case the file could not be opened
 
@@ -393,6 +371,15 @@ void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
     file.close();
 }
 
+/**
+ * send the AUTH message to the server
+ *
+ * @param username username of the user who wants to authenticate
+ * @param macAddress mac address of the client
+ * @param password password of the user who wants to authenticate
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password){
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_AUTH);
@@ -407,6 +394,11 @@ void client::ProtocolManager::send_AUTH(const std::string &username, const std::
     clientMessage.Clear();
 }
 
+/**
+ * send the QUIT message to the server
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_QUIT(){
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_QUIT);
@@ -421,6 +413,13 @@ void client::ProtocolManager::send_QUIT(){
     clientMessage.Clear();
 }
 
+/**
+ * send the PROB message to the server
+ *
+ * @param e Directory_entry to probe
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_PROB(Directory_entry &e){
     //create message
     clientMessage.set_version(protocolVersion);
@@ -439,6 +438,13 @@ void client::ProtocolManager::send_PROB(Directory_entry &e){
     clientMessage.Clear();
 }
 
+/**
+ * send the DELE message to the server
+ *
+ * @param e Directory_entry to delete
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_DELE(Directory_entry &e){
     //create message
     clientMessage.set_version(protocolVersion);
@@ -457,6 +463,13 @@ void client::ProtocolManager::send_DELE(Directory_entry &e){
     clientMessage.Clear();
 }
 
+/**
+ * send the STOR message to the server
+ *
+ * @param e Directory_entry to store
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_STOR(Directory_entry &e){
     //create message
     clientMessage.set_version(protocolVersion);
@@ -476,6 +489,34 @@ void client::ProtocolManager::send_STOR(Directory_entry &e){
     clientMessage.Clear();
 }
 
+/**
+ * send the STOR message to the server
+ *
+ * @param buff data to send
+ * @param len length of the data to send
+ *
+ * @author Michele Crepaldi s269551
+ */
+void client::ProtocolManager::send_DATA(char *buff, int len){
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_DATA);
+    clientMessage.set_data(buff, len);    //insert file block in message
+
+    //send message
+    std::string client_message = clientMessage.SerializeAsString();
+    s.sendString(client_message);
+
+    //clear the message
+    clientMessage.Clear();
+}
+
+/**
+ * send the MKD message to the server
+ *
+ * @param e Directory_entry to create
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_MKD(Directory_entry &e){
     //create message
     clientMessage.set_version(protocolVersion);
@@ -493,6 +534,13 @@ void client::ProtocolManager::send_MKD(Directory_entry &e){
     clientMessage.Clear();
 }
 
+/**
+ * send the RMD message to the server
+ *
+ * @param e Directory_entry to remove
+ *
+ * @author Michele Crepaldi s269551
+ */
 void client::ProtocolManager::send_RMD(Directory_entry &e){
     //create message
     clientMessage.set_version(protocolVersion);

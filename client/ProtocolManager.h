@@ -66,6 +66,7 @@ namespace client {
         void send_PROB(Directory_entry &e);
         void send_DELE(Directory_entry &e);
         void send_STOR(Directory_entry &e);
+        void send_DATA(char *buff, int len);
         void send_MKD(Directory_entry &e);
         void send_RMD(Directory_entry &e);
         void composeMessage(Event &e);

@@ -81,7 +81,6 @@ void server::PWD_Database::open(const std::string &path) {
 
     //if the db is new then create the table inside it and then exit (there are no users)
     if(create){
-        char *zErrMsg = nullptr;
         //Create SQL statement
         std::string sql = "CREATE TABLE passwords("
                           "id INTEGER,"
@@ -91,13 +90,12 @@ void server::PWD_Database::open(const std::string &path) {
                           "PRIMARY KEY(id AUTOINCREMENT));";
 
         //Execute SQL statement
-        rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, &zErrMsg);
+        rc = sqlite3_exec(db.get(), sql.c_str(), nullptr, nullptr, nullptr);
 
         //if there was an error in the table creation throw an exception
         if( rc != SQLITE_OK ){
             std::stringstream tmp;
-            tmp << "Cannot create table: " << zErrMsg;
-            sqlite3_free(zErrMsg);
+            tmp << "Cannot create table: " << sqlite3_errstr(rc) << "; " << sqlite3_errmsg(db.get());
             throw PWD_DatabaseException(tmp.str(), pwd_databaseError::create);
         }
 
@@ -112,7 +110,7 @@ void server::PWD_Database::open(const std::string &path) {
     //Create SQL statement
     std::string sql = "SELECT COUNT(*) FROM passwords";
     //Execute SQL statement
-    rc = sqlite3_exec(db.get(), sql.c_str(), countCallback, &count, &zErrMsg);
+    rc = sqlite3_exec(db.get(), sql.c_str(), countCallback, &count, nullptr);
     //in case of errors throw an exception
     if(rc) {
         std::stringstream tmp;
@@ -131,18 +129,16 @@ void server::PWD_Database::open(const std::string &path) {
  * @param rc code returned from the SQLite function
  * @param check code to check the returned code against
  * @param message eventual error message to print
- * @param zErrMsg error string returned from the SQLite function
  * @param err pwd_databaseError to insert into the exception
  *
  * @throw PWD_DatabaseException in case rc != check
  *
  * @author Michele Crepaldi s269551
  */
-void handleSQLError(int rc, int check, std::string &&message, char *zErrMsg, server::pwd_databaseError err){
+void server::PWD_Database::handleSQLError(int rc, int check, std::string &&message, pwd_databaseError err){
     if(rc != check) {
         std::stringstream tmp;
-        tmp << message << zErrMsg;
-        sqlite3_free(zErrMsg);
+        tmp << message << sqlite3_errstr(rc) << "; " << sqlite3_errmsg(db.get());
         throw server::PWD_DatabaseException(tmp.str(), err);
     }
 }
@@ -161,7 +157,6 @@ void handleSQLError(int rc, int check, std::string &&message, char *zErrMsg, ser
 std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username) {
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
-    char *zErrMsg = nullptr;
     int rc;
 
     //TODO convert from hex (in db) to byte string the salt and the hash
@@ -176,20 +171,20 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
 
     //Prepare SQL statement
     rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
-    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //Begin the transaction (will most likely increase performance)
-    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //bind parameters
     sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     bool done = false;
     //loop over table content
     while (!done) {
-        switch (sqlite3_step (stmt)) {
+        switch (rc = sqlite3_step (stmt)) {
             case SQLITE_ROW:    //in case of a row
                 //convert columns
                 saltHex = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
@@ -202,15 +197,15 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
 
             default:    //in any other case -> error (throw exception)
                 std::stringstream tmp;
-                tmp << "Cannot read table: " << zErrMsg;
-                sqlite3_free(zErrMsg);
+                tmp << "Cannot read table: " << sqlite3_errstr(rc) << "; " << sqlite3_errmsg(db.get());
+
                 throw PWD_DatabaseException(tmp.str(), pwd_databaseError::hash);
         }
     }
 
     //End the transaction.
-    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
 
@@ -218,9 +213,9 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
     //prepare the variable to collect info into and return
     std::pair<std::string, Hash> hashPair;
     //Execute SQL statement
-    int rc = sqlite3_exec(db.get(), sql.c_str(), hashCallback, &hashPair, &zErrMsg);
+    int rc = sqlite3_exec(db.get(), sql.c_str(), hashCallback, &hashPair, nullptr);
     //optionally sqlite3_errmsg(db.get()) instead of zErrMsg
-    handleSQLError(rc, SQLITE_OK, "Cannot read from database: ", zErrMsg, PWT_databaseError::read); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot read from database: ", PWT_databaseError::read); //if there was an error throw an exception
     return hashPair;
     */
     std::string salt = RandomNumberGenerator::hex_to_string(saltHex);
@@ -242,7 +237,6 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
     int rc;
-    char *zErrMsg = nullptr;
     RandomNumberGenerator rng;
     std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
     HashMaker hm{password};
@@ -262,27 +256,27 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
 
     //Prepare SQL statement
     rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
-    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //Begin the transaction (will most likely increase performance)
-    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //bind parameters
     sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
     sqlite3_bind_text(stmt,2,saltHex.c_str(),saltHex.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
     sqlite3_bind_text(stmt,3,hashHex.c_str(),hashHex.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     // Execute SQL statement
     rc = sqlite3_step(stmt);
-    handleSQLError(rc, SQLITE_DONE, "Cannot add user to password table: ", zErrMsg, pwd_databaseError::insert); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_DONE, "Cannot add user to password table: ", pwd_databaseError::insert); //if there was an error throw an exception
 
     //End the transaction.
-    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
 }
@@ -301,7 +295,6 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
     int rc;
-    char *zErrMsg = nullptr;
     RandomNumberGenerator rng;
     std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
     HashMaker hm{password};
@@ -321,27 +314,27 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
 
     //Prepare SQL statement
     rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
-    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //Begin the transaction (will most likely increase performance)
-    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //bind parameters
     sqlite3_bind_text(stmt,1,saltHex.c_str(),saltHex.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
     sqlite3_bind_text(stmt,2,hashHex.c_str(),hashHex.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
     sqlite3_bind_text(stmt,3,username.c_str(),username.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     // Execute SQL statement
     rc = sqlite3_step(stmt);
-    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", zErrMsg, pwd_databaseError::update); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", pwd_databaseError::update); //if there was an error throw an exception
 
     //End the transaction.
-    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
 }
@@ -360,7 +353,6 @@ void server::PWD_Database::removeUser(const std::string &username){
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
     int rc;
-    char *zErrMsg = nullptr;
     //statement handle
     sqlite3_stmt* stmt;
 
@@ -369,23 +361,23 @@ void server::PWD_Database::removeUser(const std::string &username){
 
     //Prepare SQL statement
     rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
-    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //Begin the transaction (will most likely increase performance)
-    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //bind parameter
     sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
-    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     // Execute SQL statement
     rc = sqlite3_step(stmt);
-    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", zErrMsg, pwd_databaseError::remove); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", pwd_databaseError::remove); //if there was an error throw an exception
 
     //End the transaction.
-    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", pwd_databaseError::finalize); //if there was an error throw an exception
 
     sqlite3_finalize(stmt);
 }
@@ -403,7 +395,6 @@ void server::PWD_Database::forAll(std::function<void (const std::string &)> &f) 
     std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
 
     int rc;
-    char *zErrMsg = nullptr;
     //statement handle
     sqlite3_stmt* stmt;
     //Create SQL statement
@@ -412,11 +403,11 @@ void server::PWD_Database::forAll(std::function<void (const std::string &)> &f) 
 
     //Prepare SQL statement
     rc = sqlite3_prepare(db.get(), sql.str().c_str(), -1, &stmt, nullptr);
-    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //Begin the transaction (will most likely increase performance)
-    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", zErrMsg, pwd_databaseError::prepare); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", pwd_databaseError::prepare); //if there was an error throw an exception
 
     //prepare some variables
     bool done = false;
@@ -424,7 +415,7 @@ void server::PWD_Database::forAll(std::function<void (const std::string &)> &f) 
 
     //loop over table content
     while (!done) {
-        switch (sqlite3_step (stmt)) {
+        switch (rc = sqlite3_step (stmt)) {
             case SQLITE_ROW:    //in case of a row
                 //convert columns
                 username = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
@@ -439,15 +430,14 @@ void server::PWD_Database::forAll(std::function<void (const std::string &)> &f) 
 
             default:    //in any other case -> error (throw exception)
                 std::stringstream tmp;
-                tmp << "Cannot read table: " << zErrMsg;
-                sqlite3_free(zErrMsg);
+                tmp << "Cannot read table: " << sqlite3_errstr(rc) << "; " << sqlite3_errmsg(db.get());
                 throw PWD_DatabaseException(tmp.str(), pwd_databaseError::read);
         }
     }
 
     //End the transaction.
-    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, &zErrMsg);
-    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", zErrMsg, pwd_databaseError::finalize); //if there was an error throw an exception
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", pwd_databaseError::finalize); //if there was an error throw an exception
 
     //finalize statement handle
     sqlite3_finalize(stmt);
