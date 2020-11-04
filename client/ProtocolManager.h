@@ -13,7 +13,8 @@
 #include "Config.h"
 
 #define CONFIG_FILE_PATH "../config.txt"
-#define MAXBUFFSIZE 1024
+//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that (keeping in mind that there are other fields in the message
+#define MAXBUFFSIZE 20480   //20KB
 
 namespace client {
 
@@ -62,11 +63,11 @@ namespace client {
         int tries, maxTries;
 
         void send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password);
-        void send_QUIT();
+        //void send_QUIT();
         void send_PROB(Directory_entry &e);
         void send_DELE(Directory_entry &e);
         void send_STOR(Directory_entry &e);
-        void send_DATA(char *buff, int len);
+        void send_DATA(char *buff, uint64_t len);
         void send_MKD(Directory_entry &e);
         void send_RMD(Directory_entry &e);
         void composeMessage(Event &e);
@@ -76,7 +77,7 @@ namespace client {
 
         void authenticate(const std::string &username, const std::string &password, const std::string &macAddress);
 
-        void quit();
+        //void quit();
 
         void send(Event &e);
 

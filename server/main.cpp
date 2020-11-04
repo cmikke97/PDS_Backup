@@ -17,17 +17,18 @@
 #define N_THREADS 8
 #define SOCKET_QUEUE_SIZE 10
 #define SELECT_TIMEOUT_SECONDS 5
-#define TIMEOUT_SECONDS 60
-#define PASSWORD_DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverfiles/passwordDB.sqlite"
-#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverfiles/serverDB.sqlite"
+#define TIMEOUT_SECONDS 600
+#define PASSWORD_DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverFiles/passwordDB.sqlite"
+#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverFiles/serverDB.sqlite"
 #define SERVER_PATH "C:/Users/michele/Desktop/server_folder"
 #define TEMP_PATH "C:/Users/michele/Desktop/server_folder/temp"
 #define TEMP_FILE_NAME_SIZE 8
 
 #define PORT 8081
+#define SOCKET_TYPE socketType::TLS
 //TODO put these constants into the config object
 
-void single_server(TSCircular_vector<Socket> &, std::atomic<bool> &, std::atomic<bool> &);
+void single_server(TSCircular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
 void displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
@@ -168,8 +169,9 @@ int main(int argc, char** argv) {
 
         if(start) { //start the server
             std::cout << "Starting service.." << std::endl;
-            ServerSocket server{PORT, LISTEN_QUEUE, socketType::TCP};   //initialize server socket with port
-            TSCircular_vector<Socket> sockets{SOCKET_QUEUE_SIZE};
+            ServerSocket server{PORT, LISTEN_QUEUE, SOCKET_TYPE};   //initialize server socket with port
+            TSCircular_vector<std::pair<std::string, Socket>> sockets{SOCKET_QUEUE_SIZE};
+            //TSCircular_vector<Socket> sockets{SOCKET_QUEUE_SIZE};
 
             std::atomic<bool> server_thread_stop = false, main_stop = false;   //atomic boolean to force the server threads to stop
             std::vector<std::thread> threads;
@@ -191,11 +193,10 @@ int main(int argc, char** argv) {
                 if(main_stop.load())
                     return 0;
 
-                sockets.push(std::move(s)); //push the socket into the socket queue
-
-                auto clientAddress = inet_ntoa(addr.sin_addr);  //obtain ip address of newly connected client
-                std::cout << "New connection from " << clientAddress << ":" << addr.sin_port
-                          << std::endl;  //print ip address and port of the newly connected client
+                std::stringstream tmp;
+                tmp << inet_ntoa(addr.sin_addr) << ":" << addr.sin_port; //obtain ip address of newly connected client
+                std::string clientAddress = tmp.str();
+                sockets.push(std::make_pair(std::move(clientAddress),std::move(s))); //push the socket into the socket queue
             }
         }
     }
@@ -251,9 +252,16 @@ int main(int argc, char** argv) {
     }
 }
 
-void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
+void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
     while(!thread_stop.load()){ //loop until we are told to stop
-        Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
+        //Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
+
+        auto pair = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
+
+        std::string address = pair.first;
+        Socket sock = std::move(pair.second);
+
+        std::cout << "New connection from " << address << std::endl;  //print ip address and port of the newly connected client
 
         //for select
         fd_set read_fds;
@@ -264,6 +272,7 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
         try{
             //authenticate the connected client
             pm.authenticate();
+            std::cout << "Client " << address << " authenticated." << std::endl;
             pm.recoverFromDB();
 
             while(loop && !thread_stop.load()) { //loop until we are told to stop
@@ -287,10 +296,13 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
                         break;
 
                     case 0:
+                        /*
                         timeWaited += SELECT_TIMEOUT_SECONDS;
 
-                        if (timeWaited >= TIMEOUT_SECONDS)   //if the time already waited is greater than TIMEOUT
+                        if (timeWaited >= TIMEOUT_SECONDS) {  //if the time already waited is greater than TIMEOUT
                             loop = false;      //then exit loop --> this will cause the current connection to be closed
+                            std::cout << "Disconnecting client " << address << std::endl;
+                        }*/
 
                         break;
 
@@ -341,6 +353,7 @@ void single_server(TSCircular_vector<Socket> &sockets, std::atomic<bool> &thread
             switch(e.getCode()){
                 case socketError::read: //error in reading from socket
                 case socketError::write:    //error in writing to socket
+                    std::cout << "Client " << address << " disconnected." << std::endl;
                     continue; //error in the current socket, continue with the next one
 
                 //added for completeness, will never be triggered in the server threads

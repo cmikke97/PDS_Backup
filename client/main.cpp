@@ -15,6 +15,7 @@
 #include "ProtocolManager.h"
 
 #define VERSION 1
+#define SOCKET_TYPE socketType::TLS
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
@@ -117,14 +118,9 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                  int server_port, const std::string &username, const std::string &password) {
 
     try {
-        //initialize socket
-        Socket client_socket(socketType::TCP);
 
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
-
-        //initialize protocol manager
-        client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
 
         //for select
         fd_set read_fds;
@@ -135,6 +131,12 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
         // this thread will loop until it will be told to stop
         while (!thread_stop.load()) {
+            //initialize socket
+            Socket client_socket(SOCKET_TYPE);
+
+            //initialize protocol manager
+            client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
+
             try {
 
                 //wait until there is at least one event in the event queue (blocking wait)
@@ -178,8 +180,6 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     //TODO check if it is still needed
                     if (thread_stop.load()) { //if thread_stop atomic boolean is true then close connection and return
-                        //quit connection
-                        pm.quit();
                         //close connection
                         client_socket.closeConnection();
                         return;
@@ -224,9 +224,6 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     }
 
                 }
-
-                //quit connection
-                pm.quit();
 
                 //close connection
                 client_socket.closeConnection();

@@ -165,7 +165,7 @@ ssize_t TCP_Socket::sendString(std::string &stringBuffer) const {
     ssize_t len = write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
     if(len < sizeof(uint32_t))
         throw SocketException("Cannot write to socket", socketError::write);    //if # of sent bytes is less than expected throw exception
-    return write(stringBuffer.c_str() ,stringBuffer.size() ,0); // Send the string data
+    return write(stringBuffer.data() ,stringBuffer.size() ,0); // Send the string data
 }
 
 /**
@@ -244,7 +244,7 @@ std::string TCP_Socket::getMAC() const {
  * @author Michele Crepaldi s269551
  */
 void TCP_Socket::closeConnection() {
-    if(sockfd != 0)     //if the socket is not already closed
+    if(sockfd != 0) //if the socket is not already closed
         close(sockfd);  //close it
 }
 
@@ -337,7 +337,7 @@ TLS_Socket::TLS_Socket(int sockfd, WOLFSSL *ssl) : sock(new TCP_Socket(sockfd)),
  */
 TLS_Socket::TLS_Socket() {
     wolfSSL_Init();     //init wolfSSL library
-    ctx = server::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_client_method()));     //crete wolfSSL context by using wolfTLS client method
+    ctx = tls_socket::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_client_method()));     //crete wolfSSL context by using wolfTLS client method
     if (ctx.get() == nullptr)
         throw SocketException("Error in initializing wolfSSL context",socketError::create); //throw exception in case of errors
 
@@ -381,11 +381,11 @@ TLS_Socket& TLS_Socket::operator=(TLS_Socket &&other) noexcept {
 
     if(ctx.get() != nullptr)    //if the context was set
         ctx.reset();    //reset (free) it
-    ctx = server::UniquePtr<WOLFSSL_CTX>(other.ctx.release());  //set the context to be what the other's context was
+    ctx = tls_socket::UniquePtr<WOLFSSL_CTX>(other.ctx.release());  //set the context to be what the other's context was
 
     if(ssl.get() != nullptr)    //if the ssl object was set
         ssl.reset();    //reset (free) it
-    ssl = server::UniquePtr<WOLFSSL>(other.ssl.release()); //set the ssl object to be what the other's ssl was
+    ssl = tls_socket::UniquePtr<WOLFSSL>(other.ssl.release()); //set the ssl object to be what the other's ssl was
     return *this;
 }
 
@@ -402,7 +402,7 @@ TLS_Socket& TLS_Socket::operator=(TLS_Socket &&other) noexcept {
 void TLS_Socket::connect(const std::string& addr, int port) {
     sock->connect(addr, port);
 
-    ssl = server::UniquePtr<WOLFSSL>(wolfSSL_new(ctx.get()));   //create a new wolfSSL object from the context
+    ssl = tls_socket::UniquePtr<WOLFSSL>(wolfSSL_new(ctx.get()));   //create a new wolfSSL object from the context
     if (ssl.get() == nullptr)
         throw SocketException("Error in creating wolfSSL ssl", socketError::connect); //throw exception in case of errors
 
@@ -561,7 +561,7 @@ TLS_Socket::~TLS_Socket() {
  * @author Michele Crepaldi s269551
  */
 TLS_ServerSocket::TLS_ServerSocket(int port, int n) {
-    ctx = server::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_server_method())); //create a new wolfSSL context using the wolfTLS server method
+    ctx = tls_socket::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_server_method())); //create a new wolfSSL context using the wolfTLS server method
     if (ctx.get() == nullptr)
         throw SocketException("Cannot create server wolfSSL context", socketError::create);   //throw exception if there are errors
 
@@ -601,7 +601,7 @@ TLS_ServerSocket::TLS_ServerSocket(int port, int n) {
 SocketBridge* TLS_ServerSocket::accept(struct sockaddr_in *addr, unsigned long *len) {
     auto s = serverSock->accept(addr, len); //accept tcp socket
 
-    auto ssl = server::UniquePtr<WOLFSSL>(wolfSSL_new(ctx.get()));  //create new wolfSSL from context
+    auto ssl = tls_socket::UniquePtr<WOLFSSL>(wolfSSL_new(ctx.get()));  //create new wolfSSL from context
     if (ssl == nullptr)
         throw SocketException("Cannot create new wolfSSL socket", socketError::accept);     //throw exception in case of errors
 

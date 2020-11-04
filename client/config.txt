@@ -4,7 +4,7 @@
 
 #-REQUIRED-
 path_to_watch = C:/Users/michele/Desktop/programmazione_di_sistema_backup
-database_path = C:/Users/michele/CLionProjects/PDS_Backup/client/clientDB/clientDB.sqlite
+database_path = C:/Users/michele/CLionProjects/PDS_Backup/client/clientFiles/clientDB.sqlite
 
 millis_filesystem_watcher = 5000
 event_queue_size = 20
@@ -13,7 +13,7 @@ seconds_between_reconnections = 10
 max_connection_retries = 5
 max_server_error_retries = 5
 max_auth_error_retries = 5
-timeout_seconds = 300
+timeout_seconds = 20
 select_timeout_seconds = 5
 max_response_waiting = 1024
 

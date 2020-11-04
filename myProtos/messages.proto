@@ -26,7 +26,6 @@ message ClientMessage{
     RMD = 5;    //has version, type, path
     DATA = 6;   //has version, type, data, last
     AUTH = 7;   //has version, type, username, mac, password
-    QUIT = 8;   //has version, type
   }
 }
 

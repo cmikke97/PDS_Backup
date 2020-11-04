@@ -19,10 +19,10 @@
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
 
-#define CERTIFICATE_PATH "./TLScerts/server_cert.pem"
-#define PRIVATEKEY_PATH "./TLScerts/server_pkey.pem"
+#define CERTIFICATE_PATH "../../TLScerts/server_cert.pem"
+#define PRIVATEKEY_PATH "../../TLScerts/server_pkey.pem"
 
-#define CA_FILE_PATH "./TLScerts/cacert.pem"
+#define CA_FILE_PATH "../../TLScerts/cacert.pem"
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -139,7 +139,7 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-namespace server {
+namespace tls_socket {
     template<class T>
     struct DeleterOf;
 
@@ -171,8 +171,8 @@ namespace server {
  */
 class TLS_Socket : public virtual SocketBridge {
     std::unique_ptr<TCP_Socket> sock;
-    server::UniquePtr<WOLFSSL_CTX> ctx;
-    server::UniquePtr<WOLFSSL> ssl;
+    tls_socket::UniquePtr<WOLFSSL_CTX> ctx;
+    tls_socket::UniquePtr<WOLFSSL> ssl;
 
     explicit TLS_Socket(int sockfd, WOLFSSL *ssl);
     friend class TLS_ServerSocket;
@@ -338,41 +338,5 @@ public:
         return code;
     }
 };
-
-
-/*
- * mi potrebbe servire
- */
-/*
-void Socket::recvFile(const std::filesystem::path& path, uintmax_t expectedFileSize, int options) {
-    //initialize variables
-    std::ofstream file;
-    std::filesystem::directory_entry element(path);
-    char buff[MAXBUFFSIZE];
-    uintmax_t totalBytesReceived = 0;
-    int justReceived;
-
-    //open output file
-    file.open(path, std::ios::out | std::ios::binary);
-
-    if(file.is_open()){
-        //receive file in MAXBUFFSIZE-wide blocks
-        do{
-            justReceived = this->read(buff, MAXBUFFSIZE, options);
-
-            //write block to file and update total amount of bytes received
-            totalBytesReceived += justReceived;
-            file.write(buff, justReceived);
-        }
-        while(justReceived == MAXBUFFSIZE);
-    }
-
-    //close the output file
-    file.close();
-
-    //check total amout of bytes received against expected file size
-    if(totalBytesReceived != expectedFileSize)
-        throw std::runtime_error("received less bytes than expectedFileSize"); //if they are different then throw an exception
-}*/
 
 #endif //CLIENT_SOCKET_H
