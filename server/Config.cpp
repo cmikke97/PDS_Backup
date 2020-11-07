@@ -14,7 +14,7 @@
 #define N_THREADS 4     //Number of single server threads (apart from the accepting thread)
 #define SOCKET_QUEUE_SIZE 10    //Maximum socket queue size
 #define SELECT_TIMEOUT_SECONDS 5    //Seconds the client will wait between 2 selects on the socket
-#define TIMEOUT_SECONDS 120     //Seconds the server will wait before disconnecting client
+#define TIMEOUT_SECONDS 60     //Seconds the server will wait before disconnecting client
 #define PASSWORD_DATABASE_PATH "../serverFiles/passwordDB.sqlite" //Password database path
 #define DATABASE_PATH "../serverFiles/serverDB.sqlite"    //Server Databse path
 #define SERVER_PATH "C:/Users/michele/Desktop/server_folder"    //Server base path

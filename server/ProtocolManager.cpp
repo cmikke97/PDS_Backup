@@ -244,6 +244,9 @@ void server::ProtocolManager::storeFile(){
             throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::client);
         }
 
+        std::cout << expected.getAbsolutePath() << std::endl;
+        std::cout << std::filesystem::path(expected.getAbsolutePath()).parent_path() << std::endl;
+        std::cout << std::filesystem::path(expected.getAbsolutePath()).parent_path().parent_path() << std::endl;
         //get the parent path
         auto parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path().parent_path();
 
