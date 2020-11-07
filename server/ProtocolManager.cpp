@@ -2,12 +2,6 @@
 // Created by michele on 21/10/2020.
 //
 
-#if defined(__CYGWIN__)
-    #define PLATFORM_NAME "windows" // Windows (Cygwin POSIX under Microsoft Window)
-#elif defined(__linux__)
-    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
-#endif
-
 #include <fstream>
 #include <regex>
 #include "ProtocolManager.h"
