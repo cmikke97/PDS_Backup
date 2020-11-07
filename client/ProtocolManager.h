@@ -8,13 +8,12 @@
 
 #include <string>
 #include <messages.pb.h>
+#include <cmath>
 #include "../myLibraries/Socket.h"
 #include "../Event.h"
 #include "Config.h"
 
 #define CONFIG_FILE_PATH "../config.txt"
-//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that (keeping in mind that there are other fields in the message
-#define MAXBUFFSIZE 20480   //20KB
 
 namespace client {
 
@@ -59,8 +58,8 @@ namespace client {
         std::string path_to_watch;
 
         std::vector<Event> waitingForResponse{};
-        int start, end, size, protocolVersion;
-        int tries, maxTries;
+        int start, end, size;
+        int protocolVersion, tries, maxTries, max_data_chunk_size;
 
         void send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password);
         //void send_QUIT();
@@ -79,6 +78,10 @@ namespace client {
 
         //void quit();
 
+        int waitingForResponses() const;
+
+        bool isWaiting() const;
+
         void send(Event &e);
 
         void receive();
@@ -87,7 +90,7 @@ namespace client {
 
         void recoverFromError();
 
-        void sendFile(const std::filesystem::path &path);
+        void sendFile(Directory_entry &element);
     };
 
     /**

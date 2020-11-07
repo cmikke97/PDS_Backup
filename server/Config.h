@@ -14,26 +14,26 @@
  * Config class
  */
 
-namespace client {
+namespace server {
     /**
      * Config class; used to retrive the configuration for the execution of the program from file (singleton)
      *
      * @author Michele Crepaldi s269551
      */
     class Config {
-        std::string path_to_watch;
-        std::string database_path;
+        std::string password_database_path;
+        std::string server_database_path;
+        std::string server_base_path;
+        std::string temp_path;
+        std::string certificate_path;
+        std::string private_key_path;
         std::string ca_file_path;
-        int millis_filesystem_watcher{};
-        int event_queue_size{};
-        int seconds_between_reconnections{};
-        int max_connection_retries{};
-        int max_server_error_retries{};
-        int max_auth_error_retries{};
-        int timeout_seconds{};
+        int listen_queue{};
+        int n_threads{};
+        int socket_queue_size{};
         int select_timeout_seconds{};
-        int max_response_waiting{};
-        int max_data_chunk_size{};
+        int timeout_seconds{};
+        int tmp_file_name_size{};
 
         void load(const std::string &configFilePath);
 
@@ -53,31 +53,31 @@ namespace client {
 
         static std::shared_ptr<Config> getInstance(const std::string &path);
 
-        std::string& getPathToWatch();
+        const std::string &getPasswordDatabasePath();
 
-        std::string& getDatabasePath();
+        const std::string &getServerDatabasePath();
 
-        std::string& getCAFilePath();
+        const std::string &getServerBasePath();
 
-        int getMillisFilesystemWatcher();
+        const std::string &getTempPath();
 
-        int getEventQueueSize();
+        const std::string &getCertificatePath();
 
-        int getSecondsBetweenReconnections();
+        const std::string &getPrivateKeyPath();
 
-        int getMaxConnectionRetries();
+        const std::string &getCaFilePath();
 
-        int getMaxServerErrorRetries();
+        int getListenQueue();
 
-        int getMaxAuthErrorRetries();
+        int getNThreads();
 
-        int getTimeoutSeconds();
+        int getSocketQueueSize();
 
         int getSelectTimeoutSeconds();
 
-        int getMaxResponseWaiting();
+        int getTimeoutSeconds();
 
-        int getMaxDataChunkSize();
+        int getTmpFileNameSize();
     };
 
     /*
@@ -91,7 +91,7 @@ namespace client {
      * @author Michele Crepaldi s269551
      */
     enum class configError {
-        open, fileCreated, pathToWatch
+        open, fileCreated
     };
 
     /**

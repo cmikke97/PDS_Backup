@@ -3,9 +3,8 @@
 //
 
 #include <fstream>
-#include <utility>
 #include "ProtocolManager.h"
-#include "../server/ProtocolManager.h"
+#include "../myLibraries/TS_Message.h"
 
 
 /**
@@ -23,6 +22,7 @@ client::ProtocolManager::ProtocolManager(Socket &s, int max, int ver, int maxTri
     auto config = Config::getInstance(CONFIG_FILE_PATH);
     waitingForResponse.resize(size+1);
     db = Database::getInstance(config->getDatabasePath());
+    max_data_chunk_size = config->getMaxDataChunkSize();
 }
 
 /**
@@ -58,7 +58,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             code = serverMessage.code();
             switch(static_cast<client::okCode>(code)) {
                 case okCode::authenticated: //user authentication successful
-                    std::cout << "[AUTH] Authenticated." << std::endl;
+                    TS_Message::print(std::cout, "AUTH", "Authenticated", "");
                     return;
                 case okCode::found: //probe file found the file
                 case okCode::created:   //file/directory create was successful
@@ -89,18 +89,40 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
-            std::cout << "[VER] Change version to: " << serverMessage.newversion() << std::endl;
+            TS_Message::print(std::cout, "VER", "Change version to", std::to_string(serverMessage.newversion()));
             //for future use (not implemented now, to implement when a new version is written)
             //for now terminate the program
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
 
         default: //i should never arrive here
-            std::cerr << "Unsupported message type" << std::endl;
+            TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
             throw ProtocolManagerException("Unsupported message type error", protocolManagerError::unsupported);
     }
 
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     //serverMessage.Clear();
+}
+
+/**
+ * function to get the number of messages waiting for a server response
+ *
+ * @return # of messages waiting for a response
+ *
+ * @author Michele Crepaldi s269551
+ */
+int client::ProtocolManager::waitingForResponses() const{
+    return (size + end - start) % size;
+}
+
+/**
+ * function to know if the Protocol Manager is waiting for server responses or not
+ *
+ * @return whether the Protocol Manager is waiting for server responses or not
+ *
+ * @author Michele Crepaldi s269551
+ */
+bool client::ProtocolManager::isWaiting() const{
+    return start != end;
 }
 
 /**
@@ -128,7 +150,7 @@ void client::ProtocolManager::quit() {
  */
 void client::ProtocolManager::send(Event &e) {
     if (!e.getElement().is_regular_file() && !e.getElement().is_directory()) {  //if it is not a file nor a directory then return
-        std::cerr << "change to an unsupported type." << std::endl;
+        TS_Message::print(std::cerr, "WARNING", "Change to an unsupported type", e.getElement().getRelativePath());
         return;
     }
 
@@ -184,11 +206,13 @@ void client::ProtocolManager::receive() {
                 //reset the tries variable (i popped a message)
                 tries = 0;
 
+                /* TODO evaluate if to leave this here or to leave it in the file send
                 //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
                 //then it means that the file was deleted or modified --> I can't send it anymore
                 std::filesystem::path ap = e.getElement().getAbsolutePath();
                 if(!std::filesystem::directory_entry(ap).exists() || Directory_entry(path_to_watch, ap).getHash() != e.getElement().getHash())
                     break;
+                */
 
                 //otherwise send file
 
@@ -207,12 +231,12 @@ void client::ProtocolManager::receive() {
                 waitingForResponse[end] = std::move(tmp);
                 end = (end+1)%size;
 
-                sendFile(e.getElement().getAbsolutePath());
+                sendFile(e.getElement());
                 break;
             }
             //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
             //TODO throw exception
-            std::cerr << "protocol error" << std::endl;
+            TS_Message::print(std::cerr, "ERROR", "protocol error", "");
             break;
         case messages::ServerMessage_Type_OK:
             //if(start != end) this condition is true if I receive something
@@ -225,16 +249,16 @@ void client::ProtocolManager::receive() {
 
             switch(static_cast<client::okCode>(code)) {
                 case okCode::found:     //probe file found the file
-                    std::cout << "[SUCCESS] Command successful: PROB of " << e.getElement().getRelativePath() << std::endl;
+                    TS_Message::print(std::cout, "SUCCESS", "PROB", e.getElement().getRelativePath());
                     break;
 
                 case okCode::created:   //file/directory create was successful
-                    std::cout << "[SUCCESS] Command successful: STOR/MKD of " << e.getElement().getRelativePath() << std::endl;
+                    TS_Message::print(std::cout, "SUCCESS", "STOR/MKD", e.getElement().getRelativePath());
                     break;
 
                 case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
                 case okCode::removed:   //file/directory remove was successful
-                    std::cout << "[SUCCESS] Command successful: DELE/RMD of " << e.getElement().getRelativePath() << std::endl;
+                    TS_Message::print(std::cout, "SUCCESS", "DELE/RMD", e.getElement().getRelativePath());
                     break;
 
                 case okCode::authenticated: //user authentication successful
@@ -260,7 +284,6 @@ void client::ProtocolManager::receive() {
         case messages::ServerMessage_Type_ERR:
             //retrieve error code
             code = serverMessage.code();
-            std::cerr << "Error: code " << code << std::endl;
 
             //based on error code handle it
             switch(static_cast<client::errCode>(code)){
@@ -274,6 +297,8 @@ void client::ProtocolManager::receive() {
                     if(tries > maxTries)
                         throw ProtocolManagerException("Error from sent message", protocolManagerError::client);
 
+                    TS_Message::print(std::cerr, "WARNING", "Message error", "Will now retry");
+
                     //otherwise try to recover from the error
                     recoverFromError();
                     break;
@@ -286,11 +311,12 @@ void client::ProtocolManager::receive() {
                 default:
                     throw ProtocolManagerException("Unknown server error", protocolManagerError::unknown);
             }
+            break;
         case messages::ServerMessage_Type_VER:
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
         default:
             //unrecognised message type
-            std::cerr << "Unsupported message type" << std::endl;
+            TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
             throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported);
     }
 
@@ -333,7 +359,7 @@ void client::ProtocolManager::recoverFromError() {
         composeMessage(e);
 
         if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
-            sendFile(e.getElement().getAbsolutePath()); //send the actual file
+            sendFile(e.getElement()); //send the actual file
         }
     }
 }
@@ -346,25 +372,47 @@ void client::ProtocolManager::recoverFromError() {
  *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::sendFile(const std::filesystem::path& path) {
+void client::ProtocolManager::sendFile(Directory_entry &element) {
     //initialize variables
     std::ifstream file;
-    std::filesystem::directory_entry element(path);
-    uint64_t bytesRead;
-    char buff[MAXBUFFSIZE];
+    char buff[max_data_chunk_size];
+
+    //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
+    //then it means that the file was deleted or modified --> I can't send it anymore
+    Directory_entry effective{path_to_watch, element.getAbsolutePath()};
+    if(!effective.exists() || effective.getHash() != element.getHash())
+        throw ProtocolManagerException("File not present anymore", protocolManagerError::client);
 
     //open input file
-    file.open(path, std::ios::in | std::ios::binary);
+    file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);
 
     if(file.is_open()){
-        while(file.read(buff, MAXBUFFSIZE)) //read file in MAXBUFFSIZE-wide blocks
+        int64_t totRead = 0;
+        TS_Message message{"SENDING", "Sending file:", element.getRelativePath()};
+        std::cout << message;
+
+        while(file.read(buff, max_data_chunk_size)) { //read file in max_data_chunk_size-wide blocks
+            totRead += file.gcount();
             send_DATA(buff, file.gcount()); //send the block
+            message.update(std::floor((float)100.0 * totRead/element.getSize()));
+            std::cout << message;
+        }
 
         clientMessage.set_last(true);   //mark the last data block
 
-        send_DATA(buff, file.gcount()); //send the last block
+        totRead += file.gcount();
+        send_DATA(buff, file.gcount()); //send the block
+        if(totRead != 0)
+        {
+            message.update(std::floor((float)100.0 * totRead / element.getSize()));
+        }
+        else
+            message.update(100);
+
+        std::cout << message << std::endl;
     }
-    //TODO throw exception in case the file could not be opened
+    else
+        throw ProtocolManagerException("Could not open file", protocolManagerError::client);
 
     //close the input file
     file.close();
@@ -571,46 +619,46 @@ void client::ProtocolManager::composeMessage(Event &e) {
         switch (e.getStatus()) {
             case FileSystemStatus::modified: //file modified
             case FileSystemStatus::created: //file created
-                std::cout << "[EVENT] File created/modified: " << e.getElement().getAbsolutePath() << std::endl;
+                TS_Message::print(std::cout, "EVENT", "File created/modified", e.getElement().getRelativePath());
 
                 send_PROB(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //file deleted
-                std::cout << "[EVENT] File deleted: " << e.getElement().getAbsolutePath() << std::endl;
+                TS_Message::print(std::cout, "EVENT", "File deleted", e.getElement().getRelativePath());
 
                 send_DELE(e.getElement());
                 break;
 
             case FileSystemStatus::modifySent: //modify message sent
             case FileSystemStatus::storeSent: //store message sent
-                std::cout << "[SENDING] Sending file: " << e.getElement().getAbsolutePath() << std::endl;
+                //TS_Message::print(std::cout, "SENDING", "Sending file", e.getElement().getRelativePath());
 
                 send_STOR(e.getElement());
                 break;
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                std::cerr << "Error! Unknown file status." << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "Unknown file status.", "");
         }
     } else { //if the element is a directory
         switch (e.getStatus()) {
             case FileSystemStatus::modified: //directory modified
             case FileSystemStatus::created: //directory created
-                std::cout << "[EVENT] Directory created: " << e.getElement().getAbsolutePath() << std::endl;
+                TS_Message::print(std::cout, "EVENT", "Directory created/modified", e.getElement().getRelativePath());
 
                 send_MKD(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
-                std::cout << "[EVENT] Directory deleted: " << e.getElement().getAbsolutePath() << std::endl;
+                TS_Message::print(std::cout, "EVENT", "Directory deleted", e.getElement().getRelativePath());
 
                 send_RMD(e.getElement());
                 break;
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                std::cerr << "Error! Unknown file status." << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "Unknown file status.", "");
         }
     }
 }

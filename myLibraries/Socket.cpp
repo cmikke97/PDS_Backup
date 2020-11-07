@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <fstream>
 #include "Socket.h"
+#include "../myLibraries/TS_Message.h"
+
+SocketBridge::~SocketBridge()= default;
+ServerSocketBridge::~ServerSocketBridge()= default;
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -95,10 +99,22 @@ void TCP_Socket::connect(const std::string& addr, int port) {
  * @author Michele Crepaldi s269551
  */
 ssize_t TCP_Socket::read(char *buffer, size_t len, int options) const {
-    ssize_t res = recv(sockfd, buffer, len, options);   //receive len bytes from the socket and put it into buffer
-    if(res < 0)
-        throw SocketException("Cannot read from socket", socketError::read);    //if # of bytes read is < 0 throw exception
-    return res;
+    char *ptr = buffer;
+    int64_t numRec, rec;
+
+    while(len > 0){
+        numRec = recv(sockfd, ptr, len, options);   //receive len bytes from the socket and put it into buffer
+        if(numRec < 0)
+            throw SocketException("Cannot read from socket", socketError::read);    //if # of bytes read is < 0 throw exception
+
+        if(numRec == 0)
+            throw SocketException("Socket closed", socketError::closed);    //if # of bytes read is == 0 the socket was closed from the other party, so throw exception
+
+        ptr += numRec;
+        len -= numRec;
+        rec += numRec;
+    }
+    return rec;
 }
 
 /**
@@ -113,7 +129,7 @@ ssize_t TCP_Socket::read(char *buffer, size_t len, int options) const {
 std::string TCP_Socket::recvString() const {
     std::string stringBuffer;
     uint32_t dataLength;
-    ssize_t len = read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), 0); // Receive the message length
+    int64_t len = read(reinterpret_cast<char *>(&dataLength), sizeof(uint32_t), 0); // Receive the message length
     if(len < sizeof(uint32_t))
         throw SocketException("Cannot read from socket", socketError::read);    //if # of received bytes is less than expected throw exception
 
@@ -144,10 +160,18 @@ std::string TCP_Socket::recvString() const {
  *
  */
 ssize_t TCP_Socket::write(const char *buffer, size_t len, int options) const {
-    ssize_t res = send(sockfd, buffer, len, options);   //send buffer through TCP socket
-    if(res < 0)
-        throw SocketException("Cannot write to socket", socketError::write);    //if # of sent bytes is < 0 throw exception
-    return res;
+    const char *ptr = (const char*)buffer;
+    size_t numSent, sent;
+    while(len > 0){
+        numSent = send(sockfd, ptr, len, options);   //send buffer through TCP socket
+        if(numSent < 0)
+            throw SocketException("Cannot write to socket", socketError::write);    //if # of sent bytes is < 0 throw exception
+
+        ptr += numSent; //update the pointer to data
+        len -= numSent; //update number of bytes left to send
+        sent += numSent;    //update total number of bytes sent
+    }
+    return sent;
 }
 
 /**
@@ -160,12 +184,13 @@ ssize_t TCP_Socket::write(const char *buffer, size_t len, int options) const {
  * @author Michele Crepaldi s269551
 */
 ssize_t TCP_Socket::sendString(std::string &stringBuffer) const {
-    uint32_t dataLength = htonl(stringBuffer.size()); // Ensure network byte order when sending the data length
+    uint32_t size = stringBuffer.size();
+    uint32_t dataLength = htonl(size); // Ensure network byte order when sending the data length
 
     ssize_t len = write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
     if(len < sizeof(uint32_t))
         throw SocketException("Cannot write to socket", socketError::write);    //if # of sent bytes is less than expected throw exception
-    return write(stringBuffer.data() ,stringBuffer.size() ,0); // Send the string data
+    return write(stringBuffer.data() ,stringBuffer.size() ,0); // Send the string data;
 }
 
 /**
@@ -282,7 +307,7 @@ TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
     //extract ip address in readable form
     char address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &sockaddrIn.sin_addr, address, sizeof(address));     //get address
-    std::cout << "[INFO] Server opened: available at [" << address << ":" << port << "]" << std::endl;
+    TS_Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(address) + ":" + std::to_string(port) + "]");
 }
 
 /**
@@ -810,6 +835,17 @@ ServerSocket::ServerSocket(int port, int n, socketType type) : Socket(type) {
         default:
             throw SocketException("Undefined server socket type",socketError::create);
     }
+}
+
+ServerSocket::ServerSocket(ServerSocket &&other) noexcept : serverSocket(other.serverSocket.release()) {
+}
+
+ServerSocket& ServerSocket::operator=(ServerSocket &&source) noexcept {
+    if(serverSocket != nullptr)
+        serverSocket.reset();
+
+    serverSocket = std::unique_ptr<ServerSocketBridge>(source.serverSocket.release());
+    return *this;
 }
 
 /**

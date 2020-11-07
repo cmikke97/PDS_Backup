@@ -122,7 +122,7 @@ void client::Database::handleSQLError(int rc, int check, std::string &&message, 
  * @author Michele Crepaldi s269551
  */
 void client::Database::forAll(std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> &f) {
-    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+    std::unique_lock lock(access_mutex); //ensure thread safeness
 
     int rc;
     //statement handle
@@ -203,7 +203,7 @@ std::string quotesql( const std::string& s ) {
  * @author Michele Crepaldi s269551
  */
 void client::Database::insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
-    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+    std::unique_lock lock(access_mutex); //ensure thread safeness
 
     int rc;
     std::string hashHex = RandomNumberGenerator::string_to_hex(hash);   //convert hash to hexadecimal representation (to store it)
@@ -273,7 +273,7 @@ void client::Database::insert(Directory_entry &d) {
  * @author Michele Crepaldi s269551
  */
 void client::Database::remove(const std::string &path) {
-    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+    std::unique_lock lock(access_mutex); //ensure thread safeness
 
     int rc;
 
@@ -319,7 +319,7 @@ void client::Database::remove(const std::string &path) {
  * @author Michele Crepaldi s269551
  */
 void client::Database::update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash) {
-    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+    std::unique_lock lock(access_mutex); //ensure thread safeness
 
     int rc;
     std::string hashHex = RandomNumberGenerator::string_to_hex(hash);   //convert hash to hexadecimal representation (to store it)

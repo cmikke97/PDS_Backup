@@ -35,8 +35,17 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
         auto it = paths_.begin();
         while (it != paths_.end()) {
             if (!std::filesystem::exists(it->first)) {
+                //std::filesystem::path parent = std::filesystem::path(it->first).parent_path();  //get the parent directory of this element
+
                 if(action(it->second, FileSystemStatus::deleted)) //if the action was successful then erase the element from paths_; otherwise this element will be removed later
                     it = paths_.erase(it);
+
+                /*
+                if(std::filesystem::exists(parent)){    //if the parent still exists then when at the server the lastWriteTime will be modified (an element inside the folder will be removed)
+                    auto old = paths_.find(parent.string());
+                    if(old != paths_.end())
+                        action(old->second, FileSystemStatus::modified);
+                }*/
             }
             else{
                 it++;
@@ -78,10 +87,20 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
  */
 void FileSystemWatcher::recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action) {
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
+
+    //update the content of the paths_ map
     f = [this, action](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
         auto element = Directory_entry(path_to_watch, path, size, type, lastWriteTime, Hash(hash));
-        action(element, FileSystemStatus::modified);
         paths_[element.getAbsolutePath()] = std::move(element);
     };
+    //use the function for each element of the db
     db->forAll(f);
+
+    //add each element in paths_ to the initial modified events (to verify at the start that the server has already a copy of all the elements)
+    for(auto i: paths_) {
+        if(std::filesystem::exists(i.first))
+            //check if the element exists in the filesystem, if yes put the element as modified in the elements queue;
+            //otherwise it will be deleted so do not send anything (otherwise the element will be created on server and then deleted)
+            action(i.second, FileSystemStatus::modified);
+    }
 }

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <map>
 #include <unordered_map>
 #include <string>
 #include <functional>
@@ -43,7 +44,7 @@ public:
     void recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);
 
 private:
-    std::unordered_map<std::string, Directory_entry> paths_;
+    std::map<std::string, Directory_entry> paths_;
 
     //bool contains(const std::string &key);
 };
