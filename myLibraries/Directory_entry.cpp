@@ -167,7 +167,7 @@ bool Directory_entry::operator==(Directory_entry &other){
  *
  * @author Michele Crepaldi s269551
  */
-std::string Directory_entry::getRelativePath() {
+std::string& Directory_entry::getRelativePath() {
     return relativePath;
 }
 
@@ -178,7 +178,7 @@ std::string Directory_entry::getRelativePath() {
  *
  * @author Michele Crepaldi s269551
  */
-std::string Directory_entry::getAbsolutePath() {
+std::string& Directory_entry::getAbsolutePath() {
     return absolutePath;
 }
 
@@ -211,7 +211,7 @@ Directory_entry_TYPE Directory_entry::getType() {
  *
  * @author Michele Crepaldi s269551
  */
-std::string Directory_entry::getLastWriteTime() {
+std::string& Directory_entry::getLastWriteTime() {
     return last_write_time;
 }
 

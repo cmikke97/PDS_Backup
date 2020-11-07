@@ -2,10 +2,17 @@
 // Created by michele on 21/10/2020.
 //
 
+#if defined(__CYGWIN__)
+    #define PLATFORM_NAME "windows" // Windows (Cygwin POSIX under Microsoft Window)
+#elif defined(__linux__)
+    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
+#endif
+
 #include <fstream>
 #include <regex>
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
+
 
 /**
  * send an OK response to the client with a code
@@ -244,11 +251,9 @@ void server::ProtocolManager::storeFile(){
             throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::client);
         }
 
-        std::cout << expected.getAbsolutePath() << std::endl;
-        std::cout << std::filesystem::path(expected.getAbsolutePath()).parent_path() << std::endl;
-        std::cout << std::filesystem::path(expected.getAbsolutePath()).parent_path().parent_path() << std::endl;
+
         //get the parent path
-        auto parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path().parent_path();
+        std::filesystem::path parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path();
 
         //check if the parent folder already exists
         create = !std::filesystem::directory_entry(parentPath).exists();
@@ -327,7 +332,7 @@ void server::ProtocolManager::removeFile(){
     }
 
     //get the parent path
-    auto parentPath = std::filesystem::path(el->second.getAbsolutePath()).parent_path().parent_path();
+    std::filesystem::path parentPath = std::filesystem::path(el->second.getAbsolutePath()).parent_path();
 
     //take the lastWriteTime of the destination folder before removing the file,
     //any lastWriteTime modification will be requested by the client so we want to keep the same time

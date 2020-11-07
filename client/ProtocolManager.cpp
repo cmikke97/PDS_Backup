@@ -410,12 +410,12 @@ void client::ProtocolManager::sendFile(Directory_entry &element) {
             message.update(100);
 
         std::cout << message << std::endl;
+
+        //close the input file
+        file.close();
     }
     else
         throw ProtocolManagerException("Could not open file", protocolManagerError::client);
-
-    //close the input file
-    file.close();
 }
 
 /**
