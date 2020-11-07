@@ -41,11 +41,11 @@ public:
 
     bool operator==(Directory_entry &other);
 
-    std::string getRelativePath();
-    std::string getAbsolutePath();
+    std::string& getRelativePath();
+    std::string& getAbsolutePath();
     uintmax_t getSize() const;
     Directory_entry_TYPE getType();
-    std::string getLastWriteTime();
+    std::string& getLastWriteTime();
     bool is_regular_file();
     bool is_directory();
     Hash& getHash();
