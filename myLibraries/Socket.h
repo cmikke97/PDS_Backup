@@ -44,6 +44,8 @@ public:
     [[nodiscard]] virtual int getSockfd() const = 0;
     [[nodiscard]] virtual std::string getMAC() const = 0;
     virtual void closeConnection() = 0;
+
+    virtual ~SocketBridge() = 0;
 };
 
 /**
@@ -61,6 +63,7 @@ class ServerSocketBridge : public virtual SocketBridge {
 public:
     //pure abstract method
     virtual SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) = 0;
+    ~ServerSocketBridge() override = 0;
 };
 
 /*
@@ -102,7 +105,7 @@ public:
     [[nodiscard]] int getSockfd() const override;
     [[nodiscard]] std::string getMAC() const override;
     void closeConnection() override;
-    ~TCP_Socket();
+    ~TCP_Socket() override;
 };
 
 /**
@@ -121,7 +124,7 @@ class TCP_ServerSocket: public ServerSocketBridge, public TCP_Socket{
 public:
     explicit TCP_ServerSocket(int port, int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
-    ~TCP_ServerSocket();
+    ~TCP_ServerSocket() override;
 };
 
 /*
@@ -187,7 +190,7 @@ public:
     [[nodiscard]] int getSockfd() const override;
     [[nodiscard]] std::string getMAC() const override;
     void closeConnection() override;
-    ~TLS_Socket();
+    ~TLS_Socket() override;
 };
 
 /**
@@ -207,7 +210,7 @@ class TLS_ServerSocket: public ServerSocketBridge, public TLS_Socket{
 public:
     explicit TLS_ServerSocket(int port, int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
-    ~TLS_ServerSocket();
+    ~TLS_ServerSocket() override;
 };
 
 /*
@@ -243,17 +246,22 @@ class Socket {
     explicit Socket(SocketBridge *sb);
     friend class ServerSocket;
 
-public:
     static std::string ca_file_path;
+    friend class TLS_Socket;
+
+public:
+
     static void specifyCertificates(const std::string &cacert);
 
-    Socket(const Socket &) = delete;
-    Socket& operator=(const Socket &) = delete;
+    Socket(const Socket &) = delete;    //delete copy constructor
+    Socket& operator=(const Socket &) = delete; //delete copy assignment
     Socket() = default;
 
     explicit Socket(socketType type);
-    Socket(Socket &&other) noexcept;
-    Socket& operator=(Socket &&other) noexcept;
+
+    Socket(Socket &&other) noexcept;    //define move constructor
+    Socket& operator=(Socket &&other) noexcept; //define move assignment
+
     void connect(const std::string& addr, int port);
     [[nodiscard]] std::string recvString() const;
     ssize_t sendString(std::string &stringBuffer) const;
@@ -281,11 +289,20 @@ public:
 class ServerSocket : public Socket {
     std::unique_ptr<ServerSocketBridge> serverSocket;
 
-public:
     static std::string certificate_path, privatekey_path;
+    friend class TLS_ServerSocket;
+
+public:
     static void specifyCertificates(const std::string &cert, const std::string &prikey, const std::string &cacert);
 
     explicit ServerSocket(int port, int n, socketType type);
+
+    ServerSocket(const ServerSocket &other) = delete;   //delete copy constructor
+    ServerSocket& operator=(const ServerSocket& source) = delete;   //delete copy assignment
+
+    ServerSocket(ServerSocket &&other) noexcept;    //define move constructor
+    ServerSocket& operator=(ServerSocket &&source) noexcept;    //define move assignment
+
     Socket accept(struct sockaddr_in* addr, unsigned long* len);
 };
 
@@ -299,7 +316,7 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-enum class socketError{create, bind, accept, read, write, connect, getMac};
+enum class socketError{create, bind, accept, read, write, connect, getMac, closed};
 
 /**
  * exceptions for the socket class

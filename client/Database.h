@@ -14,6 +14,7 @@
 #include <functional>
 #include <utility>
 #include <mutex>
+#include <shared_mutex>
 #include "../myLibraries/Directory_entry.h"
 #include "../myLibraries/RandomNumberGenerator.h"
 

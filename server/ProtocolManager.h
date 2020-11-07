@@ -11,6 +11,9 @@
 #include "messages.pb.h"
 #include "Database.h"
 #include "PWD_Database.h"
+#include "Config.h"
+
+#define CONFIG_FILE_PATH "../config.txt"
 
 namespace server {
 
@@ -71,7 +74,7 @@ namespace server {
         //void quit();
 
     public:
-        explicit ProtocolManager(Socket &s, const std::string &address, int ver, std::string basePath, std::string tempPath, int tempSize);
+        explicit ProtocolManager(Socket &s, const std::string &address, int ver);
         void recoverFromDB();
         void authenticate();
         void receive();

@@ -5,11 +5,7 @@
 #include <fstream>
 #include <regex>
 #include "ProtocolManager.h"
-
-//TODO i will get these from config
-#define PASSWORD_DATABASE_PATH "./serverfiles/passwordDB.sqlite"
-#define DATABASE_PATH "./serverfiles/serverDB.sqlite"
-
+#include "../myLibraries/TS_Message.h"
 
 /**
  * send an OK response to the client with a code
@@ -111,7 +107,7 @@ void server::ProtocolManager::probe() {
     Hash h = Hash(clientMessage.hash());
     clientMessage.Clear();
 
-    std::cout << "[PROB] - " << address << " (" << username << ") - " << path << std::endl;
+    TS_Message::print(std::cout, "PROB", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element
@@ -162,7 +158,7 @@ void server::ProtocolManager::storeFile(){
                              clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
     clientMessage.Clear();  //clear the client message
 
-    std::cout << "[STOR] - " << address << " (" << username << ") - " << expected.getRelativePath() << std::endl;
+    TS_Message::print(std::cout, "STOR", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
 
     //create a random temporary name for the file
     RandomNumberGenerator rng;
@@ -177,45 +173,58 @@ void server::ProtocolManager::storeFile(){
     std::ofstream out;
     out.open( temporaryPath + tmpFileName, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
     if(out.is_open()){
-        bool loop;
-        do{
-            std::string message = s.recvString();
-            clientMessage.ParseFromString(message);
+        try {
+            bool loop;
+            do {
+                std::string message = s.recvString();
+                clientMessage.ParseFromString(message);
 
-            if(clientMessage.version() != protocolVersion){
-                //send the version message
-                send_VER();
+                if (clientMessage.version() != protocolVersion) {
+                    //send the version message
+                    send_VER();
 
-                //close the file
-                out.close();
+                    //close the file
+                    out.close();
 
-                //delete temporary file
-                std::filesystem::remove(temporaryPath + tmpFileName);
+                    //delete temporary file
+                    std::filesystem::remove(temporaryPath + tmpFileName);
 
-                //throw exception
-                throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
-            }
+                    //throw exception
+                    throw ProtocolManagerException("Client is using a different version",
+                                                   protocolManagerError::version);
+                }
 
-            if(clientMessage.type() != messages::ClientMessage_Type_DATA){
-                //close the file
-                out.close();
+                if (clientMessage.type() != messages::ClientMessage_Type_DATA) {
+                    //close the file
+                    out.close();
 
-                //delete temporary file
-                std::filesystem::remove(temporaryPath + tmpFileName);
+                    //delete temporary file
+                    std::filesystem::remove(temporaryPath + tmpFileName);
 
-                //no data message with last bool set was encountered before this message, error!
-                send_ERR(errCode::unexpected);    //send error message with cause
+                    //no data message with last bool set was encountered before this message, error!
+                    send_ERR(errCode::unexpected);    //send error message with cause
 
-                throw ProtocolManagerException("Unexpected message, DATA transfer was not done.", protocolManagerError::client);
-            }
-            loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
+                    throw ProtocolManagerException("Unexpected message, DATA transfer was not done.",
+                                                   protocolManagerError::client);
+                }
+                loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
 
-            std::string data = clientMessage.data();    //get the data from message
-            out.write(data.data(), data.size());    //write it to file
+                std::string data = clientMessage.data();    //get the data from message
+                out.write(data.data(), data.size());    //write it to file
 
-            clientMessage.Clear();
+                clientMessage.Clear();
+            } while (loop);
         }
-        while(loop);
+        catch (SocketException &e) {    //in case of socket exceptions while transferring the file I need to delete the temporary file
+            //close the file
+            out.close();
+
+            //delete temporary file
+            std::filesystem::remove(temporaryPath + tmpFileName);
+
+            //rethrow the exception
+            throw;
+        }
 
         //close the file
         out.close();
@@ -235,9 +244,26 @@ void server::ProtocolManager::storeFile(){
             throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::client);
         }
 
+        //get the parent path
+        auto parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path().parent_path();
+
+        //check if the parent folder already exists
+        create = !std::filesystem::directory_entry(parentPath).exists();
+
+        if(create)  //if the directory does not already exist
+            std::filesystem::create_directories(parentPath);    //create all the directories (if they do not already exist) up to the parent path
+
+        //take the lastWriteTime of the destination folder before moving the file,
+        //any lastWriteTime modification will be requested by the client so we want to keep the same time
+        Directory_entry parent{basePath, parentPath.string()};
+
         //If we are here then the file was successfully transferred and its copy on the server is as expected
         //so move then it can be moved to the final destination
         std::filesystem::rename(temporaryPath + tmpFileName, expected.getAbsolutePath());
+
+        //reset the parent directory lastWriteTime
+        if(parent.getAbsolutePath() != basePath)
+            parent.set_time_to_file(parent.getLastWriteTime());
 
         auto el = elements.find(expected.getRelativePath());
         if(el == elements.end()) {
@@ -256,7 +282,8 @@ void server::ProtocolManager::storeFile(){
         }
 
         //TODO handle exception
-        std::cout << "[DATA] - " << address << " (" << username << ") - " << expected.getRelativePath() << std::endl;
+
+        TS_Message::print(std::cout, "DATA", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
 
         //the file has been created
         send_OK(okCode::created);
@@ -281,10 +308,10 @@ void server::ProtocolManager::removeFile(){
     Hash h{clientMessage.hash()};
     clientMessage.Clear();
 
-    std::cout << "[DELE] - " << address << " (" << username << ") - " << path << std::endl;
+    TS_Message::print(std::cout, "DELE", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
-    if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
+    if(el == elements.end() || !el->second.exists()) { //if i cannot find the element OR the element does not exist, i don't have to remove it
         //the file did not exist, the result is the same
         send_OK(okCode::notThere);
         return;
@@ -296,8 +323,20 @@ void server::ProtocolManager::removeFile(){
         throw ProtocolManagerException("Tried to remove something which is not a file or file hash does not correspond.", protocolManagerError::client);
     }
 
+    //get the parent path
+    auto parentPath = std::filesystem::path(el->second.getAbsolutePath()).parent_path().parent_path();
+
+    //take the lastWriteTime of the destination folder before removing the file,
+    //any lastWriteTime modification will be requested by the client so we want to keep the same time
+    Directory_entry parent{basePath, parentPath.string()};
+
     //remove the file
-    std::filesystem::remove(el->second.getAbsolutePath());   //true if the file was removed, false if it did not exist
+    if(!std::filesystem::remove(el->second.getAbsolutePath()))   //true if the file was removed, false if it couldn't remove it
+        throw ProtocolManagerException("Could not remove a file", protocolManagerError::internal);
+
+    //reset the parent directory lastWriteTime
+    if(parent.getAbsolutePath() != basePath)
+        parent.set_time_to_file(parent.getLastWriteTime());
 
     //remove element from db
     db->remove(username, mac, el->second.getRelativePath());
@@ -321,12 +360,27 @@ void server::ProtocolManager::makeDir(){
     const std::string lastWriteTime = clientMessage.lastwritetime();
     clientMessage.Clear();
 
-    std::cout << "[MKD] - " << address << " (" << username << ") - " << path << std::endl;
+    TS_Message::print(std::cout, "MKD", address + " (" + username + "@" + mac + ")", path);
 
-    //check if the folder already exists
-    bool create = !std::filesystem::directory_entry(basePath + path).exists();
+    auto el = elements.find(path);
+    if(el != elements.end() && el->second.exists() && el->second.getLastWriteTime() == lastWriteTime){
+        //if I already have the directory in the elements map AND the directory exists in the filesystem AND its lastWriteTime is as expected
+        send_OK(okCode::created);   //send OK message
+        return; //and return
+    }
+    //else
 
-    if(create)  //if the directory does not already exist
+    //get the parent path (to then get its lastWriteTime in order to keep it the same after the dir create
+    auto parentPath = std::filesystem::path(basePath + path).parent_path();
+    auto parExists = std::filesystem::directory_entry(parentPath.string()).exists();
+    Directory_entry parent;
+
+    if(parExists)   //if the parent directory exists
+        //take the lastWriteTime of the destination folder before creating the directory,
+        //any lastWriteTime modification will be requested by the client so we want to keep the same time
+        parent = Directory_entry{basePath, parentPath.string()};
+
+    if(!std::filesystem::directory_entry(basePath + path).exists())  //if the directory does not already exist
         std::filesystem::create_directories(basePath + path);    //create all the directories (if they do not already exist) up to the temporary path
 
     if(!std::filesystem::is_directory(basePath + path)){
@@ -339,10 +393,14 @@ void server::ProtocolManager::makeDir(){
 
     //create a Directory entry which represents the newly created folder (or to the already present one)
     Directory_entry newDir{basePath, std::filesystem::directory_entry(basePath + path)};
+
     //change last write time for the file
     newDir.set_time_to_file(lastWriteTime);
 
-    auto el = elements.find(path);
+    if(parExists && parent.getAbsolutePath() != basePath)   //if the parent directory already existed before (and it is not the base path)
+        //reset the parent directory lastWriteTime
+        parent.set_time_to_file(parent.getLastWriteTime());
+
     if(el == elements.end()) {
         //add to the elements map
         elements.emplace(newDir.getRelativePath(), newDir);
@@ -374,7 +432,7 @@ void server::ProtocolManager::removeDir(){
     const std::string path = clientMessage.path();
     clientMessage.Clear();
 
-    std::cout << "[RMD] - " << address << " (" << username << ") - " << path << std::endl;
+    TS_Message::print(std::cout, "RMD", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
@@ -383,41 +441,53 @@ void server::ProtocolManager::removeDir(){
         return;
     }
 
-    if(!el->second.is_directory()){
+    auto dirToRemove = el->second;
+
+    if(!dirToRemove.is_directory()){
         //the element is not a directory! -> error
         send_ERR(errCode::notADir);    //send error message with cause
         throw ProtocolManagerException("Tried to remove something which is not a directory.", protocolManagerError::client);
     }
 
+    auto parentPath = std::filesystem::path(basePath + path).parent_path();
+    //take the lastWriteTime of the destination folder before removing the directory,
+    //any lastWriteTime modification will be requested by the client so we want to keep the same time
+    Directory_entry parent{basePath, parentPath.string()};
+
     //remove the directory
     //std::filesystem::remove(el->second.getAbsolutePath()); //it throws an exception if the dir is not empty
-    //TODO descide if to use this instead which removes also subdirectories
+    //TODO decide if to use this instead which removes also subdirectories
     //int n_removed = std::filesystem::remove_all(el->second.getAbsolutePath());
-    std::filesystem::recursive_directory_iterator iter{el->second.getAbsolutePath()};
+    std::filesystem::recursive_directory_iterator iter{dirToRemove.getAbsolutePath()};
     std::vector<Directory_entry> elementsToRemove;
     for(auto i: iter){
         //I save the elements in a vector before removing them in order to be sure to save them all
         elementsToRemove.emplace_back(basePath, i);
     }
-    for(auto i: elementsToRemove){
-        //if the element was already deleted by a previous call then this function returns 0,
-        //otherwise it returns the number of deleted elements; in any case I want to remove the elements
-        std::filesystem::remove_all(i.getAbsolutePath());
 
+    //remove the directory (and all its subdirectories and files) from filesystem
+    if(std::filesystem::exists(dirToRemove.getAbsolutePath()))
+        if(std::filesystem::remove_all(dirToRemove.getAbsolutePath()) == 0)
+            throw ProtocolManagerException("Could not remove an element.", protocolManagerError::internal);
+
+    //then remove each sub element from both the db and elements map
+    for(auto i: elementsToRemove){
         //remove element from db
         db->remove(username, mac, i.getRelativePath());
 
         //remove the element from the elements map
         elements.erase(i.getRelativePath());
     }
-    //this next call should remove just 1 element (the original directory to remove)
-    std::filesystem::remove_all(el->second.getAbsolutePath());
 
     //remove element from db
-    db->remove(username, mac, el->second.getRelativePath());
+    db->remove(username, mac, dirToRemove.getRelativePath());
 
     //remove the element from the elements map
-    elements.erase(el->second.getRelativePath());
+    elements.erase(dirToRemove.getRelativePath());
+
+    //reset the parent directory lastWriteTime
+    if(parent.getAbsolutePath() != basePath)
+        parent.set_time_to_file(parent.getLastWriteTime());
 
     //the file has been removed
     send_OK(okCode::removed);
@@ -454,17 +524,19 @@ void server::ProtocolManager::quit(){
  *
  * @author Michele Crepaldi s269551
  */
-server::ProtocolManager::ProtocolManager(Socket &s, const std::string &address, int ver, std::string basePath, std::string tempPath, int tempSize) :
+server::ProtocolManager::ProtocolManager(Socket &s, const std::string &address, int ver) :
     s(s),
     address(address),
-    protocolVersion(ver),
-    basePath(std::move(basePath)),
-    temporaryPath(std::move(tempPath)),
-    tempNameSize(tempSize){
+    protocolVersion(ver){
 
     //TODO get from config
-    password_db = PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
-    db = Database::getInstance(DATABASE_PATH);
+    auto config = Config::getInstance(CONFIG_FILE_PATH);
+    basePath = config->getServerBasePath();
+    temporaryPath = config->getTempPath();
+    tempNameSize = config->getTmpFileNameSize();
+
+    password_db = PWD_Database::getInstance(config->getPasswordDatabasePath());
+    db = Database::getInstance(config->getServerDatabasePath());
 };
 
 /**
@@ -525,7 +597,7 @@ void server::ProtocolManager::authenticate() {
     tmp << basePath << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
     basePath = tmp.str();
 
-    std::cout << "[EVENT] - " << address << " - authenticated as " << username  << "@" << mac << std::endl;
+    TS_Message::print(std::cout, "EVENT", address, "authenticated as " + username  + "@" + mac);
 };
 
 /**
@@ -572,13 +644,13 @@ void server::ProtocolManager::recoverFromDB() {
 
     //now update all the updated elements to db
     for(auto el: toUpdate){
-        std::cerr << "[WARNING] Element " << el.getRelativePath() << " in " << basePath << " was modified offline!" << std::endl;
+        TS_Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was modified offline!");
         db->update(username, mac, el);
     }
 
     //delete all the deleted elements from db
     for(auto el: toDelete){
-        std::cerr << "[WARNING] Element " << el.getRelativePath() << " in " << basePath << " was removed offline!" << std::endl;
+        TS_Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was removed offline!");
         db->remove(username, mac, el.getRelativePath());
     }
 }

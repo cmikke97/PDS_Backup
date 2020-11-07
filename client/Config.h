@@ -23,6 +23,7 @@ namespace client {
     class Config {
         std::string path_to_watch;
         std::string database_path;
+        std::string ca_file_path;
         int millis_filesystem_watcher{};
         int event_queue_size{};
         int seconds_between_reconnections{};
@@ -32,6 +33,7 @@ namespace client {
         int timeout_seconds{};
         int select_timeout_seconds{};
         int max_response_waiting{};
+        int max_data_chunk_size{};
 
         void load(const std::string &configFilePath);
 
@@ -51,9 +53,11 @@ namespace client {
 
         static std::shared_ptr<Config> getInstance(const std::string &path);
 
-        const std::string getPathToWatch();
+        std::string& getPathToWatch();
 
-        const std::string getDatabasePath();
+        std::string& getDatabasePath();
+
+        std::string& getCAFilePath();
 
         int getMillisFilesystemWatcher();
 
@@ -72,6 +76,8 @@ namespace client {
         int getSelectTimeoutSeconds();
 
         int getMaxResponseWaiting();
+
+        int getMaxDataChunkSize();
     };
 
     /*
@@ -85,7 +91,7 @@ namespace client {
      * @author Michele Crepaldi s269551
      */
     enum class configError {
-        open, fileCreated
+        open, fileCreated, pathToWatch
     };
 
     /**

@@ -259,6 +259,7 @@ Hash& Directory_entry::getHash() {
  * @author Michele Crepaldi s269551
  */
 std::string Directory_entry::get_time_from_file(){
+    setenv("TZ", "UTC", 1);
     struct stat buf{};
     if(stat(absolutePath.data(), &buf) != 0)    //get file info
         throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
@@ -266,7 +267,7 @@ std::string Directory_entry::get_time_from_file(){
     std::time_t tt = buf.st_mtime;  //get file last modified time
     std::tm *gmt = std::localtime(&tt); //convert std::time_t to std::tm
     std::stringstream buffer;
-    buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M"); //convert std::tm to a readable string
+    buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M %Z"); //convert std::tm to a readable string
     return buffer.str();
 }
 
@@ -283,6 +284,7 @@ std::string Directory_entry::get_time_from_file(){
  * @author Michele Crepaldi s269551
  */
 void Directory_entry::set_time_to_file(const std::string &time){
+    setenv("TZ", "UTC", 1);
     struct stat buf{};
     if(stat(absolutePath.data(), &buf) != 0)    //get file info
         throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
@@ -290,7 +292,7 @@ void Directory_entry::set_time_to_file(const std::string &time){
     std::tm gmt{};
     std::stringstream buffer;
     buffer << time;
-    buffer >> std::get_time(&gmt, "%A, %d %B %Y %H:%M");    //convert from readable string to std::tm
+    buffer >> std::get_time(&gmt, "%A, %d %B %Y %H:%M %Z");    //convert from readable string to std::tm
     std::time_t tt = mktime(&gmt);  //convert std::tm to time_t
 
     struct utimbuf new_times{};

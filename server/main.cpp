@@ -1,3 +1,7 @@
+//
+// Created by michele on 25/07/2020.
+//
+
 #include <iostream>
 #include <messages.pb.h>
 #include <sstream>
@@ -8,31 +12,14 @@
 #include "Thread_guard.h"
 #include "PWD_Database.h"
 #include "Database.h"
+#include "Config.h"
 #include "ProtocolManager.h"
-#include "TS_Message.h"
+#include "../myLibraries/TS_Message.h"
 
 #define VERSION 1
-#define CONFIG_FILE_PATH "./config.txt"
-
-#define LISTEN_QUEUE 8
-#define N_THREADS 8
-#define SOCKET_QUEUE_SIZE 10
-#define SELECT_TIMEOUT_SECONDS 5
-#define TIMEOUT_SECONDS 600
-#define PASSWORD_DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverFiles/passwordDB.sqlite"
-#define DATABASE_PATH "C:/Users/michele/CLionProjects/PDS_Backup/server/serverFiles/serverDB.sqlite"
-#define SERVER_PATH "C:/Users/michele/Desktop/server_folder"
-#define TEMP_PATH "C:/Users/michele/Desktop/server_folder/temp"
-#define TEMP_FILE_NAME_SIZE 8
-
-#define CERTIFICATE_PATH "../../TLScerts/server_cert.pem"
-#define PRIVATEKEY_PATH "../../TLScerts/server_pkey.pem"
-
-#define CA_FILE_PATH "../../TLScerts/cacert.pem"
 
 #define PORT 8081
 #define SOCKET_TYPE socketType::TCP
-//TODO put these constants into the config object
 
 void single_server(TSCircular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
@@ -146,9 +133,9 @@ int main(int argc, char** argv) {
     }
 
     try{
-        //TODO get config
-        auto pass_db = server::PWD_Database::getInstance(PASSWORD_DATABASE_PATH);
-        auto db = server::Database::getInstance(DATABASE_PATH);
+        auto config = server::Config::getInstance(CONFIG_FILE_PATH);
+        auto pass_db = server::PWD_Database::getInstance(config->getPasswordDatabasePath());
+        auto db = server::Database::getInstance(config->getServerDatabasePath());
 
         if(addU){   //add user to the server
             pass_db->addUser(username, password);
@@ -174,16 +161,16 @@ int main(int argc, char** argv) {
         }
 
         if(start) { //start the server
-            std::cout << "[SERVICE] Starting service.." << std::endl;
-            ServerSocket::specifyCertificates(CERTIFICATE_PATH, PRIVATEKEY_PATH, CA_FILE_PATH);
-            ServerSocket server{PORT, LISTEN_QUEUE, SOCKET_TYPE};   //initialize server socket with port
-            TSCircular_vector<std::pair<std::string, Socket>> sockets{SOCKET_QUEUE_SIZE};
+            TS_Message::print(std::cout, "SERVICE", "Starting service..", "");
+            ServerSocket::specifyCertificates(config->getCertificatePath(), config->getPrivateKeyPath(), config->getCaFilePath());
+            ServerSocket server{PORT, config->getListenQueue(), SOCKET_TYPE};   //initialize server socket with port
+            TSCircular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
             //TSCircular_vector<Socket> sockets{SOCKET_QUEUE_SIZE};
 
             std::atomic<bool> server_thread_stop = false, main_stop = false;   //atomic boolean to force the server threads to stop
             std::vector<std::thread> threads;
 
-            for (int i = 0; i < N_THREADS; i++)  //create N_THREADS threads and start them
+            for (int i = 0; i < config->getNThreads(); i++)  //create N_THREADS threads and start them
                 threads.emplace_back(single_server, std::ref(sockets), std::ref(server_thread_stop), std::ref(main_stop));
 
             Thread_guard td{threads, server_thread_stop};
@@ -212,14 +199,14 @@ int main(int argc, char** argv) {
             case socketError::create:
             case socketError::accept:
             default:
-                std::cerr << "[ERROR] " << e.what() << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
                 return 1;
         }
     }
     catch (server::PWD_DatabaseException &e) {
         switch(e.getCode()){
             case server::pwd_databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
-                std::cerr << "[ERROR] " << "User already exists." << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", "User already exists" + std::string(e.what()));
             case server::pwd_databaseError::create: //could not create the table in the database -> (fatal) terminate server
             case server::pwd_databaseError::open:   //could not open the database -> (fatal) terminate server
             case server::pwd_databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
@@ -230,7 +217,7 @@ int main(int argc, char** argv) {
             case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
             default:
                 //Fatal error -> close the server
-                std::cerr << "[ERROR] " << e.what() << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
 
                 return 1; //return -> the thread guard will stop and join all the server threads
         }
@@ -247,14 +234,16 @@ int main(int argc, char** argv) {
             case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
             default:
                 //Fatal error -> close the server
-                std::cerr << "[ERROR] " << e.what() << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
                 return 1; //return -> the thread guard will stop and join all the server threads
         }
     }
-    //TODO catch ConfigException and switch on e.getCode();
+    catch (server::ConfigException &e) {
+        TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+    }
     catch (std::exception &e) {
-        std::cerr << "[ERROR] " << e.what() << std::endl;
+        TS_Message::print(std::cerr, "ERROR", "exception", e.what());
         return 1;
     }
 }
@@ -274,9 +263,12 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         fd_set read_fds;
         int timeWaited = 0;
         bool loop = true;
-        server::ProtocolManager pm{sock, address, VERSION, SERVER_PATH, TEMP_PATH, TEMP_FILE_NAME_SIZE};
 
         try{
+            auto config = server::Config::getInstance(CONFIG_FILE_PATH);
+
+            server::ProtocolManager pm{sock, address, VERSION};
+
             //authenticate the connected client
             pm.authenticate();
             pm.recoverFromDB();
@@ -288,7 +280,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                 int maxfd = sock.getSockfd();
                 struct timeval tv{};
-                tv.tv_sec = SELECT_TIMEOUT_SECONDS;
+                tv.tv_sec = config->getSelectTimeoutSeconds();
 
                 //select on read socket
                 int activity = select(maxfd + 1, &read_fds, nullptr, nullptr, &tv);
@@ -302,13 +294,12 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                         break;
 
                     case 0:
-                        /*
-                        timeWaited += SELECT_TIMEOUT_SECONDS;
+                        timeWaited += config->getSelectTimeoutSeconds();
 
-                        if (timeWaited >= TIMEOUT_SECONDS) {  //if the time already waited is greater than TIMEOUT
+                        if (timeWaited >= config->getTimeoutSeconds()) {  //if the time already waited is greater than TIMEOUT
                             loop = false;      //then exit loop --> this will cause the current connection to be closed
-                            std::cout << "Disconnecting client " << address << std::endl;
-                        }*/
+                            TS_Message::print(std::cout, "INFO", "Disconnecting client ", address);
+                        }
 
                         break;
 
@@ -341,7 +332,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
                 default:
                     //Fatal error -> close the server
-                    TS_Message::print(std::cerr, "ERROR", e.what(), ""); //TODO go on from this
+                    TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -359,7 +350,8 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
             switch(e.getCode()){
                 case socketError::read: //error in reading from socket
                 case socketError::write:    //error in writing to socket
-                    std::cout << "[EVENT] Client " << address << " disconnected." << std::endl;
+                case socketError::closed:    //socket was closed by client
+                    TS_Message::print(std::cout, "EVENT", address, "disconnected.");
                     continue; //error in the current socket, continue with the next one
 
                 //added for completeness, will never be triggered in the server threads
@@ -370,7 +362,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case socketError::getMac:   //error in getting the machine MAC address -> Fatal error
                 default:
                     //Fatal error -> close the server
-                    std::cerr << "[ERROR] " << e.what() << std::endl;
+                    TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
@@ -398,7 +390,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
                 default:
                     //Fatal error -> close the server
-                    std::cerr << "[ERROR] " << e.what() << std::endl;
+                    TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -424,7 +416,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
                 default:
                     //Fatal error -> close the server
-                    std::cerr << "[ERROR] " << e.what() << std::endl;
+                    TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -438,10 +430,12 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                     return; //then return
             }
         }
-        //TODO catch ConfigException and switch on e.getCode();
+        catch (server::ConfigException &e) {
+            TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+        }
         catch (std::exception &e) {
             //Fatal error -> close the server
-            std::cerr << "[ERROR] " << e.what() << std::endl;
+            TS_Message::print(std::cerr, "ERROR", "exception", e.what());
 
             sock.closeConnection(); //close the connection with the client
 

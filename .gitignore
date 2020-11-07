@@ -7,3 +7,5 @@
 /server/serverFiles/
 /server/cmake-build-debug/
 /server/cmake-build-debug-cygwin/
+/client/config.txt
+/server/config.txt

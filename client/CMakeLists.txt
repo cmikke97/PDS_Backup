@@ -8,7 +8,8 @@ set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Event.cpp Da
         Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Config.cpp Config.h)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Directory_entry.cpp
-        ../myLibraries/Directory_entry.h ../myLibraries/RandomNumberGenerator.h ../myLibraries/RandomNumberGenerator.cpp)
+        ../myLibraries/Directory_entry.h ../myLibraries/RandomNumberGenerator.h ../myLibraries/RandomNumberGenerator.cpp
+        ../myLibraries/TS_Message.cpp ../myLibraries/TS_Message.h)
 
 #now we want to include wolfSSL, protocol buffers and sqlite3
 if (CYGWIN) #if on windows

@@ -13,10 +13,11 @@
 #include "../myLibraries/Socket.h"
 #include "messages.pb.h"
 #include "ProtocolManager.h"
+#include "../myLibraries/TS_Message.h"
 
 #define VERSION 1
+
 #define SOCKET_TYPE socketType::TCP
-#define CA_FILE_PATH "../../TLScerts/cacert.pem"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
@@ -83,17 +84,18 @@ int main(int argc, char **argv) {
     }
     catch (client::DatabaseException &e) {
         //in case of database exceptions show message and return
-        std::cerr << e.what() << std::endl;
+        TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
         return 1;
     }
     catch (client::ConfigException &e) {
-        if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
-            std::cout << "[WARNING]" << e.what() << std::endl;
-            std::cout << "[WARNING]" << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
-            std::cout << "[WARNING]" << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
-        }
-        else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
-            std::cerr << e.what() << std::endl;
+        switch(e.getCode()){
+            case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
+                TS_Message::print(std::cout, "ERROR", "Config Exception", e.what());
+                TS_Message::print(std::cout, "WARNING", "Please check it in config file: ", CONFIG_FILE_PATH);
+                break;
+            case client::configError::open: //if there were some errors in opening the configuration file return
+            default:
+                TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }
 
         return 1;
@@ -123,7 +125,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
 
-        Socket::specifyCertificates(CA_FILE_PATH);
+        Socket::specifyCertificates(config->getCAFilePath());
 
         //for select
         fd_set read_fds;
@@ -146,6 +148,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 if (!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
                     return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
+                TS_Message::print(std::cout, "INFO", "Changes detected", "Connecting to server..");
                 //connect with server
                 client_socket.connect(server_ip, server_port);
                 //if the connection is successful then reset tries variable
@@ -168,6 +171,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     //build fd sets
                     FD_ZERO(&read_fds);
+                    FD_SET(0, &read_fds);
                     FD_SET(client_socket.getSockfd(), &read_fds);
 
                     FD_ZERO(&write_fds);
@@ -183,15 +187,14 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     //TODO check if it is still needed
                     if (thread_stop.load()) { //if thread_stop atomic boolean is true then close connection and return
-                        //close connection
-                        client_socket.closeConnection();
+                        //connection will be automatically closed (by socket destructor)
                         return;
                     }
 
                     switch (activity) {
                         case -1:
                             //I should never get here
-                            std::cerr << "Select error" << std::endl;
+                            TS_Message::print(std::cerr, "ERROR", "Select error", "case -1");
 
                             //connection will be closed automatically by the socket destructor
 
@@ -200,10 +203,17 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             return;
 
                         case 0:
+                            if(pm.isWaiting())  //if the protocol manager is waiting for server responses just go on
+                                break;
+
+                            //if the protocol manager is not waiting for any server response then update the timeWaited variable
+                            //to then close the connection if after TimeoutSeconds seconds no event happens
                             timeWaited += config->getSelectTimeoutSeconds();
 
-                            if (timeWaited >= config->getTimeoutSeconds())   //if the time already waited is greater than TIMEOUT
+                            if (timeWaited >= config->getTimeoutSeconds()) {  //if the time already waited is greater than TIMEOUT
                                 loop = false;           //then exit inner loop --> this will cause the connection to be closed
+                                TS_Message::print(std::cout, "INFO", "No changes detected", "Disconnecting from server..");
+                            }
 
                             break;
 
@@ -224,6 +234,18 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             if (FD_ISSET(client_socket.getSockfd(), &read_fds)) {
                                 pm.receive();
                             }
+
+                            //if I have something to read
+                            if (FD_ISSET(0, &read_fds)) {
+                                std::string command;
+                                std::cin >> command;
+                                if(command == "exit"){
+                                    //client_socket.closeConnection();
+                                    fileWatcher_stop.store(true);
+                                    return;
+                                }
+
+                            }
                     }
 
                 }
@@ -233,23 +255,31 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (SocketException &e) {
                 switch (e.getCode()) {
+                    case socketError::closed:    //socket was closed by server
                     //case socketError::create:   //error in socket create
                     case socketError::read:     //error in socket read
                     case socketError::write:    //error in socket write
                     case socketError::connect:  //error in socket connect
 
+                        if(tries == 0)
+                            TS_Message::print(std::cout, "INFO", "Connection was closed by the server", "will reconnect if needed");
+
+                        if(!pm.canSend() || !eventQueue.canGet())
+                            break;
+
                         //re-try only for a limited number of times
                         if (tries < config->getMaxConnectionRetries()) {
                             //error in connection; retry later; wait for x seconds
                             tries++;
-                            std::cerr << "Connection error. Retry (" << tries << ") in "
-                                      << config->getSecondsBetweenReconnections() << " seconds." << std::endl;
+                            std::stringstream tmp;
+                            tmp << "Retry (" << tries << ") in " << config->getSecondsBetweenReconnections() << " seconds.";
+                            TS_Message::print(std::cerr, "WARNING", "Connection error", tmp.str());
                             std::this_thread::sleep_for(std::chrono::seconds(config->getSecondsBetweenReconnections()));
                             break;
                         }
 
                         //maximum number of re-tries exceeded -> terminate program
-                        std::cerr << "Cannot establish connection." << std::endl;
+                        TS_Message::print(std::cerr, "ERROR", "Cannot establish connection", "");
 
                     case socketError::getMac: //error retrieving the MAC
                     default:
@@ -265,7 +295,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     case client::protocolManagerError::internal: //internal server error (exception)
                     case client::protocolManagerError::version: //version not supported error
                     case client::protocolManagerError::unsupported: //unsupported message type error
-                        std::cerr << e.what() << std::endl;
+                        TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                         //connection will be closed automatically by the socket destructor
 
@@ -275,7 +305,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     case client::protocolManagerError::unexpected: //unexpected message error
                         if(!authenticated){  //if I am not authenticated any unexpected message means error
-                            std::cerr << e.what() << std::endl;
+                            TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                             //connection will be closed automatically by the socket destructor
 
@@ -286,10 +316,12 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                         //otherwise
                     case client::protocolManagerError::client: //client message error
-                    //TODO go on -> skip the current message
+                        //TODO go on -> skip the current message
+                        TS_Message::print(std::cerr, "WARNING", "Message error", "Message will be skipped");
+                        break;
 
                     default: //for unrecognised exception codes
-                        std::cerr << "Unrecognised exception code" << std::endl;
+                        TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", "Unrecognised exception code");
 
                         //connection will be closed automatically by the socket destructor
 
@@ -300,7 +332,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (client::DatabaseException &e) {
                 //in case of a database exception the only thing we can do is to close the program
-                std::cerr << e.what() << std::endl;
+                TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
                 //connection will be closed automatically by the socket destructor
 
@@ -312,7 +344,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (SocketException &e) {
         //we are here if the socket class couldn't create a socket
-        std::cerr << e.what() << std::endl;
+        TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);
@@ -320,20 +352,21 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (client::DatabaseException &e){
         //we are here if the Database class couldn't open the database
-        std::cerr << e.what() << std::endl;
+        TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);
         return;
     }
     catch (client::ConfigException &e) {
-        if (e.getCode() == client::configError::fileCreated){   //if the config file did not exist create it, ask to modify it and return
-            std::cout << "[WARNING]" << e.what() << std::endl;
-            std::cout << "[WARNING]" << "Configuration file now contains default values; modify it and especially set a value for 'path_to_watch' before restarting the application." << std::endl;
-            std::cout << "[WARNING]" << "You can find the file here: " << CONFIG_FILE_PATH << std::endl;
-        }
-        else if(e.getCode() == client::configError::open){  //if there were some errors in opening the configuration file return
-            std::cerr << e.what() << std::endl;
+        switch(e.getCode()){
+            case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
+                TS_Message::print(std::cout, "ERROR", "Config Exception", e.what());
+                TS_Message::print(std::cout, "WARNING", "Please check it in config file: ", CONFIG_FILE_PATH);
+                break;
+            case client::configError::open: //if there were some errors in opening the configuration file return
+            default:
+                TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }
 
         //terminate filesystem watcher and close program
@@ -342,7 +375,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (...) {
         //any uncaught exception will terminate the program
-        std::cerr << "uncaught exception" << std::endl;
+        TS_Message::print(std::cerr, "ERROR", "uncaught exception", "");
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);
