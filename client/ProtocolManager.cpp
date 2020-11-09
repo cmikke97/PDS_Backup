@@ -126,20 +126,6 @@ bool client::ProtocolManager::isWaiting() const{
 }
 
 /**
- * function to quit from service (connection)
- *
- * @author Michele Crepaldi s269551
- */
- /*
-void client::ProtocolManager::quit() {
-    //create message
-    send_QUIT();
-
-    //TODO decide if to get a message back or not
-}
-*/
-
-/**
  * function used to send a message relative to an event to the server
  *
  * @param e event to create the message from
@@ -200,19 +186,11 @@ void client::ProtocolManager::receive() {
                     throw ProtocolManagerException("Response SEND message does not match the current event", client::protocolManagerError::unknown, 0);
                 */
 
-                //if(start != end), this condition is true if I receive something
+                //if(start != end), this condition is true if I receive something //TODO remove this line?
                 //pop the (create) event element (it was successful)
                 start = (start+1)%size;
                 //reset the tries variable (i popped a message)
                 tries = 0;
-
-                /* TODO evaluate if to leave this here or to leave it in the file send
-                //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the file present in the filesystem
-                //then it means that the file was deleted or modified --> I can't send it anymore
-                std::filesystem::path ap = e.getElement().getAbsolutePath();
-                if(!std::filesystem::directory_entry(ap).exists() || Directory_entry(path_to_watch, ap).getHash() != e.getElement().getHash())
-                    break;
-                */
 
                 //otherwise send file
 

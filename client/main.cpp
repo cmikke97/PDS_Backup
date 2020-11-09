@@ -458,7 +458,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                         //otherwise
                     case client::protocolManagerError::client: //client message error
-                        //TODO go on -> skip the current message
+                        //TODO go on -> skip the current message (Should be done.. check..)
                         TS_Message::print(std::cerr, "WARNING", "Message error", "Message will be skipped");
                         break;
 

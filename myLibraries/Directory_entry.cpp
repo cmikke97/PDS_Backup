@@ -295,10 +295,6 @@ void Directory_entry::set_time_to_file(const std::string &time){
     if(utime(absolutePath.data(), &new_times) != 0) //set the new times for the file
         throw std::runtime_error("Error in setting file time"); //throw exception in case of errors
 
-
-    //TODO choose between these 2
-    //update the current value of last_write_time
-    //last_write_time = time;
     //get last write time from the file and convert it to string
     last_write_time = get_time_from_file();
 }
@@ -318,12 +314,6 @@ void Directory_entry::updateValues(){
     if(type == Directory_entry_TYPE::file){
         //calculate hash
         HashMaker hm;
-
-        /* TODO evaluate if to add these
-        hm.update(relativePath);
-        hm.update(sizeStr.str());
-        hm.update(this->last_write_time);
-        */
 
         std::ifstream infile;
         infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
