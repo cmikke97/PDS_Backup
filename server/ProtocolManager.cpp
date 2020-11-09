@@ -36,11 +36,6 @@ void server::ProtocolManager::send_SEND(){
     serverMessage.set_type(messages::ServerMessage_Type_SEND);
     serverMessage.set_path(clientMessage.path());
 
-    //TODO evaluate if to add these
-    //serverMessage.set_filesize(clientMessage.filesize());
-    //serverMessage.set_lastwritetime(clientMessage.lastwritetime());
-    //serverMessage.set_path(clientMessage.path());
-
     serverMessage.set_hash(clientMessage.hash());
 
     std::string tmp = serverMessage.SerializeAsString();    //crete string
@@ -119,7 +114,7 @@ void server::ProtocolManager::probe() {
     if(!el->second.is_regular_file()) {  //if the element is not a file
         //there is something with the same name which is not a file -> error
         send_ERR(errCode::notAFile);    //send error message with cause
-        throw ProtocolManagerException("Probed something which is not a file.", protocolManagerError::client);      //TODO error code
+        throw ProtocolManagerException("Probed something which is not a file.", protocolManagerError::client);
         return;
     }
 
@@ -128,14 +123,6 @@ void server::ProtocolManager::probe() {
         send_SEND();
         return;
     }
-
-    /* TODO evaluate if to add these
-    if(el->second.getSize() != c.filesize())    //if the filesize does not correspond
-        return false;
-
-    if(el->second.getLastWriteTime() != c.lastwritetime())  //if the last write time does not correspond
-        return false;
-    */
 
     //the file has been found -> OK message
     send_OK(okCode::found);
@@ -282,13 +269,11 @@ void server::ProtocolManager::storeFile(){
             db->update(username, mac, expected);
         }
 
-        //TODO handle exception
-
         TS_Message::print(std::cout, "DATA", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
 
+        //TODO evaluate if to handle socket exception here
         //the file has been created
         send_OK(okCode::created);
-
         return;
     }
 
@@ -455,10 +440,6 @@ void server::ProtocolManager::removeDir(){
     //any lastWriteTime modification will be requested by the client so we want to keep the same time
     Directory_entry parent{basePath, parentPath.string()};
 
-    //remove the directory
-    //std::filesystem::remove(el->second.getAbsolutePath()); //it throws an exception if the dir is not empty
-    //TODO decide if to use this instead which removes also subdirectories
-    //int n_removed = std::filesystem::remove_all(el->second.getAbsolutePath());
     std::filesystem::recursive_directory_iterator iter{dirToRemove.getAbsolutePath()};
     std::vector<Directory_entry> elementsToRemove;
     for(auto i: iter){
@@ -495,23 +476,6 @@ void server::ProtocolManager::removeDir(){
 }
 
 /**
- * function to quit the protocol
- *
- * @author Michele Crepaldi s269551
- */
- /*
-void server::ProtocolManager::quit(){
-    send_QUIT();    //send a quit to the client
-
-    s.closeConnection();    //close the connection with the client
-    std::cout << "Client " << address << " closed connection." << std::endl;
-
-    throw ProtocolManagerException("", protocolManagerError::quit);
-    //TODO verify if something else is needed
-}
-  */
-
-/**
  * protocol manager constructor
  *
  * @param s socket associated to this thread
@@ -530,7 +494,6 @@ server::ProtocolManager::ProtocolManager(Socket &s, const std::string &address, 
     address(address),
     protocolVersion(ver){
 
-    //TODO get from config
     auto config = Config::getInstance(CONFIG_FILE_PATH);
     basePath = config->getServerBasePath();
     temporaryPath = config->getTempPath();
@@ -738,7 +701,9 @@ void server::ProtocolManager::receive(){
     catch (server::DatabaseException &e){
         throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
     }
-    //TODO catch config exception
+    catch (server::ConfigException &e){
+        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+    }
     catch (std::exception &e) {
         //internal error
         send_ERR(errCode::exception);    //send error message with cause

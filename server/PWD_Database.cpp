@@ -5,6 +5,8 @@
 #include <fstream>
 #include "PWD_Database.h"
 
+#define SALT_SIZE 32
+
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
  * Password Database class
@@ -230,15 +232,13 @@ void server::PWD_Database::addUser(const std::string &username, const std::strin
 
     int rc;
     RandomNumberGenerator rng;
-    std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
+    std::string salt = rng.getRandomString(SALT_SIZE);
     HashMaker hm{password};
     hm.update(salt);
 
     //convert salt and hash to hex representation (to be stored)
     std::string saltHex = RandomNumberGenerator::string_to_hex(salt);
     std::string hashHex = RandomNumberGenerator::string_to_hex(hm.get().str());
-
-    //TODO convert from byte string to hex the salt and the hash before putting them in the database
 
     //statement handle
     sqlite3_stmt* stmt;
@@ -288,15 +288,13 @@ void server::PWD_Database::updateUser(const std::string &username, const std::st
 
     int rc;
     RandomNumberGenerator rng;
-    std::string salt = rng.getRandomString(32); //TODO salt size as parameter (config)
+    std::string salt = rng.getRandomString(SALT_SIZE);
     HashMaker hm{password};
     hm.update(salt);
 
     //convert salt and hash to hex representation (to be stored)
     std::string saltHex = RandomNumberGenerator::string_to_hex(salt);
     std::string hashHex = RandomNumberGenerator::string_to_hex(hm.get().str());
-
-    //TODO convert from byte string to hex the salt and the hash before putting them in the database
 
     //statement handle
     sqlite3_stmt* stmt;
