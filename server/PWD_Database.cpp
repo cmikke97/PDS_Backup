@@ -159,8 +159,6 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
 
     int rc;
 
-    //TODO convert from hex (in db) to byte string the salt and the hash
-
     std::string saltHex, hashHex;
 
     //statement handle
@@ -209,18 +207,12 @@ std::pair<std::string, Hash> server::PWD_Database::getHash(std::string &username
 
     sqlite3_finalize(stmt);
 
-    /*
-    //prepare the variable to collect info into and return
-    std::pair<std::string, Hash> hashPair;
-    //Execute SQL statement
-    int rc = sqlite3_exec(db.get(), sql.c_str(), hashCallback, &hashPair, nullptr);
-    //optionally sqlite3_errmsg(db.get()) instead of zErrMsg
-    handleSQLError(rc, SQLITE_OK, "Cannot read from database: ", PWT_databaseError::read); //if there was an error throw an exception
-    return hashPair;
-    */
-    std::string salt = RandomNumberGenerator::hex_to_string(saltHex);
-    std::string hash = RandomNumberGenerator::hex_to_string(hashHex);
-    return std::make_pair(salt, Hash(hash));
+    if(saltHex.empty() || hashHex.empty())  //if they are empty it means no user with the provided username was registered
+        return std::make_pair("",Hash());   //no user with the provided username was found
+
+    std::string salt = RandomNumberGenerator::hex_to_string(saltHex);   //get the bitstring representation of the salt from hex string
+    std::string hash = RandomNumberGenerator::hex_to_string(hashHex);   //get the bitstring representation of the hash from hex string
+    return std::make_pair(salt, Hash(hash));    //return the salt and hash
 }
 
 /**

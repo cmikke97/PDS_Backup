@@ -91,7 +91,7 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class configError {
-        open, fileCreated
+        open, serverBasePath, tempPath, justCreated
     };
 
     /**

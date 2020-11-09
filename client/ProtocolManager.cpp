@@ -58,7 +58,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             code = serverMessage.code();
             switch(static_cast<client::okCode>(code)) {
                 case okCode::authenticated: //user authentication successful
-                    TS_Message::print(std::cout, "AUTH", "Authenticated", "");
+                    TS_Message::print(std::cout, "AUTH", "Authenticated");
                     return;
                 case okCode::found: //probe file found the file
                 case okCode::created:   //file/directory create was successful
@@ -95,7 +95,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
 
         default: //i should never arrive here
-            TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
+            TS_Message::print(std::cerr, "ERROR", "Unsupported message type");
             throw ProtocolManagerException("Unsupported message type error", protocolManagerError::unsupported);
     }
 
@@ -236,7 +236,7 @@ void client::ProtocolManager::receive() {
             }
             //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
             //TODO throw exception
-            TS_Message::print(std::cerr, "ERROR", "protocol error", "");
+            TS_Message::print(std::cerr, "ERROR", "protocol error");
             break;
         case messages::ServerMessage_Type_OK:
             //if(start != end) this condition is true if I receive something
@@ -639,7 +639,7 @@ void client::ProtocolManager::composeMessage(Event &e) {
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                TS_Message::print(std::cerr, "ERROR", "Unknown file status.", "");
+                TS_Message::print(std::cerr, "ERROR", "Unknown file status.");
         }
     } else { //if the element is a directory
         switch (e.getStatus()) {
@@ -658,7 +658,7 @@ void client::ProtocolManager::composeMessage(Event &e) {
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                TS_Message::print(std::cerr, "ERROR", "Unknown file status.", "");
+                TS_Message::print(std::cerr, "ERROR", "Unknown file status.");
         }
     }
 }

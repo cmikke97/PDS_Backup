@@ -320,6 +320,153 @@ void server::Database::remove(std::string &username, std::string &mac, const std
 }
 
 /**
+ * function used to remove all elements from the database for a specified user
+ *
+ * @param username
+ *
+ * @throw DatabaseException in case of database errors (cannot prepare, remove or finalize)
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::Database::removeAll(std::string &username){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
+    int rc;
+
+    //statement handle
+    sqlite3_stmt* stmt;
+
+    //Create SQL statement
+    std::string sql =   "DELETE FROM savedFiles WHERE username=?;";
+
+    //Prepare SQL statement
+    rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", databaseError::prepare); //if there was an error throw an exception
+
+    //Begin the transaction (will most likely increase performance)
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", databaseError::prepare); //if there was an error throw an exception
+
+    //bind parameter
+    sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", databaseError::prepare); //if there was an error throw an exception
+
+    // Execute SQL statement
+    rc = sqlite3_step(stmt);
+    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", databaseError::remove); //if there was an error throw an exception
+
+    //End the transaction.
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", databaseError::finalize); //if there was an error throw an exception
+
+    sqlite3_finalize(stmt);
+}
+
+/**
+ * function used to remove all elements from the database for a specified user-mac
+ *
+ * @param username
+ * @param mac macAddress
+ *
+ * @throw DatabaseException in case of database errors (cannot prepare, remove or finalize)
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::Database::removeAll(std::string &username, std::string &mac){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
+    int rc;
+
+    //statement handle
+    sqlite3_stmt* stmt;
+
+    //Create SQL statement
+    std::string sql =   "DELETE FROM savedFiles WHERE username=? AND mac=?;";
+
+    //Prepare SQL statement
+    rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", databaseError::prepare); //if there was an error throw an exception
+
+    //Begin the transaction (will most likely increase performance)
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", databaseError::prepare); //if there was an error throw an exception
+
+    //bind parameter
+    sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", databaseError::prepare); //if there was an error throw an exception
+    sqlite3_bind_text(stmt,2,mac.c_str(),mac.length(),SQLITE_TRANSIENT);
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", databaseError::prepare); //if there was an error throw an exception
+
+    // Execute SQL statement
+    rc = sqlite3_step(stmt);
+    handleSQLError(rc, SQLITE_DONE, "Cannot remove user from password table: ", databaseError::remove); //if there was an error throw an exception
+
+    //End the transaction.
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", databaseError::finalize); //if there was an error throw an exception
+
+    sqlite3_finalize(stmt);
+}
+
+std::vector<std::string> server::Database::getAllMacAddresses(const std::string &username){
+    std::lock_guard<std::mutex> lock(access_mutex); //ensure thread safeness
+
+    int rc;
+    //statement handle
+    sqlite3_stmt* stmt;
+    //Create SQL statement
+    std::string sql = "SELECT mac FROM savedFiles WHERE username=?;";
+
+    //Prepare SQL statement
+    rc = sqlite3_prepare_v2(db.get(), sql.c_str(), -1, &stmt, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot prepare SQL statement: ", databaseError::prepare); //if there was an error throw an exception
+
+    //Begin the transaction (will most likely increase performance)
+    rc = sqlite3_exec(db.get(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot begin transaction: ", databaseError::prepare); //if there was an error throw an exception
+
+    //bind parameters
+    sqlite3_bind_text(stmt,1,username.c_str(),username.length(),SQLITE_TRANSIENT);
+    handleSQLError(rc, SQLITE_OK, "Cannot bind the parameters: ", databaseError::prepare); //if there was an error throw an exception
+
+    //prepare some variables
+    bool done = false;
+    std::string mac;
+    std::vector<std::string> macAddrs;
+
+    //loop over table content
+    while (!done) {
+        switch (rc = sqlite3_step (stmt)) {
+            case SQLITE_ROW:    //in case of a row
+                //convert columns
+                mac = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
+
+                //add to vector
+                macAddrs.emplace_back(mac);
+                break;
+
+            case SQLITE_DONE:   //in case there are no more rows
+                done = true;
+                break;
+
+            default:    //in any other case -> error (throw exception)
+                std::stringstream tmp;
+                tmp << "Cannot read table: " << sqlite3_errstr(rc) << "; " << sqlite3_errmsg(db.get());
+                throw DatabaseException(tmp.str(), databaseError::read);
+        }
+    }
+
+    //End the transaction.
+    rc = sqlite3_exec(db.get(), "END TRANSACTION", nullptr, nullptr, nullptr);
+    handleSQLError(rc, SQLITE_OK, "Cannot end the transaction: ", databaseError::finalize); //if there was an error throw an exception
+
+    //finalize statement handle
+    sqlite3_finalize(stmt);
+
+    return std::move(macAddrs);
+}
+
+/**
  * function used to update an element of the database for a specified user-mac
  *
  * @param username username

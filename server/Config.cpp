@@ -14,15 +14,19 @@
 #define N_THREADS 4     //Number of single server threads (apart from the accepting thread)
 #define SOCKET_QUEUE_SIZE 10    //Maximum socket queue size
 #define SELECT_TIMEOUT_SECONDS 5    //Seconds the client will wait between 2 selects on the socket
-#define TIMEOUT_SECONDS 60     //Seconds the server will wait before disconnecting client
+#define TIMEOUT_SECONDS 30     //Seconds the server will wait before disconnecting client
 #define PASSWORD_DATABASE_PATH "../serverFiles/passwordDB.sqlite" //Password database path
 #define DATABASE_PATH "../serverFiles/serverDB.sqlite"    //Server Databse path
-#define SERVER_PATH "C:/Users/michele/Desktop/server_folder"    //Server base path
-#define TEMP_PATH "C:/Users/michele/Desktop/server_folder/temp" //Temporary path where to put temporary files
 #define TEMP_FILE_NAME_SIZE 8   //Size of the name of temporary files
 #define CERTIFICATE_PATH "../../TLScerts/server_cert.pem"   //Server certificate path
 #define PRIVATEKEY_PATH "../../TLScerts/server_pkey.pem"    //Server private key path
 #define CA_FILE_PATH "../../TLScerts/cacert.pem"    //CA to use for server certificate verification
+
+//host dependant values (variables which depend on the specific host/machine which the program is running on)
+//so their default value is the empty string meaning that the user will be asked to properly specify them
+#define SERVER_PATH ""    //Server base path
+#define TEMP_PATH "" //Temporary path where to put temporary files
+
 
 //static variables definition
 std::shared_ptr<server::Config> server::Config::config_;
@@ -54,12 +58,64 @@ server::Config::Config(std::string path) : path_(std::move(path)) {
     load(path_);
 }
 
+/**
+ * function used to add a single configuration variable line to the config file
+ *
+ * @param f config file fstream to add the line to
+ * @param variableName name of the variable to insert
+ * @param value default value of the variable to insert
+ *
+ * @author Michele Crepaldi s269551
+ */
 void addConfigVariable(std::fstream &f, const std::string &variableName, const std::string &value){
     f << variableName << " = " << value << std::endl;
 }
 
-void addComment(std::fstream &f, const std::string &comment){
+/**
+ * function used to add a single comment line to the config file
+ *
+ * @param f config file fstream to add the line to
+ * @param comment comment to insert
+ *
+ * @author Michele Crepaldi s269551
+ */
+void addSingleComment(std::fstream &f, const std::string &comment){
     f << comment << std::endl;
+}
+
+/**
+ * function to add an array of comments to the config file
+ *
+ * @tparam rows number of rows of the comments array
+ * @param file config file fstream to add the lines to
+ * @param comments reference to the comments array to insert into the config file
+ *
+ * @author Michele Crepaldi s269551
+ */
+template <size_t rows>
+void addComments(std::fstream &file, const std::string (&comments)[rows])
+{
+    for (size_t i = 0; i < rows; ++i)
+        addSingleComment(file, comments[i]);
+    file << std::endl;
+}
+
+/**
+ * function to add an array (matrix) of variables to the config file
+ *
+ * @tparam rows number of rows of the variables array
+ * @param file config file fstream to add the lines to
+ * @param variables reference to the variables array (matrix) to insert into the config file
+ */
+template <size_t rows>
+void addVariables(std::fstream &file, const std::string (&variables)[rows][3])
+{
+    for (size_t i = 0; i < rows; ++i){
+        addSingleComment(file, variables[i][2]);
+        addConfigVariable(file, variables[i][0], variables[i][1]);
+        file << std::endl;
+    }
+    file << std::endl;
 }
 
 /**
@@ -81,10 +137,11 @@ void server::Config::load(const std::string &configFilePath) {
 
         TS_Message::print(std::cout, "WARNING", "Configuration file does not exist", "it will now be created with default values");
 
-        std::string variables[13][3] = {{"password_database_path",  PASSWORD_DATABASE_PATH,                 "# Password database path"},
+        std::string hostVariables[][3] = {  {"server_base_path", SERVER_PATH, "# Server base path"},
+                                            {"temp_path",        TEMP_PATH,   "# Temporary path where to put temporary files"}};
+
+        std::string variables[][3] = {  {"password_database_path",  PASSWORD_DATABASE_PATH,                 "# Password database path"},
                                         {"server_database_path",    DATABASE_PATH,                          "# Server Databse path"},
-                                        {"server_base_path",        SERVER_PATH,                            "# Server base path"},
-                                        {"temp_path",               TEMP_PATH,                              "# Temporary path where to put temporary files"},
                                         {"certificate_path",        CERTIFICATE_PATH,                       "# Server certificate path"},
                                         {"private_key_path",        PRIVATEKEY_PATH,                        "# Server private key path"},
                                         {"ca_file_path",            CA_FILE_PATH,                           "# CA to use for server certificate verification"},
@@ -95,38 +152,49 @@ void server::Config::load(const std::string &configFilePath) {
                                         {"timeout_seconds",         std::to_string(TIMEOUT_SECONDS),        "# Seconds the server will wait before disconnecting client"},
                                         {"tmp_file_name_size",      std::to_string(TEMP_FILE_NAME_SIZE),    "# Size of the name of temporary files"}};
 
-        std::string initial_comments[] = {  "###########################################################################",
-                                            "#                                                                         #",
-                                            "#         Configuration file for the server of PDS_Backup project         #",
-                                            "#        -  in case of empty fields default values will be used  -        #",
-                                            "#                   (rows preceded by '#' are comments)                   #",
-                                            "#                                                                         #",
-                                            "###########################################################################"};
+        std::string initial_comments[] = {          "###########################################################################",
+                                                    "#                                                                         #",
+                                                    "#         Configuration file for the SERVER of PDS_Backup project         #",
+                                                    "#                   (rows preceded by '#' are comments)                   #",
+                                                    "#                                                                         #",
+                                                    "###########################################################################"};
 
-        std::string final_comments[]  = {   "###########################################################################",
-                                            "#                                                                         #",
-                                            "#        -              Configuration file finished              -        #",
-                                            "#                                                                         #",
-                                            "###########################################################################"};
+        std::string host_variables_comments[] = {   "###########################################################################",
+                                                    "#         Host specific variables: no default values are provided         #",
+                                                    "###########################################################################"};
+
+        std::string variables_comments[] = {        "###########################################################################",
+                                                    "#                             Other variables                             #",
+                                                    "#        -  in case of empty fields default values will be used  -        #",
+                                                    "###########################################################################"};
+
+        std::string final_comments[]  = {           "###########################################################################",
+                                                    "#                                                                         #",
+                                                    "#        -              Configuration file finished              -        #",
+                                                    "#                                                                         #",
+                                                    "###########################################################################"};
 
         //add initial comments
-        for(const auto & initial_comment : initial_comments)
-            addComment(file, initial_comment);
-        file << std::endl;
+        addComments(file, initial_comments);
 
-        for(auto & variable : variables){
-            addComment(file, variable[2]);
-            addConfigVariable(file, variable[0], variable[1]);
-            file << std::endl;
-        }
-        file << std::endl;
+        //add host variables comments
+        addComments(file, host_variables_comments);
+
+        //add host variables
+        addVariables(file, hostVariables);
+
+        //add variables comments
+        addComments(file, variables_comments);
+
+        //add other variables
+        addVariables(file, variables);
 
         //add final comments
-        for(const auto & final_comment : final_comments)
-            addComment(file, final_comment);
-        file << std::endl;
+        addComments(file, final_comments);
 
         file.close();
+
+        throw ConfigException("Configuration file created, modify it and restart.", configError::justCreated);
     }
 
     //open configuration file
@@ -248,31 +316,44 @@ const std::string &server::Config::getServerDatabasePath() {
 }
 
 /**
- * server base path getter (if no value was provided in the config file use a default one)
+ * server base path getter (HOST specific, this has no default values; so if no value was provided an exception will be thrown)
  *
  * @return path to watch
+ *
+ * @throw ConfigException in case no value was provided (there are no defaults for this variable) OR in case the value provided
+ * references a non existing directory OR something which is not a directory
  *
  * @author Michele Crepaldi s269551
  */
 const std::string &server::Config::getServerBasePath() {
-    if(server_base_path.empty())
-        server_base_path = SERVER_PATH;
 
-    //if the server base path does not exist it will be created automatically by the server
+    if(server_base_path.empty())    //value required.. if it is empty throw exception (there is no default value for this variable)
+        throw ConfigException("Server base path was not set", configError::serverBasePath);   //throw an exception
+
+    //if the path to watch set references a non-existant folder
+    if(!std::filesystem::exists(server_base_path))
+        throw ConfigException("Server base path does not exist", configError::serverBasePath);   //throw an exception
+
+    //if the path to watch set references something which is not a folder
+    if(!std::filesystem::is_directory(server_base_path))
+        throw ConfigException("Server base path is not a directory", configError::serverBasePath);   //throw an exception
 
     return server_base_path;
 }
 
 /**
- * temp path getter (if no value was provided in the config file use a default one)
+ * temp path getter (HOST specific, this has no default values; so if no value was provided an exception will be thrown)
  *
  * @return path to watch
+ *
+ * @throw ConfigException in case no value was provided (there are no defaults for this variable)
  *
  * @author Michele Crepaldi s269551
  */
 const std::string &server::Config::getTempPath() {
-    if(temp_path.empty())
-        temp_path = TEMP_PATH;
+
+    if(temp_path.empty())    //value required.. if it is empty throw exception (there is no default value for this variable)
+        throw ConfigException("Server temporary path was not set", configError::tempPath);   //throw an exception
 
     //if the temporary path does not exist it will be created automatically by the server
 

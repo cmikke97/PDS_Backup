@@ -6,6 +6,7 @@
 #include <string>
 #include <iostream>
 #include <atomic>
+#include <getopt.h>
 #include "FileSystemWatcher.h"
 #include "Event.h"
 #include "../myLibraries/TSCircular_vector.h"
@@ -17,9 +18,48 @@
 
 #define VERSION 1
 
-#define SOCKET_TYPE socketType::TCP
+#define SOCKET_TYPE socketType::TLS
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
+
+void displayHelp(const std::string &programName){
+    std::cout << "\nNAME" << std::endl << "\t";
+    std::cout << "PDS_BACKUP client\n" << std::endl;
+    std::cout << "SYNOPSIS" << std::endl << "\t";
+    std::cout  << programName << " [--help] [--retrieve destFolder] [--mac macAddress] [--all] [--start] [--ip server_ipaddress] [--port server_port] [--user username] [--pass password]\n" << std::endl;
+    std::cout << "OPTIONS" << std::endl << "\t";
+    std::cout << "--help (abbr -h)" << std::endl << "\t\t";
+    std::cout << "Print out a usage message\n" << std::endl << "\t";
+    std::cout << "--retrieve (abbr -r)" << std::endl << "\t\t";
+    std::cout << "Requests the server (after authentication) to send to the client the copy of the folders and files of\n\t\t"
+                 "the specified user. The data will be put in the specified [destDir]. If no other commands are specified\n\t\t"
+                 "(no --mac, no --all) then only the files and directories for the current mac address will be retrieved.\n\t\t"
+                 "This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass] [--dir]\n" << std::endl << "\t";
+    std::cout << "--dir (abbr -m) destDir" << std::endl << "\t\t";
+    std::cout << "Sets the [destDir] of the user's data to retrieve.\n\t\t"
+                 "Needed by --retrieve.\n" << std::endl << "\t";
+    std::cout << "--mac (abbr -m) macAddress" << std::endl << "\t\t";
+    std::cout << "Sets the [macAddress] of the user's data to retrieve.\n\t\t"
+                 "To be used with --retrieve.\n" << std::endl << "\t";
+    std::cout << "--all (abbr -a)" << std::endl << "\t\t";
+    std::cout << "Specifies to retrieve all user's data,\n\t\t"
+                 "To be used with --retrieve.\n" << std::endl << "\t";
+    std::cout << "--start (abbr -s)" << std::endl << "\t\t";
+    std::cout << "Start the server (if not present the server will stop after having created/loaded the Config file).\n\t\t"
+                 "This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass]\n" << std::endl << "\t";
+    std::cout << "--ip (abbr -i) server_ipaddress" << std::endl << "\t\t";
+    std::cout << "Sets the [ip] address of the server to contact.\n\t\t"
+                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
+    std::cout << "--port (abbr -p) server_port" << std::endl << "\t\t";
+    std::cout << "Sets the [port] of the server to contact.\n\t\t"
+                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
+    std::cout << "--user (abbr -u) username" << std::endl << "\t\t";
+    std::cout << "Sets the [username] to use to authenticate to the server.\n\t\t"
+                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
+    std::cout << "--pass (abbr -w) password" << std::endl << "\t\t";
+    std::cout << "Sets the [password] to use to authenticate to the server.\n\t\t"
+                 "Needed by --start and --retrieve.\n" << std::endl;
+}
 
 /**
  * the client main function
@@ -35,9 +75,110 @@ int main(int argc, char **argv) {
     // compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    if (argc != 5) {
-        std::cerr << "Error: format is [" << argv[0] << "] [server ip] [server port] [username] [password]" << std::endl;
-        exit(1);
+    //--options management--
+    std::string destFolder, mac, serverIP, serverPort, username, password;
+    bool retrieveSet = false, dirSet = false, macSet = false, allSet = false, startSet = false, ipSet = false, portSet = false, userSet = false, passSet = false;
+
+    if(argc == 1){
+        std::cout << "Options expected. Use -h (or --help) for help." << std::endl;
+        return 1;
+    }
+
+    int c;
+    while (true) {
+        int option_index = 0;
+        static struct option long_options[] = { //long options definition
+                {"retrieve",    no_argument,        nullptr,  'r' },
+                {"dir",         required_argument,  nullptr,  'd' },
+                {"mac",         required_argument,  nullptr,  'm' },
+                {"all",         no_argument,        nullptr,  'a' },
+                {"start",       no_argument,        nullptr,  's' },
+                {"ip",          required_argument,  nullptr,  'i' },
+                {"port",        required_argument,  nullptr,  'p' },
+                {"username",    required_argument,  nullptr,  'u' },
+                {"password",    required_argument,  nullptr,  'w' },
+                {"help",        no_argument,        nullptr,  'h'},
+                {nullptr,0,                 nullptr,  0 }
+        };
+
+        c = getopt_long(argc, argv, "rd:m:asi:p:u:w:h", long_options, &option_index);     //short options definition and the getting of an option
+        if (c == -1)
+            break;
+
+        switch (c) {
+            case 'r':   //retrieve option
+                retrieveSet = true;
+                break;
+
+            case 'd':   //dir option
+                dirSet = true;
+                destFolder = optarg;
+                break;
+
+            case 'm':   //mac option
+                macSet = true;
+                mac = optarg;
+                break;
+
+            case 'a':   //all option
+                allSet = true;
+                break;
+
+            case 's':   //start client option
+                startSet = true;
+                break;
+
+            case 'i':   //ip option
+                ipSet = true;
+                serverIP = optarg;
+                break;
+
+            case 'p':   //port option
+                portSet = true;
+                serverPort = optarg;
+                break;
+
+            case 'u':   //username option
+                userSet = true;
+                username = optarg;
+                break;
+
+            case 'w':   //password option
+                passSet = true;
+                password = optarg;
+                break;
+
+            case 'h':   //help option
+                displayHelp(argv[0]);
+                return 0;
+
+            case '?':   //unknown option
+                break;
+
+            default:    //error from getopt
+                std::cerr << "?? getopt returned character code 0" << c << " ??" << std::endl;
+        }
+    }
+
+    //perform some checks on the options
+    if(!retrieveSet && (macSet || allSet || dirSet)){
+        TS_Message::print(std::cerr, "ERROR", "--mac, --all and --dir options require --retrieve.", "Use -h (or --help) for help.");
+        return 1;
+    }
+
+    if(retrieveSet && (!ipSet || !portSet || !userSet || !passSet || !dirSet)){
+        TS_Message::print(std::cerr, "ERROR", "--retrieve command requires --ip --port --user --pass --dir options to be set.", "Use -h (or --help) for help.");
+        return 1;
+    }
+
+    if(startSet && (!ipSet || !portSet || !userSet || !passSet)){
+        TS_Message::print(std::cerr, "ERROR", "--start command requires --ip --port --user --pass options to be set.", "Use -h (or --help) for help.");
+        return 1;
+    }
+
+    if(!startSet && !retrieveSet){
+        TS_Message::print(std::cerr, "ERROR", "--start AND/OR --retrieve options need to be specified", "Use -h (or --help) for help.");
+        return 1;
     }
 
     try {
@@ -46,17 +187,18 @@ int main(int argc, char **argv) {
         //get the database instance and open the database (and if not previously there create also the needed table)
         auto db = client::Database::getInstance(config->getDatabasePath());
 
+        if(retrieveSet){
+            //TODO retrieve files and folders from the server
+        }
+
+        if(!startSet)   //if the --start option was not there just close the program
+            return 0;
+
         // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
 
         // create a circular vector instance that will contain all the events happened
         TSCircular_vector<Event> eventQueue(config->getEventQueueSize());
-
-        //extract the arguments
-        std::string serverIP = argv[1];
-        std::string serverPort = argv[2];
-        std::string username = argv[3];
-        std::string password = argv[4];
 
         //initialize some atomic boolean to make the different threads stop
         std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
@@ -89,10 +231,10 @@ int main(int argc, char **argv) {
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
+            case client::configError::justCreated:  //if the config file was not there and it has been created
             case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
-                TS_Message::print(std::cout, "ERROR", "Config Exception", e.what());
-                TS_Message::print(std::cout, "WARNING", "Please check it in config file: ", CONFIG_FILE_PATH);
-                break;
+                TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+
             case client::configError::open: //if there were some errors in opening the configuration file return
             default:
                 TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
@@ -279,7 +421,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         }
 
                         //maximum number of re-tries exceeded -> terminate program
-                        TS_Message::print(std::cerr, "ERROR", "Cannot establish connection", "");
+                        TS_Message::print(std::cerr, "ERROR", "Cannot establish connection");
 
                     case socketError::getMac: //error retrieving the MAC
                     default:
@@ -360,10 +502,10 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
-            case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
-                TS_Message::print(std::cout, "ERROR", "Config Exception", e.what());
-                TS_Message::print(std::cout, "WARNING", "Please check it in config file: ", CONFIG_FILE_PATH);
-                break;
+            case client::configError::justCreated:  //if the config file was not there and it has been created
+            case client::configError::pathToWatch:  //if the configured path to watch was not specified or it does not exist (or it is not a directory) ask to modify it and return
+                TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+
             case client::configError::open: //if there were some errors in opening the configuration file return
             default:
                 TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
@@ -375,7 +517,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (...) {
         //any uncaught exception will terminate the program
-        TS_Message::print(std::cerr, "ERROR", "uncaught exception", "");
+        TS_Message::print(std::cerr, "ERROR", "uncaught exception");
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);

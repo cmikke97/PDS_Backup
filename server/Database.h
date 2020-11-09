@@ -85,6 +85,9 @@ namespace server {
         void insert(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
         void insert(std::string &username, std::string &mac, Directory_entry &d);
         void remove(std::string &username, std::string &mac, const std::string &path);
+        void removeAll(std::string &username);
+        void removeAll(std::string &username, std::string &mac);
+        std::vector<std::string> getAllMacAddresses(const std::string &username);
         void update(std::string &username, std::string &mac, const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);
         void update(std::string &username, std::string &mac, Directory_entry &d);
     };
