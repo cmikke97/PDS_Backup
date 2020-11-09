@@ -21,6 +21,8 @@ class TS_Message {
 
 public:
     static void print(std::ostream &out, const std::string &head, const std::string &body, const std::string &tail);
+    static void print(std::ostream &out, const std::string &head, const std::string &body);
+
     TS_Message(std::string head, std::string body, std::string tail);
     void update(int newPerc);
     friend std::ostream & operator << (std::ostream &out, const TS_Message &c);

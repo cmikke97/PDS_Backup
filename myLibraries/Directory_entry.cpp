@@ -71,8 +71,8 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
 
     if(std::regex_match (absolutePath,m,e))
         relativePath = m[2];
-    else
-        throw std::runtime_error("Error getting relative from absolute path"); //I should never arrive here
+    else    //TODO maybe it is better to create an exception class for Directory entry
+        throw std::runtime_error("Error getting relative from absolute path"); //if the absolute path does not contain the basePath
 
     //if it is a file then set its size, if it is a directory then size is 0
     this->size = type==Directory_entry_TYPE::file?size:0;
@@ -83,12 +83,6 @@ Directory_entry::Directory_entry(const std::string& basePath, const std::string&
     if(type == Directory_entry_TYPE::file){
         //calculate hash
         HashMaker hm;
-
-        /* TODO evaluate if to add these
-        hm.update(relativePath);
-        hm.update(sizeStr.str());
-        hm.update(this->last_write_time);
-        */
 
         std::ifstream infile;
         infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);

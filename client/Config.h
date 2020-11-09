@@ -91,7 +91,7 @@ namespace client {
      * @author Michele Crepaldi s269551
      */
     enum class configError {
-        open, fileCreated, pathToWatch
+        open, pathToWatch, justCreated
     };
 
     /**

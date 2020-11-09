@@ -184,8 +184,7 @@ ssize_t TCP_Socket::write(const char *buffer, size_t len, int options) const {
  * @author Michele Crepaldi s269551
 */
 ssize_t TCP_Socket::sendString(std::string &stringBuffer) const {
-    uint32_t size = stringBuffer.size();
-    uint32_t dataLength = htonl(size); // Ensure network byte order when sending the data length
+    uint32_t dataLength = htonl(stringBuffer.size()); // Ensure network byte order when sending the data length
 
     ssize_t len = write(reinterpret_cast<const char *>(&dataLength), sizeof(uint32_t) , 0); // Send the data length
     if(len < sizeof(uint32_t))
@@ -210,6 +209,7 @@ int TCP_Socket::getSockfd() const {
  * @return MAC address of this machine's network card
  *
  * @throw SocketException in case of errors in getting the MAC address
+ * @throw SocketException in case of errors in getting the IP address
  *
  * @author Michele Crepaldi s269551
  */
@@ -218,6 +218,7 @@ std::string TCP_Socket::getMAC() const {
     struct ifconf ifc{};
     char buf[1024];
     bool success = false;
+    sockaddr_in *ip_address;
 
     ifc.ifc_len = sizeof(buf);  //prepare ifc variable
     ifc.ifc_buf = buf;
@@ -235,9 +236,21 @@ std::string TCP_Socket::getMAC() const {
 
             if (! (ifr.ifr_flags & IFF_LOOPBACK)) { //if the flag implies this is loopback interface then skip it
 
-                if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) == 0) { //get the MAC address for this interface and stop the loop
-                    success = true;
-                    break;
+                if(ioctl(sockfd, SIOCGIFADDR, &ifr) == 0){  //get the ip address associated to this interface
+                    ip_address = reinterpret_cast<sockaddr_in *>(&ifr.ifr_addr);    //get the ip address from the ifr element (just updated)
+
+                    char buf2[INET_ADDRSTRLEN];
+                    if (inet_ntop(AF_INET, &ip_address->sin_addr, buf2, INET_ADDRSTRLEN) == nullptr)    //convert the address to uman readable form
+                        throw SocketException("Could not inet_ntop", socketError::getMac);     //throw exception in case of errors
+
+                    if(std::string(buf2) != getIP())    //compare the ip address associated to this interface with the actual socket ip address
+                        continue;   //if they are different continue with the next interface
+
+                    //otherwise
+                    if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) == 0) { //get the MAC address for this interface and stop the loop
+                        success = true;
+                        break;
+                    }
                 }
             }
         }
@@ -248,7 +261,7 @@ std::string TCP_Socket::getMAC() const {
     if (!success)
         throw SocketException("Error in getting MAC address", socketError::getMac); //if no MAC address was found signal error
 
-    auto *hwaddr = (unsigned char *)ifr.ifr_hwaddr.sa_data; //get mac address from struct ifreq
+    auto *hwaddr = reinterpret_cast<unsigned char *>(ifr.ifr_hwaddr.sa_data); //get mac address from struct ifreq
 
     std::stringstream mac;  //compose mac address string
     mac <<
@@ -261,6 +274,47 @@ std::string TCP_Socket::getMAC() const {
         std::hex << (int) hwaddr[5];
 
     return mac.str();   //return MAC address as string
+}
+
+/**
+ * get the machine local IP address (address of its used interface) from the TCP_socket
+ *
+ * @return IP address of this machine's network card
+ *
+ * @throw SocketException in case of errors in getting the IP address
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::string TCP_Socket::getIP() const{
+    int sock = socket(PF_INET, SOCK_DGRAM, 0);
+    sockaddr_in loopback{};
+
+    if (sock == -1)
+        throw SocketException("Could not create socket", socketError::getIP);     //throw exception in case of errors
+
+    std::memset(&loopback, 0, sizeof(loopback));
+    loopback.sin_family = AF_INET;
+    loopback.sin_addr.s_addr = INADDR_LOOPBACK;   // using loopback ip address
+    loopback.sin_port = htons(9);                 // using debug port
+
+    if (::connect(sock, reinterpret_cast<sockaddr*>(&loopback), sizeof(loopback)) == -1) {
+        close(sock);
+        throw SocketException("Could not connect", socketError::getIP);     //throw exception in case of errors
+    }
+
+    socklen_t addrlen = sizeof(loopback);
+    if (getsockname(sock, reinterpret_cast<sockaddr*>(&loopback), &addrlen) == -1) {
+        close(sock);
+        throw SocketException("Could not getsockname", socketError::getIP);     //throw exception in case of errors
+    }
+
+    close(sock);
+
+    char buf[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &loopback.sin_addr, buf, INET_ADDRSTRLEN) == nullptr)
+        throw SocketException("Could not inet_ntop", socketError::getIP);     //throw exception in case of errors
+
+    return std::string(buf);
 }
 
 /**
@@ -307,7 +361,7 @@ TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
     //extract ip address in readable form
     char address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &sockaddrIn.sin_addr, address, sizeof(address));     //get address
-    TS_Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(address) + ":" + std::to_string(port) + "]");
+    TS_Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(this->getIP()) + ":" + std::to_string(port) + "]");
 }
 
 /**
@@ -556,6 +610,19 @@ std::string TLS_Socket::getMAC() const {
 }
 
 /**
+ * get the machine IP address from the TLS_socket
+ *
+ * @return IP address of this machine's network card
+ *
+ * @throw SocketException in case of errors in getting the IP address
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::string TLS_Socket::getIP() const{
+    return sock->getIP();
+}
+
+/**
  * function used to manually close the TLS connection
  *
  * @author Michele Crepaldi s269551
@@ -787,6 +854,19 @@ std::string Socket::getMAC() {
 }
 
 /**
+ * get the machine IP address from the socket
+ *
+ * @return IP address of this machine's network card
+ *
+ * @throw SocketException in case of errors in getting the IP address
+ *
+ * @author Michele Crepaldi s269551
+ */
+std::string Socket::getIP(){
+    return socket->getIP();
+}
+
+/**
  * function used to manually close the connection
  *
  * @author Michele Crepaldi s269551
@@ -837,9 +917,24 @@ ServerSocket::ServerSocket(int port, int n, socketType type) : Socket(type) {
     }
 }
 
+/**
+ * move constructor of class ServerSocket
+ *
+ * @param other other ServerSocket
+ *
+ * @author Michele Crepaldi s269551
+ */
 ServerSocket::ServerSocket(ServerSocket &&other) noexcept : serverSocket(other.serverSocket.release()) {
 }
 
+/**
+ * override of operator= for the ServerSocket class
+ *
+ * @param source the other ServerSocket
+ * @return this ServerSocket
+ *
+ * @author Michele Crepaldi s269551
+ */
 ServerSocket& ServerSocket::operator=(ServerSocket &&source) noexcept {
     if(serverSocket != nullptr)
         serverSocket.reset();

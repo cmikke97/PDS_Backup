@@ -15,13 +15,16 @@
 #define SECONDS_BETWEEN_RECONNECTIONS 10 //seconds to wait before client retrying connection after connection lost
 #define MAX_CONNECTION_RETRIES 12 //maximum number of times the system will re-try to connect consecutively
 #define MAX_SERVER_ERROR_RETRIES 5 //maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the final outcome) after an internal server error
-#define MAX_AUTH_ERROR_RETRIES 5 //maximum number of times the system will re-try the authentication after an internal server error
-#define TIMEOUT 30 //seconds to wait before client-server connection timeout
+#define MAX_AUTH_ERROR_RETRIES 5 //maximum number of times the system will re-try the authentication after an internal server error //TODO actually not used.. remove it
+#define TIMEOUT 15 //seconds to wait before client-server connection timeout
 #define SELECT_TIMEOUT 5 //seconds to wait between one select and the other
 #define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
 #define DATABASE_PATH "../clientFiles/clientDB.sqlite"  //path of the client database
 #define CA_FILE_PATH "../../TLScerts/cacert.pem"    //path of the CA to use to check the server certificate
-#define PATH_TO_WATCH "C:/Users/michele/Desktop/programmazione_di_sistema_backup"    //path to watch for changes
+
+//host dependant values (variables which depend on the specific host/machine which the program is running on)
+//so their default value is the empty string meaning that the user will be asked to properly specify them
+#define PATH_TO_WATCH ""    //path to watch for changes
 
 //20KB
 #define MAX_DATA_CHUNK_SIZE 20480   //Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
@@ -57,12 +60,64 @@ client::Config::Config(std::string path) : path_(std::move(path)) {
     load(path_);
 }
 
+/**
+ * function used to add a single configuration variable line to the config file
+ *
+ * @param f config file fstream to add the line to
+ * @param variableName name of the variable to insert
+ * @param value default value of the variable to insert
+ *
+ * @author Michele Crepaldi s269551
+ */
 void addConfigVariable(std::fstream &f, const std::string &variableName, const std::string &value){
     f << variableName << " = " << value << std::endl;
 }
 
-void addComment(std::fstream &f, const std::string &comment){
+/**
+ * function used to add a single comment line to the config file
+ *
+ * @param f config file fstream to add the line to
+ * @param comment comment to insert
+ *
+ * @author Michele Crepaldi s269551
+ */
+void addSingleComment(std::fstream &f, const std::string &comment){
     f << comment << std::endl;
+}
+
+/**
+ * function to add an array of comments to the config file
+ *
+ * @tparam rows number of rows of the comments array
+ * @param file config file fstream to add the lines to
+ * @param comments reference to the comments array to insert into the config file
+ *
+ * @author Michele Crepaldi s269551
+ */
+template <size_t rows>
+void addComments(std::fstream &file, const std::string (&comments)[rows])
+{
+    for (size_t i = 0; i < rows; ++i)
+        addSingleComment(file, comments[i]);
+    file << std::endl;
+}
+
+/**
+ * function to add an array (matrix) of variables to the config file
+ *
+ * @tparam rows number of rows of the variables array
+ * @param file config file fstream to add the lines to
+ * @param variables reference to the variables array (matrix) to insert into the config file
+ */
+template <size_t rows>
+void addVariables(std::fstream &file, const std::string (&variables)[rows][3])
+{
+    for (size_t i = 0; i < rows; ++i){
+        addSingleComment(file, variables[i][2]);
+        addConfigVariable(file, variables[i][0], variables[i][1]);
+        file << std::endl;
+    }
+    file << std::endl;
 }
 
 /**
@@ -84,8 +139,9 @@ void client::Config::load(const std::string &configFilePath) {
 
         TS_Message::print(std::cout, "WARNING", "Configuration file does not exist", "it will now be created with default values");
 
-        std::string variables[13][3] = {{"path_to_watch",                   PATH_TO_WATCH,                                  "# Path to back up on server"},
-                                        {"database_path",                   DATABASE_PATH,                                  "# Client Databse path"},
+        std::string hostVariables[][3] = {  {"path_to_watch",                   PATH_TO_WATCH,                                  "# Path to back up on server"}};
+
+        std::string variables[][3] = {  {"database_path",                   DATABASE_PATH,                                  "# Client Databse path"},
                                         {"ca_file_path",                    CA_FILE_PATH,                                   "# CA to use for server certificate verification"},
                                         {"millis_filesystem_watcher",       std::to_string(MILLIS_FILESYSTEM_WATCHER),      "# Milliseconds the file system watcher will wait every cycle"},
                                         {"event_queue_size",                std::to_string(EVENT_QUEUE_SIZE),               "# Max events queue size"},
@@ -101,38 +157,49 @@ void client::Config::load(const std::string &configFilePath) {
                                                                                                                             "\n# so keep it less than that (keeping in mind that there are also other fields in the message)"}};
 
 
-        std::string initial_comments[] = {  "###########################################################################",
-                                            "#                                                                         #",
-                                            "#         Configuration file for the client of PDS_Backup project         #",
-                                            "#        -  in case of empty fields default values will be used  -        #",
-                                            "#                   (rows preceded by '#' are comments)                   #",
-                                            "#                                                                         #",
-                                            "###########################################################################"};
+        std::string initial_comments[] = {          "###########################################################################",
+                                                    "#                                                                         #",
+                                                    "#         Configuration file for the CLIENT of PDS_Backup project         #",
+                                                    "#                   (rows preceded by '#' are comments)                   #",
+                                                    "#                                                                         #",
+                                                    "###########################################################################"};
 
-        std::string final_comments[]  = {   "###########################################################################",
-                                            "#                                                                         #",
-                                            "#        -              Configuration file finished              -        #",
-                                            "#                                                                         #",
-                                            "###########################################################################"};
+        std::string host_variables_comments[] = {   "###########################################################################",
+                                                    "#         Host specific variables: no default values are provided         #",
+                                                    "###########################################################################"};
+
+        std::string variables_comments[] = {        "###########################################################################",
+                                                    "#                             Other variables                             #",
+                                                    "#        -  in case of empty fields default values will be used  -        #",
+                                                    "###########################################################################"};
+
+        std::string final_comments[]  = {           "###########################################################################",
+                                                    "#                                                                         #",
+                                                    "#        -              Configuration file finished              -        #",
+                                                    "#                                                                         #",
+                                                    "###########################################################################"};
 
         //add initial comments
-        for(const auto & initial_comment : initial_comments)
-            addComment(file, initial_comment);
-        file << std::endl;
+        addComments(file, initial_comments);
 
-        for(auto & variable : variables){
-            addComment(file, variable[2]);
-            addConfigVariable(file, variable[0], variable[1]);
-            file << std::endl;
-        }
-        file << std::endl;
+        //add host variables comments
+        addComments(file, host_variables_comments);
+
+        //add host variables
+        addVariables(file, hostVariables);
+
+        //add variables comments
+        addComments(file, variables_comments);
+
+        //add other variables
+        addVariables(file, variables);
 
         //add final comments
-        for(const auto & final_comment : final_comments)
-            addComment(file, final_comment);
-        file << std::endl;
+        addComments(file, final_comments);
 
         file.close();
+
+        throw ConfigException("Configuration file created, modify it and restart.", configError::justCreated);
     }
 
     //open configuration file
@@ -207,19 +274,27 @@ void client::Config::load(const std::string &configFilePath) {
 }
 
 /**
- * path to watch getter (if no value was provided in the config file use a default one)
+ * path to watch getter (HOST specific, this has no default values; so if no value was provided an exception will be thrown)
  *
  * @return path to watch
+ *
+ * @throw ConfigException in case no value was provided (there are no defaults for this variable) OR in case the value provided
+ * references a non existing directory OR something which is not a directory
  *
  * @author Michele Crepaldi s269551
  */
 std::string& client::Config::getPathToWatch() {
-    if(path_to_watch.empty())
-        path_to_watch = PATH_TO_WATCH;
+
+    if(path_to_watch.empty())    //if it is empty it means there is no default value for this element (it is required from the user)
+        throw ConfigException("Path to watch was not set", configError::pathToWatch);   //throw an exception
 
     //if the path to watch set references a non-existant folder
     if(!std::filesystem::exists(path_to_watch))
-        throw ConfigException("Path to watch does not exists", configError::pathToWatch);
+        throw ConfigException("Path to watch does not exist", configError::pathToWatch);   //throw an exception
+
+    //if the path to watch set references something which is not a folder
+    if(!std::filesystem::is_directory(path_to_watch))
+        throw ConfigException("Path to watch is not a directory", configError::pathToWatch);   //throw an exception
 
     return path_to_watch;
 }

@@ -43,6 +43,7 @@ public:
     virtual ssize_t sendString(std::string &stringBuffer) const = 0;
     [[nodiscard]] virtual int getSockfd() const = 0;
     [[nodiscard]] virtual std::string getMAC() const = 0;
+    [[nodiscard]] virtual std::string getIP() const = 0;
     virtual void closeConnection() = 0;
 
     virtual ~SocketBridge() = 0;
@@ -104,6 +105,7 @@ public:
     ssize_t sendString(std::string &stringBuffer) const override;
     [[nodiscard]] int getSockfd() const override;
     [[nodiscard]] std::string getMAC() const override;
+    [[nodiscard]] std::string getIP() const override;
     void closeConnection() override;
     ~TCP_Socket() override;
 };
@@ -189,6 +191,7 @@ public:
     ssize_t sendString(std::string &stringBuffer) const override;
     [[nodiscard]] int getSockfd() const override;
     [[nodiscard]] std::string getMAC() const override;
+    [[nodiscard]] std::string getIP() const override;
     void closeConnection() override;
     ~TLS_Socket() override;
 };
@@ -267,6 +270,7 @@ public:
     ssize_t sendString(std::string &stringBuffer) const;
     [[nodiscard]] int getSockfd() const;
     [[nodiscard]] std::string getMAC();
+    [[nodiscard]] std::string getIP();
     void closeConnection();
 };
 
@@ -316,7 +320,7 @@ public:
  *
  * @author Michele Crepaldi s269551
  */
-enum class socketError{create, bind, accept, read, write, connect, getMac, closed};
+enum class socketError{create, bind, accept, read, write, connect, getMac, getIP, closed};
 
 /**
  * exceptions for the socket class
