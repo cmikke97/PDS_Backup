@@ -348,7 +348,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
             //authenticate the connected client
             pm.authenticate();
-            pm.recoverFromDB();
+            //pm.recoverFromDB();
 
             while(loop && !thread_stop.load()) { //loop until we are told to stop
                 //build fd sets

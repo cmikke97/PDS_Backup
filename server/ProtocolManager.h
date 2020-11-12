@@ -59,6 +59,8 @@ namespace server {
         std::string username, mac, basePath, temporaryPath, address;
         int tempNameSize, protocolVersion;
 
+        bool recovered;
+
         std::unordered_map<std::string, Directory_entry> elements;
 
         void send_OK(okCode code);
@@ -74,7 +76,7 @@ namespace server {
         //void quit();
 
     public:
-        explicit ProtocolManager(Socket &s, const std::string &address, int ver);
+        explicit ProtocolManager(Socket &s, std::string address, int ver);
         void recoverFromDB();
         void authenticate();
         void receive();

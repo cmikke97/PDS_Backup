@@ -69,7 +69,11 @@ namespace client {
         void send_DATA(char *buff, uint64_t len);
         void send_MKD(Directory_entry &e);
         void send_RMD(Directory_entry &e);
+        void send_RETR(const std::string &username, const std::string &macAddress, bool all);
         void composeMessage(Event &e);
+
+        void storeFile(const std::string &destFolder, const std::string &temporaryPath, int tempNameSize);
+        void makeDir(const std::string &destFolder);
 
     public:
         ProtocolManager(Socket &s, int max, int ver, int maxTries, std::string path);
@@ -91,6 +95,8 @@ namespace client {
         void recoverFromError();
 
         void sendFile(Directory_entry &element);
+
+        void retrieveFiles(const std::string &username, const std::string &macAddress, bool all, const std::string &destFolder);
     };
 
     /**

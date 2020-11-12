@@ -4,6 +4,7 @@
 
 #include <fstream>
 #include <regex>
+#include <utility>
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
 
@@ -489,10 +490,11 @@ void server::ProtocolManager::removeDir(){
  *
  * @author Michele Crepaldi s269551
  */
-server::ProtocolManager::ProtocolManager(Socket &s, const std::string &address, int ver) :
+server::ProtocolManager::ProtocolManager(Socket &s, std::string address, int ver) :
     s(s),
-    address(address),
-    protocolVersion(ver){
+    address(std::move(address)),
+    protocolVersion(ver),
+    recovered(false){
 
     auto config = Config::getInstance(CONFIG_FILE_PATH);
     basePath = config->getServerBasePath();
@@ -572,6 +574,9 @@ void server::ProtocolManager::authenticate() {
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::recoverFromDB() {
+    if(recovered)   //if I already did the recovery just return
+        return;
+
     std::vector<Directory_entry> toUpdate, toDelete;
 
     std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
@@ -617,6 +622,8 @@ void server::ProtocolManager::recoverFromDB() {
         TS_Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was removed offline!");
         db->remove(username, mac, el.getRelativePath());
     }
+
+    recovered = true;   //set this bool meaning the recovery has been completed
 }
 
 /**
@@ -646,30 +653,39 @@ void server::ProtocolManager::receive(){
         switch (clientMessage.type()) {
             case messages::ClientMessage_Type_PROB:
 
+                //TODO evaluate how to move this in another place in order not to repeat it all the time
+                recoverFromDB();    //will be done only the first time
+
                 probe();    //probe the elements list for the element in client message
 
                 break;
             case messages::ClientMessage_Type_STOR: {
 
+                recoverFromDB();    //will be done only the first time
                 storeFile();    //store the file in the server filesystem
 
                 break;
             }
             case messages::ClientMessage_Type_DELE:
 
+                recoverFromDB();    //will be done only the first time
                 removeFile();
 
                 break;
             case messages::ClientMessage_Type_MKD:
 
+                recoverFromDB();    //will be done only the first time
                 makeDir();
 
                 break;
             case messages::ClientMessage_Type_RMD:
 
+                recoverFromDB();    //will be done only the first time
                 removeDir();
 
                 break;
+            case messages::ClientMessage_Type_RETR:
+                //TODO get from db and send files
             default:
                 throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
         }
