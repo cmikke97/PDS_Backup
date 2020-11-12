@@ -396,6 +396,69 @@ void client::ProtocolManager::sendFile(Directory_entry &element) {
         throw ProtocolManagerException("Could not open file", protocolManagerError::client);
 }
 
+void client::ProtocolManager::retrieveFiles(const std::string &username, const std::string &macAddress, bool all, const std::string &destFolder){
+    send_RETR(username, macAddress, all);
+
+    std::string tempDir = destFolder + "temp";
+    int tempFileNameSize = 32;
+
+    while(true) {
+        //get server response
+        std::string server_temp = s.recvString();
+
+        //parse server response
+        serverMessage.ParseFromString(server_temp);
+
+        //check version
+        if (protocolVersion != serverMessage.version())
+            throw ProtocolManagerException("Different protocol version!",
+                                           client::protocolManagerError::version); //TODO decide if to keep this
+
+        int code;
+        switch (serverMessage.type()) {
+            case messages::ServerMessage_Type_MKD:  //create a directory
+                makeDir(destFolder);
+                break;
+            case messages::ServerMessage_Type_STOR: //store a file from server
+                storeFile(destFolder, tempDir, tempFileNameSize);
+                break;
+            case messages::ServerMessage_Type_SEND:
+            case messages::ServerMessage_Type_OK:   //end of the server messages -> return
+                serverMessage.Clear();
+                return;
+            case messages::ServerMessage_Type_ERR:
+                //retrieve error code
+                code = serverMessage.code();
+
+                //based on error code handle it
+                switch (static_cast<client::errCode>(code)) {
+                    case errCode::exception:    //there was an exception in the server
+                        throw ProtocolManagerException("Internal server error", protocolManagerError::internal);
+                    case errCode::auth: //authentication error
+                    case errCode::notAFile: //error in PROB
+                    case errCode::store:    //error in STOR
+                    case errCode::remove:   //error in DELE
+                    case errCode::notADir:  //error in RMD/MKD
+                    case errCode::unexpected:   //unexpected message type
+                        throw ProtocolManagerException("Unexpected error code", protocolManagerError::unexpected);
+                    default:
+                        throw ProtocolManagerException("Unknown server error", protocolManagerError::unknown);
+                }
+            case messages::ServerMessage_Type_VER:
+                throw ProtocolManagerException("Version not supported", protocolManagerError::version);
+            default:
+                //unrecognised message type
+                TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
+                throw ProtocolManagerException("Unsupported message type error",
+                                               client::protocolManagerError::unsupported);
+        }
+
+        //TODO maybe move this
+        //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+        serverMessage.Clear();
+    }
+}
+
 /**
  * send the AUTH message to the server
  *
@@ -418,27 +481,6 @@ void client::ProtocolManager::send_AUTH(const std::string &username, const std::
     //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
     clientMessage.Clear();
 }
-
-/**
- * send the QUIT message to the server
- *
- * @author Michele Crepaldi s269551
- */
- /*
-void client::ProtocolManager::send_QUIT(){
-    clientMessage.set_version(protocolVersion);
-    clientMessage.set_type(messages::ClientMessage_Type_QUIT);
-
-    //compute message
-    std::string client_temp = clientMessage.SerializeAsString();
-
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    clientMessage.Clear();
-}
-*/
 
 /**
  * send the PROB message to the server
@@ -585,6 +627,34 @@ void client::ProtocolManager::send_RMD(Directory_entry &e){
 }
 
 /**
+ * send the RETR message to the server
+ *
+ * @param username username to retrieve data of
+ * @param macAddress mac address to retrieve the data about
+ * @param all if to retrieve all the data about the user or only the ones related to the user-mac pair
+ *
+ * @author Michele Crepaldi s269551
+ */
+void client::ProtocolManager::send_RETR(const std::string &username, const std::string &macAddress, bool all){
+    //create message
+    clientMessage.set_version(protocolVersion);
+    clientMessage.set_type(messages::ClientMessage_Type_RMD);
+    clientMessage.set_username(username);
+
+    clientMessage.set_macaddress(macAddress);
+    clientMessage.set_all(all);
+
+    //compute message
+    std::string client_temp = clientMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    clientMessage.Clear();
+}
+
+/**
  * function used to compose a clientMessage from an event
  *
  * @param e event to transform in message
@@ -639,4 +709,184 @@ void client::ProtocolManager::composeMessage(Event &e) {
                 TS_Message::print(std::cerr, "ERROR", "Unknown file status.");
         }
     }
+}
+
+/**
+ * function to interpret the STOR message and to get all the DATA messages for a file;
+ * it stores the file in a temporary directory with a temporary random name, when the
+ * file transfer is done then it checks the file was correctly saved and moves it to
+ * the final destination (overwriting any old existing file); then it updates the server db and elements map
+ *
+ * @throw ProtocolManagerException if the message version is not supported, if a non-DATA message is encountered
+ * before the end of the file transmission, if an error occurred in opening the file and if the file after the end
+ * of its transmission is not as expected
+ *
+ * @author Michele Crepaldi s269551
+ */
+void client::ProtocolManager::storeFile(const std::string &destFolder, const std::string &temporaryPath, int tempNameSize){
+    //create expected Directory entry element from the client message
+    Directory_entry expected{destFolder, serverMessage.path(), serverMessage.filesize(), "file",
+                             serverMessage.lastwritetime(), Hash{serverMessage.hash()}};
+    serverMessage.Clear();  //clear the client message
+
+    TS_Message::print(std::cout, "STOR", expected.getRelativePath(), "in " + destFolder);
+
+    //create a random temporary name for the file
+    RandomNumberGenerator rng;
+    std::string tmpFileName = "/" + rng.getHexString(tempNameSize) + ".tmp";
+
+    //check if the temporary folder already exists
+    bool create = !std::filesystem::directory_entry(temporaryPath).exists();
+
+    if(create)  //if the directory does not already exist
+        std::filesystem::create_directories(temporaryPath);    //create all the directories (if they do not already exist) up to the temporary path
+
+    std::ofstream out;
+    out.open( temporaryPath + tmpFileName, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    if(out.is_open()){
+        try {
+            bool loop;
+            int64_t totRead = 0;
+            TS_Message msg{"RECEIVING", "Receiving file:", expected.getRelativePath()};
+            std::cout << msg;
+
+            do {
+                std::string message = s.recvString();
+                serverMessage.ParseFromString(message);
+
+                if (serverMessage.version() != protocolVersion) {
+
+                    //close the file
+                    out.close();
+
+                    //delete temporary file
+                    std::filesystem::remove(temporaryPath + tmpFileName);
+
+                    //throw exception
+                    throw ProtocolManagerException("Server is using a different version",
+                                                   protocolManagerError::version);
+                }
+
+                if (serverMessage.type() != messages::ServerMessage_Type_DATA) {
+                    //close the file
+                    out.close();
+
+                    //delete temporary file
+                    std::filesystem::remove(temporaryPath + tmpFileName);
+
+                    throw ProtocolManagerException("Unexpected message, DATA transfer was not done.",
+                                                   protocolManagerError::internal);
+                }
+                loop = !serverMessage.last();  //is this the last data packet? if yes stop the loop
+
+                std::string data = serverMessage.data();    //get the data from message
+                out.write(data.data(), data.size());    //write it to file
+
+                totRead += data.size();
+                msg.update(std::floor((float)100.0 * totRead/expected.getSize()));
+                std::cout << msg;
+
+                serverMessage.Clear();
+            } while (loop);
+        }
+        catch (SocketException &e) {    //in case of socket exceptions while transferring the file I need to delete the temporary file
+            //close the file
+            out.close();
+
+            //delete temporary file
+            std::filesystem::remove(temporaryPath + tmpFileName);
+
+            //rethrow the exception
+            throw;
+        }
+
+        //close the file
+        out.close();
+
+        //create a Directory entry which represents the newly created file
+        Directory_entry newFile{temporaryPath, std::filesystem::directory_entry(temporaryPath + tmpFileName)};
+        //change last write time for the file
+        newFile.set_time_to_file(expected.getLastWriteTime());
+        Hash hash = newFile.getHash();
+
+        //if the written file has a different size from what expected OR if the calculated hash is different from what expected OR if the lastWriteTime for the file was not successfully set
+        if(newFile.getSize() != expected.getSize() || hash != expected.getHash() || newFile.getLastWriteTime() != expected.getLastWriteTime()) {
+            std::filesystem::remove(temporaryPath + tmpFileName);    //delete temporary file
+
+            //some error occurred
+            throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::internal);
+        }
+
+        //get the parent path
+        std::filesystem::path parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path();
+
+        //check if the parent folder already exists
+        create = !std::filesystem::directory_entry(parentPath).exists();
+
+        if(create)  //if the directory does not already exist
+            std::filesystem::create_directories(parentPath);    //create all the directories (if they do not already exist) up to the parent path
+
+        //take the lastWriteTime of the destination folder before moving the file,
+        //any lastWriteTime modification will be requested by the client so we want to keep the same time
+        Directory_entry parent{destFolder, parentPath.string()};
+
+        //If we are here then the file was successfully transferred and its copy on the server is as expected
+        //so move then it can be moved to the final destination
+        std::filesystem::rename(temporaryPath + tmpFileName, expected.getAbsolutePath());
+
+        //reset the parent directory lastWriteTime
+        if(parent.getAbsolutePath() != destFolder)
+            parent.set_time_to_file(parent.getLastWriteTime());
+
+        //TODO evaluate if to handle socket exception here
+        return;
+    }
+
+    //some error occurred
+    throw ProtocolManagerException("Could not open file or something else happened.", protocolManagerError::client);
+}
+
+/**
+ * function to create/(modify its last write time) a directory on the server filesystem and update the server db and elements map
+ *
+ * @throw ProtocolManagerException if there exists already an element with the same name and it is not a directory
+ *
+ * @author Michele Crepaldi s269551
+ */
+void client::ProtocolManager::makeDir(const std::string &destFolder){
+    const std::string path = serverMessage.path();
+    const std::string lastWriteTime = serverMessage.lastwritetime();
+    serverMessage.Clear();
+
+    TS_Message::print(std::cout, "MKD", path, "in " + destFolder);
+
+    //get the parent path (to then get its lastWriteTime in order to keep it the same after the dir create
+    auto parentPath = std::filesystem::path(destFolder + path).parent_path();
+    auto parExists = std::filesystem::directory_entry(parentPath.string()).exists();
+    Directory_entry parent;
+
+    if(parExists)   //if the parent directory exists
+        //take the lastWriteTime of the destination folder before creating the directory,
+        //any lastWriteTime modification will be requested by the client so we want to keep the same time
+        parent = Directory_entry{destFolder, parentPath.string()};
+
+    if(!std::filesystem::directory_entry(destFolder + path).exists())  //if the directory does not already exist
+        std::filesystem::create_directories(destFolder + path);    //create all the directories (if they do not already exist) up to the temporary path
+
+    if(!std::filesystem::is_directory(destFolder + path)){
+        //the element is not a directory! (in case of a modify) -> error
+
+        throw ProtocolManagerException("Tried to modify something which is not a directory.", protocolManagerError::internal);
+        return;
+    }
+
+    //create a Directory entry which represents the newly created folder (or to the already present one)
+    Directory_entry newDir{destFolder, std::filesystem::directory_entry(destFolder + path)};
+
+    //change last write time for the file
+    newDir.set_time_to_file(lastWriteTime);
+
+    if(parExists && parent.getAbsolutePath() != destFolder)   //if the parent directory already existed before (and it is not the base path)
+        //reset the parent directory lastWriteTime
+        parent.set_time_to_file(parent.getLastWriteTime());
 }

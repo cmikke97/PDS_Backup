@@ -189,6 +189,30 @@ int main(int argc, char **argv) {
 
         if(retrieveSet){
             //TODO retrieve files and folders from the server
+            //specfy the TLS certificates for the socket
+            Socket::specifyCertificates(config->getCAFilePath());
+            //create the socket
+            Socket client_socket{SOCKET_TYPE};
+
+            //connect to the server through the socket
+            client_socket.connect(serverIP, stoi(serverPort));
+
+            //create the protocol manager instance
+            client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
+
+            //authenticate the client to the server
+            pm.authenticate(username, password, client_socket.getMAC());
+
+            //send the RETR message and get all the data from server
+            if(macSet){
+                //send RETR message with the set mac and get all data from server and save it in destFolder
+            }
+            else if(allSet){
+                //send RETR message with all set and get all data from server and save it in destFolder
+            }
+            else{
+                //send RETR message with this machine's mac address and get all data from server and save it in destFolder
+            }
         }
 
         if(!startSet)   //if the --start option was not there just close the program
@@ -223,6 +247,14 @@ int main(int argc, char **argv) {
             return eventQueue.tryPush(std::move(Event(element, status)));
         }, fileWatcher_stop);
 
+    }
+    catch (SocketException &e) {
+        //TODO handle socket exceptions
+        return 1;
+    }
+    catch (client::ProtocolManagerException &e) {
+        //TODO handle protocol manager exceptions
+        return 1;
     }
     catch (client::DatabaseException &e) {
         //in case of database exceptions show message and return
