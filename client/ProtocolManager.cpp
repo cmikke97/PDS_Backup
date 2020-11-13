@@ -396,11 +396,13 @@ void client::ProtocolManager::sendFile(Directory_entry &element) {
         throw ProtocolManagerException("Could not open file", protocolManagerError::client);
 }
 
-void client::ProtocolManager::retrieveFiles(const std::string &username, const std::string &macAddress, bool all, const std::string &destFolder){
-    send_RETR(username, macAddress, all);
+//TODO comment
+void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool all, const std::string &destFolder){
 
-    std::string tempDir = destFolder + "temp";
-    int tempFileNameSize = 32;
+    send_RETR(macAddress, all);
+
+    std::string tempDir = destFolder  + "/temp";
+    int tempFileNameSize = 8;  //TODO put this in config
 
     while(true) {
         //get server response
@@ -424,14 +426,34 @@ void client::ProtocolManager::retrieveFiles(const std::string &username, const s
                 break;
             case messages::ServerMessage_Type_SEND:
             case messages::ServerMessage_Type_OK:   //end of the server messages -> return
+
+                code = serverMessage.code();
                 serverMessage.Clear();
-                return;
+
+                switch(static_cast<client::okCode>(code)) {
+                    case okCode::retrieved:
+                        TS_Message::print(std::cout, "SUCCESS", "RETR", "Saved all your data to " + destFolder);
+                        return;
+
+                    case okCode::found:     //probe file found the file
+                    case okCode::created:   //file/directory create was successful
+                    case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
+                    case okCode::removed:   //file/directory remove was successful
+                    case okCode::authenticated: //user authentication successful
+                    default:
+                        throw ProtocolManagerException("Unexpected OK code", protocolManagerError::unexpected);
+
+                }
+
             case messages::ServerMessage_Type_ERR:
                 //retrieve error code
                 code = serverMessage.code();
+                serverMessage.Clear();
 
                 //based on error code handle it
                 switch (static_cast<client::errCode>(code)) {
+                    case errCode::retrieve: //there was an error in the message sent to the server (such as all to false and mac address not initialized)
+                        throw  ProtocolManagerException("Client error", protocolManagerError::client);
                     case errCode::exception:    //there was an exception in the server
                         throw ProtocolManagerException("Internal server error", protocolManagerError::internal);
                     case errCode::auth: //authentication error
@@ -452,10 +474,6 @@ void client::ProtocolManager::retrieveFiles(const std::string &username, const s
                 throw ProtocolManagerException("Unsupported message type error",
                                                client::protocolManagerError::unsupported);
         }
-
-        //TODO maybe move this
-        //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-        serverMessage.Clear();
     }
 }
 
@@ -635,11 +653,10 @@ void client::ProtocolManager::send_RMD(Directory_entry &e){
  *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::send_RETR(const std::string &username, const std::string &macAddress, bool all){
+void client::ProtocolManager::send_RETR(const std::string &macAddress, bool all){
     //create message
     clientMessage.set_version(protocolVersion);
-    clientMessage.set_type(messages::ClientMessage_Type_RMD);
-    clientMessage.set_username(username);
+    clientMessage.set_type(messages::ClientMessage_Type_RETR);
 
     clientMessage.set_macaddress(macAddress);
     clientMessage.set_all(all);
@@ -717,6 +734,10 @@ void client::ProtocolManager::composeMessage(Event &e) {
  * file transfer is done then it checks the file was correctly saved and moves it to
  * the final destination (overwriting any old existing file); then it updates the server db and elements map
  *
+ * @param destFolder destination folder where to put files
+ * @param temporaryPath temporary path where to put temporary files
+ * @param tempNameSize file name size for temporary files
+ *
  * @throw ProtocolManagerException if the message version is not supported, if a non-DATA message is encountered
  * before the end of the file transmission, if an error occurred in opening the file and if the file after the end
  * of its transmission is not as expected
@@ -747,7 +768,7 @@ void client::ProtocolManager::storeFile(const std::string &destFolder, const std
         try {
             bool loop;
             int64_t totRead = 0;
-            TS_Message msg{"RECEIVING", "Receiving file:", expected.getRelativePath()};
+            TS_Message msg{"RECV", "Receiving file:", expected.getRelativePath()};
             std::cout << msg;
 
             do {
@@ -783,8 +804,12 @@ void client::ProtocolManager::storeFile(const std::string &destFolder, const std
                 out.write(data.data(), data.size());    //write it to file
 
                 totRead += data.size();
-                msg.update(std::floor((float)100.0 * totRead/expected.getSize()));
-                std::cout << msg;
+                if(totRead != 0)
+                    msg.update(std::floor((float)100.0 * totRead/expected.getSize()));
+                else
+                    msg.update(100);
+
+                std::cout << msg << std::endl;
 
                 serverMessage.Clear();
             } while (loop);
@@ -847,9 +872,11 @@ void client::ProtocolManager::storeFile(const std::string &destFolder, const std
 }
 
 /**
- * function to create/(modify its last write time) a directory on the server filesystem and update the server db and elements map
+ * function to create/(modify its last write time) a directory on the client filesystem
  *
  * @throw ProtocolManagerException if there exists already an element with the same name and it is not a directory
+ *
+ * @param destFolder destination folder where to create the directory
  *
  * @author Michele Crepaldi s269551
  */
@@ -877,7 +904,6 @@ void client::ProtocolManager::makeDir(const std::string &destFolder){
         //the element is not a directory! (in case of a modify) -> error
 
         throw ProtocolManagerException("Tried to modify something which is not a directory.", protocolManagerError::internal);
-        return;
     }
 
     //create a Directory entry which represents the newly created folder (or to the already present one)

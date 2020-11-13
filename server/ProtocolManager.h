@@ -32,7 +32,7 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class errCode{
-        notAFile, unexpected, store, remove, notADir, auth, exception
+        notAFile, unexpected, store, remove, notADir, auth, exception, retrieve
     };
 
     /**
@@ -41,7 +41,7 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class okCode {
-        found, created, notThere, removed, authenticated
+        found, created, notThere, removed, authenticated, retrieved
     };
 
     /**
@@ -67,13 +67,19 @@ namespace server {
         void send_SEND();
         void send_ERR(errCode code);
         void send_VER();
-        //void send_QUIT();
+
+        void send_MKD(const std::string &path, Directory_entry &e);
+        void send_STOR(const std::string &path, Directory_entry &e);
+        void send_DATA(char *buff, uint64_t len);
+
         void probe();
         void storeFile();
         void removeFile();
         void makeDir();
         void removeDir();
-        //void quit();
+
+        void retrieveUserData();
+        void sendFile(Directory_entry &element, std::string &macAddr);
 
     public:
         explicit ProtocolManager(Socket &s, std::string address, int ver);
