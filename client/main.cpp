@@ -105,6 +105,8 @@ int main(int argc, char **argv) {
         if (c == -1)
             break;
 
+        //TODO check the optarg (it must not contain '-')
+
         switch (c) {
             case 'r':   //retrieve option
                 retrieveSet = true;
@@ -181,6 +183,12 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    //TODO check, if the destFolder is present, that it is a valid path
+    // namely: transform to the representation with "/" if "\" are present, delete last "/" if present
+
+    //TODO if the mac is present then remove any heading 0s in the hex values;
+    // for example 00:01:02:20:10:00 --> 0:1:2:20:10:0
+
     try {
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
@@ -205,13 +213,23 @@ int main(int argc, char **argv) {
 
             //send the RETR message and get all the data from server
             if(macSet){
+                TS_Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + mac, "destination folder: " + destFolder);
+
                 //send RETR message with the set mac and get all data from server and save it in destFolder
+                pm.retrieveFiles(mac, false, destFolder);
             }
             else if(allSet){
+                TS_Message::print(std::cout, "INFO", "Will retrieve all your files", "destination folder: " + destFolder);
+
                 //send RETR message with all set and get all data from server and save it in destFolder
+                pm.retrieveFiles("", true, destFolder);
             }
             else{
+                std::string thisSocketMac = client_socket.getMAC();
+                TS_Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + thisSocketMac, "destination folder: " + destFolder);
+
                 //send RETR message with this machine's mac address and get all data from server and save it in destFolder
+                pm.retrieveFiles(thisSocketMac, false, destFolder);
             }
         }
 

@@ -32,7 +32,7 @@ namespace client {
      * @author Michele Crepaldi s269551
      */
     enum class errCode{
-        notAFile, unexpected, store, remove, notADir, auth, exception
+        notAFile, unexpected, store, remove, notADir, auth, exception, retrieve
     };
 
     /**
@@ -41,7 +41,7 @@ namespace client {
      * @author Michele Crepaldi s269551
      */
     enum class okCode {
-        found, created, notThere, removed, authenticated
+        found, created, notThere, removed, authenticated, retrieved
     };
 
     /**
@@ -69,7 +69,7 @@ namespace client {
         void send_DATA(char *buff, uint64_t len);
         void send_MKD(Directory_entry &e);
         void send_RMD(Directory_entry &e);
-        void send_RETR(const std::string &username, const std::string &macAddress, bool all);
+        void send_RETR(const std::string &macAddress, bool all);
         void composeMessage(Event &e);
 
         void storeFile(const std::string &destFolder, const std::string &temporaryPath, int tempNameSize);
@@ -96,7 +96,7 @@ namespace client {
 
         void sendFile(Directory_entry &element);
 
-        void retrieveFiles(const std::string &username, const std::string &macAddress, bool all, const std::string &destFolder);
+        void retrieveFiles(const std::string &macAddress, bool all, const std::string &destFolder);
     };
 
     /**

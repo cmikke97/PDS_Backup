@@ -77,20 +77,75 @@ void server::ProtocolManager::send_VER(){
 }
 
 /**
- * send a QUIT response to the client
+ * send the STOR message to the server
+ *
+ * @param e Directory_entry to store
  *
  * @author Michele Crepaldi s269551
  */
- /*
-void server::ProtocolManager::send_QUIT(){
+void server::ProtocolManager::send_STOR(const std::string &path, Directory_entry &e){
+    //create message
     serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_QUIT);
+    serverMessage.set_type(messages::ServerMessage_Type_STOR);
+    serverMessage.set_path(path);
+    serverMessage.set_filesize(e.getSize());
+    serverMessage.set_lastwritetime(e.getLastWriteTime());
+    serverMessage.set_hash(e.getHash().get().first, e.getHash().get().second);
 
-    std::string tmp = serverMessage.SerializeAsString(); //crete string
-    serverMessage.Clear();  //send response message
-    s.sendString(tmp);
+    //compute message
+    std::string client_temp = serverMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    serverMessage.Clear();
 }
-*/
+
+/**
+ * send the STOR message to the server
+ *
+ * @param buff data to send
+ * @param len length of the data to send
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::send_DATA(char *buff, uint64_t len){
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_DATA);
+    serverMessage.set_data(buff, len);    //insert file block in message
+
+    //send message
+    std::string client_message = serverMessage.SerializeAsString();
+    s.sendString(client_message);
+
+    //clear the message
+    serverMessage.Clear();
+}
+
+/**
+ * send the MKD message to the server
+ *
+ * @param e Directory_entry to create
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::send_MKD(const std::string &path, Directory_entry &e){
+    //create message
+    serverMessage.set_version(protocolVersion);
+    serverMessage.set_type(messages::ServerMessage_Type_MKD);
+    serverMessage.set_path(path);
+    serverMessage.set_lastwritetime(e.getLastWriteTime());
+
+    //compute message
+    std::string client_temp = serverMessage.SerializeAsString();
+
+    //send message to server
+    s.sendString(client_temp);
+
+    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
+    serverMessage.Clear();
+}
 
 /**
  * function to probe the server elements map for the file got in clientMessage
@@ -476,6 +531,138 @@ void server::ProtocolManager::removeDir(){
     send_OK(okCode::removed);
 }
 
+//TODO comment
+void server::ProtocolManager::retrieveUserData(){
+    std::string macAddr = clientMessage.macaddress(); //get the macAddress (if present, otherwise a default "" value is passed)
+    bool retrAll = clientMessage.all(); //get the all boolean
+    clientMessage.Clear();
+
+    std::map<std::string, Directory_entry> toSend{};    //prepare a map with all the elements to send
+
+    if(retrAll){    //if all is true, meaning that the user requested all its files (independently of the machine mac address they are related to)
+
+        TS_Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "All files");
+
+        auto macs = db->getAllMacAddresses(username);   //get all the user's mac addresses
+
+        for(std::string m: macs){   //for all the mac addresses
+
+            //compose the directory name (all the elements of a username-mac pair will be put in a specific folder in the client
+            //(this folder does not need to be sent since the client will create all missing dirs along the path to a file/directory;
+            //so I just need to add the directory name as the first folder in the relative path -> this will be inside the destination
+            //folder at the client))
+            std::stringstream tmp;
+            tmp << "/" << username << "_" << std::regex_replace(m, std::regex(":"), "-");
+
+            std::string tempDirName = tmp.str();
+
+            //create the function to be used for each user's element in the db (for the mac m)
+            std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
+            f = [this, &toSend, &tempDirName](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
+                auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
+                toSend.insert({tempDirName+current.getRelativePath(), current});    //pre-append the relative root (username_mac) to the element relative path
+            };
+
+            //perform the function f on all the user elements (and mac m)
+            db->forAll(username, m, f);
+        }
+    }
+    else{   //if all is false, macaddrees will contain the specific mac address to use
+
+        if(macAddr.empty()){
+            //error
+            send_ERR(errCode::retrieve);
+
+            throw ProtocolManagerException("Error in client message", protocolManagerError::client);
+        }
+
+        TS_Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "mac = " + macAddr);
+
+        //compose the directory name (all the elements of a username-mac pair will be put in a specific folder in the client
+        //(this folder does not need to be sent since the client will create all missing dirs along the path to a file/directory;
+        //so I just need to add the directory name as the first folder in the relative path -> this will be inside the destination
+        //folder at the client))
+        std::stringstream tmp;
+        tmp << "/" << username << "_" << std::regex_replace(macAddr, std::regex(":"), "-");
+
+        std::string tempDirName = tmp.str();
+
+        //create the function to be used for each user's element in the db (for the mac m)
+        std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
+        f = [this, &toSend, &tempDirName](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
+            auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
+            toSend.insert({tempDirName+current.getRelativePath(), current});    //pre-append the relative root (username_mac) to the element relative path
+        };
+
+        //perform the function f on all the user elements (and mac m)
+        db->forAll(username, macAddr, f);
+    }
+
+    //here in toSend I will have all the elements to send to the client
+    for(auto pair: toSend){
+        if(pair.second.is_directory()){ //if it is a directory then send MKD
+            TS_Message::print(std::cout, "RETR-MKD", address + " (" + username + "@" + mac + ")", pair.first);
+            send_MKD(pair.first, pair.second);
+        }
+        else if(pair.second.is_regular_file()) {  //if it is a file then send STOR and 1 or more DATA
+            TS_Message::print(std::cout, "RETR-STOR", address + " (" + username + "@" + mac + ")", pair.first);
+            send_STOR(pair.first, pair.second);
+            sendFile(pair.second, macAddr);
+        }
+        //else the element is not supported so just skip it (there should never be any not supported element)
+    }
+
+    send_OK(okCode::retrieved);
+}
+
+//TODO comment
+void server::ProtocolManager::sendFile(Directory_entry &element, std::string &macAddr) {
+    int64_t max_data_chunk_size = 1024; //TODO max_data_chunk_size to config
+    //initialize variables
+    std::ifstream file;
+    char buff[max_data_chunk_size];
+
+    if(!std::filesystem::exists(element.getAbsolutePath())) {
+        //if the file to transfer is not present anymore in the filesystem
+        //then it means that the file was deleted --> I can't send it anymore
+        //so remove it from the db and just go to the next element (so return)
+        db->remove(username, macAddr, element.getRelativePath());
+        return;
+    }
+
+    //if the file to transfer hash is different from the one of the file present in the filesystem
+    Directory_entry effective{basePath, element.getAbsolutePath()}; //I do this because the element I got as argument was retrieved from db, instead this one is retrieved from filesystem
+    if(effective.getHash() != element.getHash()){
+        //then it means that the file was modified --> Don't send it
+        //so remove it from the db and just go to the next element (so return)
+        db->remove(username, macAddr, element.getRelativePath());
+        return;
+    }
+
+    //open input file
+    file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);
+
+    if(file.is_open()){
+        int64_t totRead = 0;
+        //TS_Message::print(std::cout, "SENDING", address + " (" + username + "@" + mac + ")", "Sending: " + element.getRelativePath());
+
+        while(file.read(buff, max_data_chunk_size)) { //read file in max_data_chunk_size-wide blocks
+            totRead += file.gcount();
+            send_DATA(buff, file.gcount()); //send the block
+        }
+
+        serverMessage.set_last(true);   //mark the last data block
+
+        totRead += file.gcount();
+        send_DATA(buff, file.gcount()); //send the block
+
+        //close the input file
+        file.close();
+    }
+    else
+        throw ProtocolManagerException("Could not open file", protocolManagerError::internal);
+}
+
 /**
  * protocol manager constructor
  *
@@ -684,8 +871,13 @@ void server::ProtocolManager::receive(){
                 removeDir();
 
                 break;
+
             case messages::ClientMessage_Type_RETR:
-                //TODO get from db and send files
+
+                retrieveUserData();
+
+                break;
+
             default:
                 throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
         }
