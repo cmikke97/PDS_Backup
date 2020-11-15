@@ -6,6 +6,8 @@
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
 
+#define TEMP_RELATIVE_PATH "/temp"
+
 
 /**
  * constructor of protocol manager class
@@ -23,6 +25,8 @@ client::ProtocolManager::ProtocolManager(Socket &s, int max, int ver, int maxTri
     waitingForResponse.resize(size+1);
     db = Database::getInstance(config->getDatabasePath());
     max_data_chunk_size = config->getMaxDataChunkSize();
+    tempNameSize = config->getTmpFileNameSize();
+
 }
 
 /**
@@ -401,8 +405,8 @@ void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool 
 
     send_RETR(macAddress, all);
 
-    std::string tempDir = destFolder  + "/temp";
-    int tempFileNameSize = 8;  //TODO put this in config
+    std::string tempDir = destFolder  + TEMP_RELATIVE_PATH;
+    int tempFileNameSize = tempNameSize;
 
     while(true) {
         //get server response

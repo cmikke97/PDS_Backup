@@ -2,8 +2,8 @@
 // Created by michele on 14/10/2020.
 //
 
-#ifndef CLIENT_HASH_H
-#define CLIENT_HASH_H
+#ifndef HASH_H
+#define HASH_H
 
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/sha256.h>
@@ -120,4 +120,4 @@ public:
     }
 };
 
-#endif //CLIENT_HASH_H
+#endif //HASH_H

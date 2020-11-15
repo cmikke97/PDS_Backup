@@ -57,7 +57,7 @@ namespace server {
         messages::ClientMessage clientMessage;
         messages::ServerMessage serverMessage;
         std::string username, mac, basePath, temporaryPath, address;
-        int tempNameSize, protocolVersion;
+        int tempNameSize, protocolVersion, max_data_chunk_size;
 
         bool recovered;
 

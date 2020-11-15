@@ -2,8 +2,8 @@
 // Created by michele on 27/07/2020.
 //
 
-#ifndef CLIENT_THREAD_GUARD_H
-#define CLIENT_THREAD_GUARD_H
+#ifndef SERVER_THREAD_GUARD_H
+#define SERVER_THREAD_GUARD_H
 
 #include <thread>
 #include <atomic>
@@ -28,4 +28,4 @@ public:
 };
 
 
-#endif //CLIENT_THREAD_GUARD_H
+#endif //SERVER_THREAD_GUARD_H

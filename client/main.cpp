@@ -7,6 +7,7 @@
 #include <iostream>
 #include <atomic>
 #include <getopt.h>
+#include <regex>
 #include "FileSystemWatcher.h"
 #include "Event.h"
 #include "../myLibraries/TSCircular_vector.h"
@@ -15,6 +16,7 @@
 #include "messages.pb.h"
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Validator.h"
 
 #define VERSION 1
 
@@ -105,7 +107,13 @@ int main(int argc, char **argv) {
         if (c == -1)
             break;
 
-        //TODO check the optarg (it must not contain '-')
+        //if you insert a command which requires an argument, but then forget to actually insert the argument:
+        //  if the command was at the end of the whole command string then the getopt function will realize it and signal an error
+        //  if the command was followed by another command the second command will be interpreted as the first command's argument
+
+        //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
+        if(optarg != nullptr && !Validator::validateOptArg(optarg))
+            return 1;
 
         switch (c) {
             case 'r':   //retrieve option
@@ -115,11 +123,21 @@ int main(int argc, char **argv) {
             case 'd':   //dir option
                 dirSet = true;
                 destFolder = optarg;
+
+                //validate folder
+                if(!Validator::validateFolder(destFolder))
+                    return 1;
+
                 break;
 
             case 'm':   //mac option
                 macSet = true;
                 mac = optarg;
+
+                //validate mac
+                if(!Validator::validateMacAddress(mac))
+                    return 1;
+
                 break;
 
             case 'a':   //all option
@@ -133,21 +151,41 @@ int main(int argc, char **argv) {
             case 'i':   //ip option
                 ipSet = true;
                 serverIP = optarg;
+
+                //validate ip address
+                if(!Validator::validateIPAddress(serverIP))
+                    return 1;
+
                 break;
 
             case 'p':   //port option
                 portSet = true;
                 serverPort = optarg;
+
+                //validate port
+                if(!Validator::validatePort(serverPort))
+                    return 1;
+
                 break;
 
             case 'u':   //username option
                 userSet = true;
                 username = optarg;
+
+                //validate username
+                if(!Validator::validateUsername(username))
+                    return 1;
+
                 break;
 
             case 'w':   //password option
                 passSet = true;
                 password = optarg;
+
+                //validate password
+                if(!Validator::validatePassword(password))
+                    return 1;
+
                 break;
 
             case 'h':   //help option
@@ -159,6 +197,18 @@ int main(int argc, char **argv) {
 
             default:    //error from getopt
                 std::cerr << "?? getopt returned character code 0" << c << " ??" << std::endl;
+        }
+    }
+
+    if (optind >= argc) {   //if last option requires an argument but none was provided
+        std::regex e(R"(^(?:(?:-[dmipuw])|(?:--(?:(?:dir)|(?:mac)|(?:ip)|(?:port)|(?:username)|(?:password))))$)");   //matches all the options which require an extra argument
+        std::smatch m;
+
+        std::string lastArgument = argv[optind-1];  //get last argument
+
+        if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
+            TS_Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
+            return 1;
         }
     }
 
@@ -183,12 +233,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    //TODO check, if the destFolder is present, that it is a valid path
-    // namely: transform to the representation with "/" if "\" are present, delete last "/" if present
-
-    //TODO if the mac is present then remove any heading 0s in the hex values;
-    // for example 00:01:02:20:10:00 --> 0:1:2:20:10:0
-
     try {
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
@@ -196,7 +240,6 @@ int main(int argc, char **argv) {
         auto db = client::Database::getInstance(config->getDatabasePath());
 
         if(retrieveSet){
-            //TODO retrieve files and folders from the server
             //specfy the TLS certificates for the socket
             Socket::specifyCertificates(config->getCAFilePath());
             //create the socket

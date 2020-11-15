@@ -2,8 +2,8 @@
 // Created by michele on 04/11/2020.
 //
 
-#ifndef SERVER_TS_MESSAGE_H
-#define SERVER_TS_MESSAGE_H
+#ifndef TS_MESSAGE_H
+#define TS_MESSAGE_H
 
 
 #include <iostream>
@@ -29,4 +29,4 @@ public:
 };
 
 
-#endif //SERVER_TS_MESSAGE_H
+#endif //TS_MESSAGE_H

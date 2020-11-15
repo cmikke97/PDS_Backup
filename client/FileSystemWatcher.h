@@ -2,8 +2,8 @@
 // Created by michele on 25/07/2020.
 //
 
-#ifndef PDS_BACKUP_FILESYSTEMWATCHER_H
-#define PDS_BACKUP_FILESYSTEMWATCHER_H
+#ifndef CLIENT_FILESYSTEMWATCHER_H
+#define CLIENT_FILESYSTEMWATCHER_H
 
 #include <filesystem>
 #include <chrono>
@@ -50,4 +50,4 @@ private:
 };
 
 
-#endif //PDS_BACKUP_FILESYSTEMWATCHER_H
+#endif //CLIENT_FILESYSTEMWATCHER_H
