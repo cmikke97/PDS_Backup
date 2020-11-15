@@ -16,6 +16,7 @@
 #include "Config.h"
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Validator.h"
 
 #define VERSION 1
 
@@ -90,20 +91,43 @@ int main(int argc, char** argv) {
         if (c == -1)
             break;
 
+        //if you insert a command which requires an argument, but then forget to actually insert the argument:
+        //  if the command was at the end of the whole command string then the getopt function will realize it and signal an error
+        //  if the command was followed by another command the second command will be interpreted as the first command's argument
+
+        //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
+        if(optarg != nullptr && !Validator::validateOptArg(optarg))
+            return 1;
+
         switch (c) {
             case 'a':   //add user option
                 addU = true;
                 username = optarg;
+
+                //validate username
+                if(!Validator::validateUsername(username))
+                    return 1;
+
                 break;
 
             case 'u':   //update user option
                 updateU = true;
                 username = optarg;
+
+                //validate username
+                if(!Validator::validateUsername(username))
+                    return 1;
+
                 break;
 
             case 'r':   //remove user option
                 removeU = true;
                 username = optarg;
+
+                //validate username
+                if(!Validator::validateUsername(username))
+                    return 1;
+
                 break;
 
             case 'v':   //view all users option
@@ -113,16 +137,31 @@ int main(int argc, char** argv) {
             case 'p':   //password option
                 passSet = true;
                 password = optarg;
+
+                //validate password
+                if(!Validator::validatePassword(password))
+                    return 1;
+
                 break;
 
             case 'd':   //delete option
                 deleteSet = true;
                 delUsername = optarg;
+
+                //validate username
+                if(!Validator::validateUsername(delUsername))
+                    return 1;
+
                 break;
 
             case 'm':   //mac option
                 macSet = true;
                 delMac = optarg;
+
+                //validate mac
+                if(!Validator::validateMacAddress(delMac))
+                    return 1;
+
                 break;
 
             case 's':   //start server option
@@ -138,6 +177,18 @@ int main(int argc, char** argv) {
 
             default:    //error from getopt
                 std::cerr << "?? getopt returned character code 0" << c << " ??" << std::endl;
+        }
+    }
+
+    if (optind >= argc) {   //if last option requires an argument but none was provided
+        std::regex e(R"(^(?:(?:-[aurpdm])|(?:--(?:(?:addU)|(?:updateU)|(?:removeU)|(?:pass)|(?:delete)|(?:mac))))$)");   //matches all the options which require an extra argument
+        std::smatch m;
+
+        std::string lastArgument = argv[optind-1];  //get last argument
+
+        if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
+            TS_Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
+            return 1;
         }
     }
 

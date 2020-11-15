@@ -27,6 +27,10 @@
 #define SERVER_PATH ""    //Server base path
 #define TEMP_PATH "" //Temporary path where to put temporary files
 
+//20KB
+#define MAX_DATA_CHUNK_SIZE 20480   //Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
+//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that (keeping in mind that there are also other fields in the message)
+
 
 //static variables definition
 std::shared_ptr<server::Config> server::Config::config_;
@@ -150,7 +154,10 @@ void server::Config::load(const std::string &configFilePath) {
                                         {"socket_queue_size",       std::to_string(SOCKET_QUEUE_SIZE),      "# Maximum socket queue size"},
                                         {"select_timeout_seconds",  std::to_string(SELECT_TIMEOUT_SECONDS), "# Seconds the client will wait between 2 selects on the socket"},
                                         {"timeout_seconds",         std::to_string(TIMEOUT_SECONDS),        "# Seconds the server will wait before disconnecting client"},
-                                        {"tmp_file_name_size",      std::to_string(TEMP_FILE_NAME_SIZE),    "# Size of the name of temporary files"}};
+                                        {"tmp_file_name_size",      std::to_string(TEMP_FILE_NAME_SIZE),    "# Size of the name of temporary files"},
+                                        {"max_data_chunk_size",     std::to_string(MAX_DATA_CHUNK_SIZE),    "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages)"
+                                                                                                            "\n# the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB)"
+                                                                                                            "\n# so keep it less than that (keeping in mind that there are also other fields in the message)"}};
 
         std::string initial_comments[] = {          "###########################################################################",
                                                     "#                                                                         #",
@@ -204,12 +211,12 @@ void server::Config::load(const std::string &configFilePath) {
         //for each line
         while(getline(file,str)) {
             //regex match
-            if(std::regex_match (str,m,e)){
+            if(std::regex_match(str,m,e)){
                 //get the key and the value
                 key = m[1];
                 value = m[2];
 
-                //convert all characters in upper case
+                //convert all characters to lower case
                 std::transform(key.begin(),key.end(),key.begin(), ::tolower);
 
                 //folders
@@ -218,46 +225,36 @@ void server::Config::load(const std::string &configFilePath) {
                     value = std::regex_replace(value, std::regex("\\\\"), "/");
 
                     //delete the tailing / that may be there at the end of the path
-                    std::smatch mtmp;
-                    std::regex etmp ("(.*)\\/$");
-                    if(std::regex_match (value,m,e))    //if i fine the trailing "/" i remove it
-                        server_base_path = m[1];
-                    else
-                        server_base_path = value;
+                    server_base_path = std::regex_replace(value, std::regex(R"(\/$)"), "");
                 }
                 if(key == "temp_path"){
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    value = std::regex_replace(value, std::regex("\\\\"), "/");
+                    value = std::regex_replace(value, std::regex(R"(\\)"), "/");
 
                     //delete the tailing / that may be there at the end of the path
-                    std::smatch mtmp;
-                    std::regex etmp ("(.*)\\/$");
-                    if(std::regex_match (value,m,e))    //if i fine the trailing "/" i remove it
-                        temp_path = m[1];
-                    else
-                        temp_path = value;
+                    temp_path = std::regex_replace(value, std::regex(R"(\/$)"), "");
                 }
 
                 //files
                 if(key == "password_database_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    password_database_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    password_database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
                 if(key == "server_database_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    server_database_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    server_database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
                 if(key == "certificate_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    certificate_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    certificate_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
                 if(key == "private_key_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    private_key_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    private_key_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
                 if(key == "ca_file_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    ca_file_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
 
                 //integers
@@ -273,6 +270,8 @@ void server::Config::load(const std::string &configFilePath) {
                     timeout_seconds = stoi(value);
                 if(key == "tmp_file_name_size")
                     tmp_file_name_size = stoi(value);
+                if(key == "max_data_chunk_size")
+                    max_data_chunk_size = stoi(value);
             }
         }
         file.close();
@@ -490,4 +489,18 @@ int server::Config::getTmpFileNameSize() {
         tmp_file_name_size = TEMP_FILE_NAME_SIZE;
 
     return tmp_file_name_size;
+}
+
+/**
+ * max data chunk size getter (if no value was provided in the config file use a default one)
+ *
+ * @return max data chunk size
+ *
+ * @author Michele Crepaldi s269551
+ */
+int server::Config::getMaxDataChunkSize() {
+    if(max_data_chunk_size == 0)
+        max_data_chunk_size = MAX_DATA_CHUNK_SIZE;
+
+    return max_data_chunk_size;
 }

@@ -15,10 +15,10 @@
 #define SECONDS_BETWEEN_RECONNECTIONS 10 //seconds to wait before client retrying connection after connection lost
 #define MAX_CONNECTION_RETRIES 12 //maximum number of times the system will re-try to connect consecutively
 #define MAX_SERVER_ERROR_RETRIES 5 //maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the final outcome) after an internal server error
-#define MAX_AUTH_ERROR_RETRIES 5 //maximum number of times the system will re-try the authentication after an internal server error //TODO actually not used.. remove it
 #define TIMEOUT 15 //seconds to wait before client-server connection timeout
 #define SELECT_TIMEOUT 5 //seconds to wait between one select and the other
 #define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
+#define TEMP_FILE_NAME_SIZE 8   //Size of the name of temporary files
 #define DATABASE_PATH "../clientFiles/clientDB.sqlite"  //path of the client database
 #define CA_FILE_PATH "../../TLScerts/cacert.pem"    //path of the CA to use to check the server certificate
 
@@ -148,10 +148,10 @@ void client::Config::load(const std::string &configFilePath) {
                                         {"seconds_between_reconnections",   std::to_string(SECONDS_BETWEEN_RECONNECTIONS),  "# Seconds the client will wait between successive connection attempts"},
                                         {"max_connection_retries",          std::to_string(MAX_CONNECTION_RETRIES),         "# Maximum number of allowed connection attempts"},
                                         {"max_server_error_retries",        std::to_string(MAX_SERVER_ERROR_RETRIES),       "# Maximum number of message retransmissions of the same message after a server error"},
-                                        {"max_auth_error_retries",          std::to_string(MAX_AUTH_ERROR_RETRIES),         "# Unused, to remove.."},
                                         {"timeout_seconds",                 std::to_string(TIMEOUT),                        "# Seconds to wait before the client will disconnect"},
                                         {"select_timeout_seconds",          std::to_string(SELECT_TIMEOUT),                 "# Seconds the client will wait between 2 selects on the socket"},
                                         {"max_response_waiting",            std::to_string(MAX_RESPONSE_WAITING),           "# Maximum number of messages waiting for a server response allowed"},
+                                        {"tmp_file_name_size",      std::to_string(TEMP_FILE_NAME_SIZE),    "# Size of the name of temporary files"},
                                         {"max_data_chunk_size",             std::to_string(MAX_DATA_CHUNK_SIZE),            "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages)"
                                                                                                                             "\n# the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB)"
                                                                                                                             "\n# so keep it less than that (keeping in mind that there are also other fields in the message)"}};
@@ -220,25 +220,20 @@ void client::Config::load(const std::string &configFilePath) {
                 //folders
                 if(key == "path_to_watch"){
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    value = std::regex_replace(value, std::regex("\\\\"), "/");
+                    value = std::regex_replace(value, std::regex(R"(\\)"), "/");
 
                     //delete the tailing / that may be there at the end of the path
-                    std::smatch mtmp;
-                    std::regex etmp ("(.*)\\/$");
-                    if(std::regex_match (value,m,e))    //if i fine the trailing "/" i remove it
-                        path_to_watch = m[1];
-                    else
-                        path_to_watch = value;
+                    path_to_watch = std::regex_replace(value, std::regex(R"(\/$)"), "");
                 }
 
                 //files
                 if(key == "database_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    database_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
                 if(key == "ca_file_path") {
                     //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    ca_file_path = std::regex_replace(value, std::regex("\\\\"), "/");
+                    ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
 
                 //integers
@@ -252,14 +247,14 @@ void client::Config::load(const std::string &configFilePath) {
                     max_connection_retries = stoi(value);
                 if(key == "max_server_error_retries")
                     max_server_error_retries = stoi(value);
-                if(key == "max_auth_error_retries")
-                    max_auth_error_retries = stoi(value);
                 if(key == "timeout_seconds")
                     timeout_seconds = stoi(value);
                 if(key == "select_timeout_seconds")
                     select_timeout_seconds = stoi(value);
                 if(key == "max_response_waiting")
                     max_response_waiting = stoi(value);
+                if(key == "tmp_file_name_size")
+                    tmp_file_name_size = stoi(value);
                 if(key == "max_data_chunk_size")
                     max_data_chunk_size = stoi(value);
 
@@ -402,20 +397,6 @@ int client::Config::getMaxServerErrorRetries() {
 }
 
 /**
- * max auth error retries getter (if no value was provided in the config file use a default one)
- *
- * @return max auth error retries
- *
- * @author Michele Crepaldi s269551
- */
-int client::Config::getMaxAuthErrorRetries() {
-    if(max_auth_error_retries == 0)
-        max_auth_error_retries = MAX_AUTH_ERROR_RETRIES;
-
-    return max_auth_error_retries;
-}
-
-/**
  * timeout seconds getter (if no value was provided in the config file use a default one)
  *
  * @return timeout seconds
@@ -455,6 +436,20 @@ int client::Config::getMaxResponseWaiting() {
         max_response_waiting = MAX_RESPONSE_WAITING;
 
     return max_response_waiting;
+}
+
+/**
+ * temp file name size getter (if no value was provided in the config file use a default one)
+ *
+ * @return path to watch
+ *
+ * @author Michele Crepaldi s269551
+ */
+int client::Config::getTmpFileNameSize() {
+    if(tmp_file_name_size == 0)
+        tmp_file_name_size = TEMP_FILE_NAME_SIZE;
+
+    return tmp_file_name_size;
 }
 
 /**

@@ -4,7 +4,6 @@
 
 #include <fstream>
 #include <regex>
-#include <utility>
 #include "ProtocolManager.h"
 #include "../myLibraries/TS_Message.h"
 
@@ -617,7 +616,6 @@ void server::ProtocolManager::retrieveUserData(){
 
 //TODO comment
 void server::ProtocolManager::sendFile(Directory_entry &element, std::string &macAddr) {
-    int64_t max_data_chunk_size = 1024; //TODO max_data_chunk_size to config
     //initialize variables
     std::ifstream file;
     char buff[max_data_chunk_size];
@@ -687,6 +685,7 @@ server::ProtocolManager::ProtocolManager(Socket &s, std::string address, int ver
     basePath = config->getServerBasePath();
     temporaryPath = config->getTempPath();
     tempNameSize = config->getTmpFileNameSize();
+    max_data_chunk_size = config->getMaxDataChunkSize();
 
     password_db = PWD_Database::getInstance(config->getPasswordDatabasePath());
     db = Database::getInstance(config->getServerDatabasePath());

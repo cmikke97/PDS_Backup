@@ -59,7 +59,7 @@ namespace client {
 
         std::vector<Event> waitingForResponse{};
         int start, end, size;
-        int protocolVersion, tries, maxTries, max_data_chunk_size;
+        int protocolVersion, tries, maxTries, tempNameSize, max_data_chunk_size;
 
         void send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password);
         //void send_QUIT();

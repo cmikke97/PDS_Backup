@@ -2,8 +2,8 @@
 // Created by michele on 25/07/2020.
 //
 
-#ifndef CLIENT_DIRECTORY_ENTRY_H
-#define CLIENT_DIRECTORY_ENTRY_H
+#ifndef DIRECTORY_ENTRY_H
+#define DIRECTORY_ENTRY_H
 
 #include <string>
 #include <chrono>
@@ -56,4 +56,4 @@ public:
 };
 
 
-#endif //CLIENT_DIRECTORY_ENTRY_H
+#endif //DIRECTORY_ENTRY_H

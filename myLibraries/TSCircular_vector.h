@@ -2,8 +2,8 @@
 // Created by michele on 27/07/2020.
 //
 
-#ifndef CLIENT_TSCIRCULAR_VECTOR_H
-#define CLIENT_TSCIRCULAR_VECTOR_H
+#ifndef TSCIRCULAR_VECTOR_H
+#define TSCIRCULAR_VECTOR_H
 
 #include <vector>
 #include <mutex>
@@ -146,4 +146,4 @@ public:
 };
 
 
-#endif //CLIENT_TSCIRCULAR_VECTOR_H
+#endif //TSCIRCULAR_VECTOR_H

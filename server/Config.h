@@ -2,8 +2,8 @@
 // Created by michele on 29/09/2020.
 //
 
-#ifndef CLIENT_CONFIG_H
-#define CLIENT_CONFIG_H
+#ifndef SERVER_CONFIG_H
+#define SERVER_CONFIG_H
 
 #include <string>
 #include <fstream>
@@ -34,6 +34,7 @@ namespace server {
         int select_timeout_seconds{};
         int timeout_seconds{};
         int tmp_file_name_size{};
+        int max_data_chunk_size{};
 
         void load(const std::string &configFilePath);
 
@@ -78,6 +79,8 @@ namespace server {
         int getTimeoutSeconds();
 
         int getTmpFileNameSize();
+
+        int getMaxDataChunkSize();
     };
 
     /*
@@ -134,4 +137,4 @@ namespace server {
     };
 }
 
-#endif //CLIENT_CONFIG_H
+#endif //SERVER_CONFIG_H

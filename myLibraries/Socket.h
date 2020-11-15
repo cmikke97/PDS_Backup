@@ -2,8 +2,8 @@
 // Created by michele on 28/07/2020.
 //
 
-#ifndef CLIENT_SOCKET_H
-#define CLIENT_SOCKET_H
+#ifndef SOCKET_H
+#define SOCKET_H
 
 #include <iostream>
 #include <sys/socket.h>
@@ -361,4 +361,4 @@ public:
     }
 };
 
-#endif //CLIENT_SOCKET_H
+#endif //SOCKET_H

@@ -29,10 +29,10 @@ namespace client {
         int seconds_between_reconnections{};
         int max_connection_retries{};
         int max_server_error_retries{};
-        int max_auth_error_retries{};
         int timeout_seconds{};
         int select_timeout_seconds{};
         int max_response_waiting{};
+        int tmp_file_name_size{};
         int max_data_chunk_size{};
 
         void load(const std::string &configFilePath);
@@ -69,13 +69,13 @@ namespace client {
 
         int getMaxServerErrorRetries();
 
-        int getMaxAuthErrorRetries();
-
         int getTimeoutSeconds();
 
         int getSelectTimeoutSeconds();
 
         int getMaxResponseWaiting();
+
+        int getTmpFileNameSize();
 
         int getMaxDataChunkSize();
     };
