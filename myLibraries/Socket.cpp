@@ -7,7 +7,9 @@
 #include <filesystem>
 #include <fstream>
 #include "Socket.h"
-#include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Message.h"
+
+//TODO check
 
 SocketBridge::~SocketBridge()= default;
 ServerSocketBridge::~ServerSocketBridge()= default;
@@ -77,7 +79,7 @@ TCP_Socket &TCP_Socket::operator=(TCP_Socket &&other) noexcept {
  *
  * @author Michele Crepaldi s269551
  */
-void TCP_Socket::connect(const std::string& addr, int port) {
+void TCP_Socket::connect(const std::string& addr, unsigned int port) {
     struct sockaddr_in address{};   //prepare sockaddr_in struct
     address.sin_family = AF_INET;
     inet_pton(AF_INET, addr.c_str(), &(address.sin_addr));
@@ -347,7 +349,7 @@ TCP_Socket::~TCP_Socket() {
  *
  * @author Michele Crepaldi s269551
  */
-TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
+TCP_ServerSocket::TCP_ServerSocket(unsigned int port, unsigned int n) {
     struct sockaddr_in sockaddrIn{};    //prepare struct sockaddr_in
     sockaddrIn.sin_port = htons(port);
     sockaddrIn.sin_family = AF_INET;
@@ -361,7 +363,7 @@ TCP_ServerSocket::TCP_ServerSocket(int port, int n) {
     //extract ip address in readable form
     char address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &sockaddrIn.sin_addr, address, sizeof(address));     //get address
-    TS_Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(this->getIP()) + ":" + std::to_string(port) + "]");
+    Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(this->getIP()) + ":" + std::to_string(port) + "]");
 }
 
 /**
@@ -478,7 +480,7 @@ TLS_Socket& TLS_Socket::operator=(TLS_Socket &&other) noexcept {
  *
  * @author Michele Crepaldi s269551
  */
-void TLS_Socket::connect(const std::string& addr, int port) {
+void TLS_Socket::connect(const std::string& addr, unsigned int port) {
     sock->connect(addr, port);
 
     ssl = tls_socket::UniquePtr<WOLFSSL>(wolfSSL_new(ctx.get()));   //create a new wolfSSL object from the context
@@ -652,7 +654,7 @@ TLS_Socket::~TLS_Socket() {
  *
  * @author Michele Crepaldi s269551
  */
-TLS_ServerSocket::TLS_ServerSocket(int port, int n) {
+TLS_ServerSocket::TLS_ServerSocket(unsigned int port, unsigned int n) {
     ctx = tls_socket::UniquePtr<WOLFSSL_CTX>(wolfSSL_CTX_new(wolfTLS_server_method())); //create a new wolfSSL context using the wolfTLS server method
     if (ctx.get() == nullptr)
         throw SocketException("Cannot create server wolfSSL context", socketError::create);   //throw exception if there are errors
@@ -799,7 +801,7 @@ Socket &Socket::operator=(Socket &&other) noexcept {
  *
  * @author Michele Crepaldi s269551
  */
-void Socket::connect(const std::string &addr, int port) {
+void Socket::connect(const std::string &addr, unsigned int port) {
     socket->connect(addr, port);
 }
 
@@ -904,7 +906,7 @@ void ServerSocket::specifyCertificates(const std::string &cert, const std::strin
  *
  * @author Michele Crepaldi s269551
  */
-ServerSocket::ServerSocket(int port, int n, socketType type) : Socket(type) {
+ServerSocket::ServerSocket(unsigned int port, unsigned int n, socketType type) : Socket(type) {
     switch(type){
         case socketType::TCP:
             serverSocket = std::make_unique<TCP_ServerSocket>(port, n);

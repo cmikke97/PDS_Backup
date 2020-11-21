@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package messages;
 
+//TODO check
+
 //client messages
 message ClientMessage{
   int32 version = 1;          //version of the protocol

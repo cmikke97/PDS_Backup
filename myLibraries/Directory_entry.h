@@ -5,6 +5,8 @@
 #ifndef DIRECTORY_ENTRY_H
 #define DIRECTORY_ENTRY_H
 
+//TODO check
+
 #include <string>
 #include <chrono>
 #include <filesystem>

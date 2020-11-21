@@ -1,22 +1,18 @@
 //
-// Created by michele on 28/09/2020.
+// Created by Michele Crepaldi s269551 on 28/09/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #ifndef CLIENT_DATABASE_H
 #define CLIENT_DATABASE_H
 
-
 #include <sqlite3.h>
 #include <string>
-#include <iostream>
-#include <sstream>
-#include <filesystem>
 #include <functional>
-#include <utility>
 #include <mutex>
-#include <shared_mutex>
+
 #include "../myLibraries/Directory_entry.h"
-#include "../myLibraries/RandomNumberGenerator.h"
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -24,19 +20,36 @@
  */
 
 /**
- * namespace containing the definition of the UniquePtr to use in the TLS classes
+ * PDS_Backup client namespace
  *
  * @author Michele Crepaldi s269551
  */
 namespace client {
+    /**
+     * custom deleter template for class T
+     * @tparam T class of the object to delete
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<class T>
     struct DeleterOf;
 
+    /**
+     * template specialization for the class sqlite3
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<>
     struct DeleterOf<sqlite3> {
         void operator()(sqlite3 *p) const { sqlite3_close(p); }
     };
 
+    /*
+     * definition of the UniquePtr construct, it is simply a unique_ptr object with the deleter for the
+     * sqlite3Type template class redefined
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<class sqlite3Type>
     using UniquePtr = std::unique_ptr<sqlite3Type, DeleterOf<sqlite3Type>>;
 
@@ -45,75 +58,106 @@ namespace client {
      *
      * @author Michele Crepaldi s269551
      */
-    enum class databaseError {
-        open, create, read, insert, update, remove, prepare, finalize
+    enum class DatabaseError {
+        //no path set
+        path,
+
+        //cannot open the database file
+        open,
+
+        //cannot create the database
+        create,
+
+        //cannot read the database
+        read,
+
+        //cannot insert row into database
+        insert,
+
+        //cannot update row in database
+        update,
+
+        //cannot remove row from database
+        remove,
+
+        //cannot prepare sql statement
+        prepare,
+
+        //cannot finalize sql statement
+        finalize
     };
 
     /*
-     * +-------------------------------------------------------------------------------------------------------------------+
+     * +---------------------------------------------------------------------------------------------------------------+
      * Database class
      */
 
     /**
-     * class which represents a sqlite3 database (singleton)
+     * Database class. It represents an sqlite3 database (singleton)
      *
      * @author Michele Crepaldi s269551
      */
     class Database {
-        UniquePtr<sqlite3> db;
-        std::mutex access_mutex;
-
-        void open(const std::string &path);
-        void handleSQLError(int rc, int check, std::string &&message, databaseError err);
-
-    protected:
-        explicit Database(std::string path);
-
-        //to sincronize threads during the first creation of the Singleton object
-        static std::mutex mutex_;
-        //singleton instance
-        static std::shared_ptr<Database> database_;
-        std::string path_;
-
     public:
-        Database(Database *other) = delete;
-
-        void operator=(const Database &) = delete;
-
-        static std::shared_ptr<Database> getInstance(const std::string &path);
-
+        Database(Database &) = delete; //copy constructor deleted
+        Database& operator=(const Database &) = delete;  //assignment deleted
+        Database(Database &&) = delete; //move constructor deleted
+        Database& operator=(Database &&) = delete;  //move assignment deleted
         ~Database() = default;
 
-        void forAll(std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
-                                       const std::string &)> &f);
+        static void setPath(const std::string &path);
 
-        void insert(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime,
-                    const std::string &hash);
+        //singleton instance getter
+        static std::shared_ptr<Database> getInstance();
 
+        //database methods
+
+        void forAll(std::function<void(const std::string &, const std::string &, uintmax_t,
+                    const std::string &, const std::string &)> &f);
+        void insert(const std::string &path, const std::string &type, uintmax_t size,
+                    const std::string &lastWriteTime, const std::string &hash);
         void insert(Directory_entry &d);
-
         void remove(const std::string &path);
-
-        void update(const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime,
-                    const std::string &hash);
-
+        void update(const std::string &path, const std::string &type, uintmax_t size,
+                    const std::string &lastWriteTime, const std::string &hash);
         void update(Directory_entry &d);
+
+    protected:
+        //protected constructor
+        explicit Database();
+
+        //mutex to synchronize threads during the first creation of the Singleton object
+        static std::mutex mutex_;
+
+        //singleton instance
+        static std::shared_ptr<Database> database_;
+
+        //path of the database file
+        static std::string path_;
+
+    private:
+        //unique pointer to the actual database
+        UniquePtr<sqlite3> _db;
+
+        //access mutex to synchronize threads during database accesses
+        std::mutex _access_mutex;
+
+        void _open(); //database open function
+        void _handleSQLError(int rc, int check, std::string &&message, DatabaseError err);   //error handler function
     };
 
     /*
-     * +-------------------------------------------------------------------------------------------------------------------+
+     * +---------------------------------------------------------------------------------------------------------------+
      * DatabaseException class
      */
 
-
-
     /**
-     * exceptions for the database class
+     * DatabaseException exception class that may be returned by the Database class
+     * (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */
     class DatabaseException : public std::runtime_error {
-        databaseError code;
     public:
 
         /**
@@ -123,12 +167,12 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        explicit DatabaseException(const std::string &msg, databaseError code) :
-                std::runtime_error(msg), code(code) {
+        explicit DatabaseException(const std::string &msg, DatabaseError code) :
+                std::runtime_error(msg), _code(code) {
         }
 
         /**
-         * database exception destructor.
+         * database exception destructor
          *
          * @author Michele Crepaldi s269551
          */
@@ -137,13 +181,16 @@ namespace client {
         /**
         * function to retrieve the error code from the exception
         *
-        * @return error code
+        * @return database error code
         *
         * @author Michele Crepaldi s269551
         */
-        databaseError getCode() const noexcept {
-            return code;
+        DatabaseError getCode() const noexcept {
+            return _code;
         }
+
+    private:
+        DatabaseError _code; //code describing the error
     };
 }
 

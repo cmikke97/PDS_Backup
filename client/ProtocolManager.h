@@ -5,6 +5,7 @@
 #ifndef CLIENT_PROTOCOLMANAGER_H
 #define CLIENT_PROTOCOLMANAGER_H
 
+//TODO check
 
 #include <string>
 #include <messages.pb.h>
@@ -59,7 +60,7 @@ namespace client {
 
         std::vector<Event> waitingForResponse{};
         int start, end, size;
-        int protocolVersion, tries, maxTries, tempNameSize, max_data_chunk_size;
+        unsigned int protocolVersion, tries, maxTries, tempNameSize, max_data_chunk_size;
 
         void send_AUTH(const std::string &username, const std::string &macAddress, const std::string &password);
         //void send_QUIT();
@@ -72,11 +73,11 @@ namespace client {
         void send_RETR(const std::string &macAddress, bool all);
         void composeMessage(Event &e);
 
-        void storeFile(const std::string &destFolder, const std::string &temporaryPath, int tempNameSize);
+        void storeFile(const std::string &destFolder, const std::string &temporaryPath);
         void makeDir(const std::string &destFolder);
 
     public:
-        ProtocolManager(Socket &s, int max, int ver, int maxTries, std::string path);
+        ProtocolManager(Socket &s, unsigned int max, unsigned int ver, unsigned int maxTries, std::string path);
 
         void authenticate(const std::string &username, const std::string &password, const std::string &macAddress);
 
@@ -86,7 +87,7 @@ namespace client {
 
         bool isWaiting() const;
 
-        void send(Event &e);
+        void send(Event &event);
 
         void receive();
 

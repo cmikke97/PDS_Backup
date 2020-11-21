@@ -1,108 +1,128 @@
 //
-// Created by michele on 29/09/2020.
+// Created by Michele Crepaldi s269551 on 29/09/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #ifndef CLIENT_CONFIG_H
 #define CLIENT_CONFIG_H
 
 #include <string>
-#include <fstream>
 #include <mutex>
+#include <memory>
 
-/*
- * +-------------------------------------------------------------------------------------------------------------------+
- * Config class
+
+/**
+ * PDS_Backup client namespace
+ *
+ * @author Michele Crepaldi s269551
  */
-
 namespace client {
-    /**
-     * Config class; used to retrive the configuration for the execution of the program from file (singleton)
-     *
-     * @author Michele Crepaldi s269551
-     */
-    class Config {
-        std::string path_to_watch;
-        std::string database_path;
-        std::string ca_file_path;
-        int millis_filesystem_watcher{};
-        int event_queue_size{};
-        int seconds_between_reconnections{};
-        int max_connection_retries{};
-        int max_server_error_retries{};
-        int timeout_seconds{};
-        int select_timeout_seconds{};
-        int max_response_waiting{};
-        int tmp_file_name_size{};
-        int max_data_chunk_size{};
-
-        void load(const std::string &configFilePath);
-
-    protected:
-        explicit Config(std::string path);
-
-        //to sincronize threads during the first creation of the Singleton object
-        static std::mutex mutex_;
-        //singleton instance
-        static std::shared_ptr<Config> config_;
-        std::string path_;
-
-    public:
-        Config(Config *other) = delete;
-
-        void operator=(const Config &) = delete;
-
-        static std::shared_ptr<Config> getInstance(const std::string &path);
-
-        std::string& getPathToWatch();
-
-        std::string& getDatabasePath();
-
-        std::string& getCAFilePath();
-
-        int getMillisFilesystemWatcher();
-
-        int getEventQueueSize();
-
-        int getSecondsBetweenReconnections();
-
-        int getMaxConnectionRetries();
-
-        int getMaxServerErrorRetries();
-
-        int getTimeoutSeconds();
-
-        int getSelectTimeoutSeconds();
-
-        int getMaxResponseWaiting();
-
-        int getTmpFileNameSize();
-
-        int getMaxDataChunkSize();
-    };
-
-    /*
-     * +-------------------------------------------------------------------------------------------------------------------+
-     * ConfigException class
-     */
-
     /**
      * configError class: it describes (enumerically) all the possible config errors
      *
      * @author Michele Crepaldi s269551
      */
     enum class configError {
-        open, pathToWatch, justCreated
+        //the config file could not be opened
+        open,
+
+        //the file did not exist and a new one was just created (some variables are host dependant,
+        //for these variables there are no default values; the user has to modify the file and restart the program)
+        justCreated,
+
+        //no value was provided for this variable (there are no defaults for this variable) OR the value provided
+        //references a non existing directory or something which is not a directory
+        pathToWatch
     };
 
+    /*
+     * +---------------------------------------------------------------------------------------------------------------+
+     * Config class
+     */
+
     /**
-     * exceptions for the config class
+     * Config class. Used to retrive the configuration for the execution of the program from file (singleton)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    class Config {
+    public:
+        Config(Config *other) = delete; //copy constructor deleted
+        Config& operator=(const Config &) = delete;    //assignment deleted
+        Config(Config &&) = delete; //move constructor deleted
+        Config& operator=(Config &&) = delete;  //move assignment deleted
+        ~Config() = default;
+
+        //singleton instance getter
+        static std::shared_ptr<Config> getInstance(const std::string &path);
+
+        //getters
+
+        const std::string& getPathToWatch();
+        const std::string& getDatabasePath();
+        const std::string& getCAFilePath();
+        unsigned int getMillisFilesystemWatcher();
+        unsigned int getEventQueueSize();
+        unsigned int getSecondsBetweenReconnections();
+        unsigned int getMaxConnectionRetries();
+        unsigned int getMaxServerErrorRetries();
+        unsigned int getTimeoutSeconds();
+        unsigned int getSelectTimeoutSeconds();
+        unsigned int getMaxResponseWaiting();
+        unsigned int getTmpFileNameSize();
+        unsigned int getMaxDataChunkSize();
+
+    protected:
+        //protected constructor
+        explicit Config(std::string path);
+
+        //mutex to synchronize threads during the first creation of the Singleton object
+        static std::mutex mutex_;
+
+        //singleton instance
+        static std::shared_ptr<Config> config_;
+
+        //path of the config file
+        std::string path_;
+
+    private:
+        //host dependant variables
+
+        std::string _path_to_watch;
+
+        //default-able variables
+
+        std::string _database_path;
+        std::string _ca_file_path;
+        unsigned int _millis_filesystem_watcher{};
+        unsigned int _event_queue_size{};
+        unsigned int _seconds_between_reconnections{};
+        unsigned int _max_connection_retries{};
+        unsigned int _max_server_error_retries{};
+        unsigned int _timeout_seconds{};
+        unsigned int _select_timeout_seconds{};
+        unsigned int _max_response_waiting{};
+        unsigned int _tmp_file_name_size{};
+        unsigned int _max_data_chunk_size{};
+
+        //config file load function
+        void _load();
+    };
+
+    /*
+     * +---------------------------------------------------------------------------------------------------------------+
+     * ConfigException class
+     */
+
+    /**
+     * ConfigException exception class that may be returned by the Config class
+     * (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */
     class ConfigException : public std::runtime_error {
-        configError code;
     public:
-
         /**
          * config exception constructor
          *
@@ -111,11 +131,11 @@ namespace client {
          * @author Michele Crepaldi s269551
          */
         explicit ConfigException(const std::string &msg, configError code) :
-                std::runtime_error(msg), code(code) {
+                std::runtime_error(msg), _code(code) {
         }
 
         /**
-         * config exception destructor.
+         * config exception destructor
          *
          * @author Michele Crepaldi s269551
          */
@@ -129,8 +149,11 @@ namespace client {
         * @author Michele Crepaldi s269551
         */
         configError getCode() const noexcept {
-            return code;
+            return _code;
         }
+
+    private:
+        configError _code;   //code describing the error
     };
 }
 

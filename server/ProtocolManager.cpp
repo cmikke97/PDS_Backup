@@ -5,8 +5,10 @@
 #include <fstream>
 #include <regex>
 #include "ProtocolManager.h"
-#include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Message.h"
+#include "../myLibraries/RandomNumberGenerator.h"
 
+//TODO check
 
 /**
  * send an OK response to the client with a code
@@ -158,7 +160,7 @@ void server::ProtocolManager::probe() {
     Hash h = Hash(clientMessage.hash());
     clientMessage.Clear();
 
-    TS_Message::print(std::cout, "PROB", address + " (" + username + "@" + mac + ")", path);
+    Message::print(std::cout, "PROB", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element
@@ -170,7 +172,6 @@ void server::ProtocolManager::probe() {
         //there is something with the same name which is not a file -> error
         send_ERR(errCode::notAFile);    //send error message with cause
         throw ProtocolManagerException("Probed something which is not a file.", protocolManagerError::client);
-        return;
     }
 
     if(el->second.getHash() != h) {   //if the file hash does not correspond then it means there exists a file which is different
@@ -201,7 +202,7 @@ void server::ProtocolManager::storeFile(){
                              clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
     clientMessage.Clear();  //clear the client message
 
-    TS_Message::print(std::cout, "STOR", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
+    Message::print(std::cout, "STOR", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
 
     //create a random temporary name for the file
     RandomNumberGenerator rng;
@@ -324,7 +325,7 @@ void server::ProtocolManager::storeFile(){
             db->update(username, mac, expected);
         }
 
-        TS_Message::print(std::cout, "DATA", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
+        Message::print(std::cout, "DATA", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
 
         //TODO evaluate if to handle socket exception here
         //the file has been created
@@ -349,7 +350,7 @@ void server::ProtocolManager::removeFile(){
     Hash h{clientMessage.hash()};
     clientMessage.Clear();
 
-    TS_Message::print(std::cout, "DELE", address + " (" + username + "@" + mac + ")", path);
+    Message::print(std::cout, "DELE", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el == elements.end() || !el->second.exists()) { //if i cannot find the element OR the element does not exist, i don't have to remove it
@@ -401,7 +402,7 @@ void server::ProtocolManager::makeDir(){
     const std::string lastWriteTime = clientMessage.lastwritetime();
     clientMessage.Clear();
 
-    TS_Message::print(std::cout, "MKD", address + " (" + username + "@" + mac + ")", path);
+    Message::print(std::cout, "MKD", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el != elements.end() && el->second.exists() && el->second.getLastWriteTime() == lastWriteTime){
@@ -429,7 +430,6 @@ void server::ProtocolManager::makeDir(){
 
         send_ERR(errCode::notADir);    //send error message with cause
         throw ProtocolManagerException("Tried to modify something which is not a directory.", protocolManagerError::client);
-        return;
     }
 
     //create a Directory entry which represents the newly created folder (or to the already present one)
@@ -473,7 +473,7 @@ void server::ProtocolManager::removeDir(){
     const std::string path = clientMessage.path();
     clientMessage.Clear();
 
-    TS_Message::print(std::cout, "RMD", address + " (" + username + "@" + mac + ")", path);
+    Message::print(std::cout, "RMD", address + " (" + username + "@" + mac + ")", path);
 
     auto el = elements.find(path);
     if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
@@ -540,7 +540,7 @@ void server::ProtocolManager::retrieveUserData(){
 
     if(retrAll){    //if all is true, meaning that the user requested all its files (independently of the machine mac address they are related to)
 
-        TS_Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "All files");
+        Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "All files");
 
         auto macs = db->getAllMacAddresses(username);   //get all the user's mac addresses
 
@@ -575,7 +575,7 @@ void server::ProtocolManager::retrieveUserData(){
             throw ProtocolManagerException("Error in client message", protocolManagerError::client);
         }
 
-        TS_Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "mac = " + macAddr);
+        Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "mac = " + macAddr);
 
         //compose the directory name (all the elements of a username-mac pair will be put in a specific folder in the client
         //(this folder does not need to be sent since the client will create all missing dirs along the path to a file/directory;
@@ -600,11 +600,11 @@ void server::ProtocolManager::retrieveUserData(){
     //here in toSend I will have all the elements to send to the client
     for(auto pair: toSend){
         if(pair.second.is_directory()){ //if it is a directory then send MKD
-            TS_Message::print(std::cout, "RETR-MKD", address + " (" + username + "@" + mac + ")", pair.first);
+            Message::print(std::cout, "RETR-MKD", address + " (" + username + "@" + mac + ")", pair.first);
             send_MKD(pair.first, pair.second);
         }
         else if(pair.second.is_regular_file()) {  //if it is a file then send STOR and 1 or more DATA
-            TS_Message::print(std::cout, "RETR-STOR", address + " (" + username + "@" + mac + ")", pair.first);
+            Message::print(std::cout, "RETR-STOR", address + " (" + username + "@" + mac + ")", pair.first);
             send_STOR(pair.first, pair.second);
             sendFile(pair.second, macAddr);
         }
@@ -641,17 +641,14 @@ void server::ProtocolManager::sendFile(Directory_entry &element, std::string &ma
     file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);
 
     if(file.is_open()){
-        int64_t totRead = 0;
         //TS_Message::print(std::cout, "SENDING", address + " (" + username + "@" + mac + ")", "Sending: " + element.getRelativePath());
 
         while(file.read(buff, max_data_chunk_size)) { //read file in max_data_chunk_size-wide blocks
-            totRead += file.gcount();
             send_DATA(buff, file.gcount()); //send the block
         }
 
         serverMessage.set_last(true);   //mark the last data block
 
-        totRead += file.gcount();
         send_DATA(buff, file.gcount()); //send the block
 
         //close the input file
@@ -687,8 +684,8 @@ server::ProtocolManager::ProtocolManager(Socket &s, std::string address, int ver
     tempNameSize = config->getTmpFileNameSize();
     max_data_chunk_size = config->getMaxDataChunkSize();
 
-    password_db = PWD_Database::getInstance(config->getPasswordDatabasePath());
-    db = Database::getInstance(config->getServerDatabasePath());
+    password_db = Database_pwd::getInstance();
+    db = Database::getInstance();
 };
 
 /**
@@ -749,7 +746,7 @@ void server::ProtocolManager::authenticate() {
     tmp << basePath << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
     basePath = tmp.str();
 
-    TS_Message::print(std::cout, "EVENT", address, "authenticated as " + username  + "@" + mac);
+    Message::print(std::cout, "EVENT", address, "authenticated as " + username + "@" + mac);
 };
 
 /**
@@ -799,13 +796,13 @@ void server::ProtocolManager::recoverFromDB() {
 
     //now update all the updated elements to db
     for(auto el: toUpdate){
-        TS_Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was modified offline!");
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was modified offline!");
         db->update(username, mac, el);
     }
 
     //delete all the deleted elements from db
     for(auto el: toDelete){
-        TS_Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was removed offline!");
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was removed offline!");
         db->remove(username, mac, el.getRelativePath());
     }
 
@@ -902,7 +899,7 @@ void server::ProtocolManager::receive(){
     catch (SocketException &e){
         throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
     }
-    catch (server::PWD_DatabaseException &e){
+    catch (server::DatabaseException_pwd &e){
         throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
     }
     catch (server::DatabaseException &e){

@@ -15,8 +15,10 @@
 #include "../myLibraries/Socket.h"
 #include "messages.pb.h"
 #include "ProtocolManager.h"
-#include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Message.h"
 #include "../myLibraries/Validator.h"
+
+//TODO check
 
 #define VERSION 1
 
@@ -207,29 +209,29 @@ int main(int argc, char **argv) {
         std::string lastArgument = argv[optind-1];  //get last argument
 
         if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
-            TS_Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
+            Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
             return 1;
         }
     }
 
     //perform some checks on the options
     if(!retrieveSet && (macSet || allSet || dirSet)){
-        TS_Message::print(std::cerr, "ERROR", "--mac, --all and --dir options require --retrieve.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "--mac, --all and --dir options require --retrieve.", "Use -h (or --help) for help.");
         return 1;
     }
 
     if(retrieveSet && (!ipSet || !portSet || !userSet || !passSet || !dirSet)){
-        TS_Message::print(std::cerr, "ERROR", "--retrieve command requires --ip --port --user --pass --dir options to be set.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "--retrieve command requires --ip --port --user --pass --dir options to be set.", "Use -h (or --help) for help.");
         return 1;
     }
 
     if(startSet && (!ipSet || !portSet || !userSet || !passSet)){
-        TS_Message::print(std::cerr, "ERROR", "--start command requires --ip --port --user --pass options to be set.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "--start command requires --ip --port --user --pass options to be set.", "Use -h (or --help) for help.");
         return 1;
     }
 
     if(!startSet && !retrieveSet){
-        TS_Message::print(std::cerr, "ERROR", "--start AND/OR --retrieve options need to be specified", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "--start AND/OR --retrieve options need to be specified", "Use -h (or --help) for help.");
         return 1;
     }
 
@@ -237,7 +239,8 @@ int main(int argc, char **argv) {
         //get the configuration
         auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
         //get the database instance and open the database (and if not previously there create also the needed table)
-        auto db = client::Database::getInstance(config->getDatabasePath());
+        client::Database::setPath(config->getDatabasePath());
+        auto db = client::Database::getInstance();
 
         if(retrieveSet){
             //specfy the TLS certificates for the socket
@@ -256,20 +259,20 @@ int main(int argc, char **argv) {
 
             //send the RETR message and get all the data from server
             if(macSet){
-                TS_Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + mac, "destination folder: " + destFolder);
+                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + mac, "destination folder: " + destFolder);
 
                 //send RETR message with the set mac and get all data from server and save it in destFolder
                 pm.retrieveFiles(mac, false, destFolder);
             }
             else if(allSet){
-                TS_Message::print(std::cout, "INFO", "Will retrieve all your files", "destination folder: " + destFolder);
+                Message::print(std::cout, "INFO", "Will retrieve all your files", "destination folder: " + destFolder);
 
                 //send RETR message with all set and get all data from server and save it in destFolder
                 pm.retrieveFiles("", true, destFolder);
             }
             else{
                 std::string thisSocketMac = client_socket.getMAC();
-                TS_Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + thisSocketMac, "destination folder: " + destFolder);
+                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + thisSocketMac, "destination folder: " + destFolder);
 
                 //send RETR message with this machine's mac address and get all data from server and save it in destFolder
                 pm.retrieveFiles(thisSocketMac, false, destFolder);
@@ -292,7 +295,7 @@ int main(int argc, char **argv) {
         std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), serverIP, stoi(serverPort), username, password);
 
         // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
-        Thread_guard tg_communication(communication_thread, communicationThread_stop);
+        client::Thread_guard tg_communication(communication_thread, communicationThread_stop);
 
         //make the filesystem watcher retrieve previously saved data from db
         fw.recoverFromDB(db.get(), [&eventQueue](Directory_entry &element, FileSystemStatus status) {
@@ -318,19 +321,31 @@ int main(int argc, char **argv) {
         return 1;
     }
     catch (client::DatabaseException &e) {
-        //in case of database exceptions show message and return
-        TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
-        return 1;
+        switch(e.getCode()){
+            case client::DatabaseError::path:   //no path was provided to the Database class -> (fatal) terminate client
+            case client::DatabaseError::create: //could not create the table in the database -> (fatal) terminate client
+            case client::DatabaseError::open:   //could not open the database -> (fatal) terminate client
+            case client::DatabaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate client
+            case client::DatabaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate client
+            case client::DatabaseError::insert: //could not insert into the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::read:   //could not read from the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::update: //could not update into the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::remove: //could not remove from the database -> (fatal) terminate client (not used here)
+            default:
+                //Fatal error -> close the server
+                Message::print(std::cerr, "ERROR", "Database Exception", e.what());
+                return 1;
+        }
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
             case client::configError::justCreated:  //if the config file was not there and it has been created
             case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
-                TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+                Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
             case client::configError::open: //if there were some errors in opening the configuration file return
             default:
-                TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+                Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }
 
         return 1;
@@ -383,7 +398,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 if (!eventQueue.waitForCondition(thread_stop)) //returns true if an event can be popped from the queue, false if thread_stop is true, otherwise it stays blocked
                     return; //if false then we exited the condition for the thread_stop being true so we want to close the program
 
-                TS_Message::print(std::cout, "INFO", "Changes detected", "Connecting to server..");
+                Message::print(std::cout, "INFO", "Changes detected", "Connecting to server..");
                 //connect with server
                 client_socket.connect(server_ip, server_port);
                 //if the connection is successful then reset tries variable
@@ -397,7 +412,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 pm.recoverFromError();
 
                 //some variables for the loop and select
-                int timeWaited = 0;
+                unsigned int timeWaited = 0;
                 bool loop = true;
 
                 //after connection and authentication then iteratively do this;
@@ -429,7 +444,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     switch (activity) {
                         case -1:
                             //I should never get here
-                            TS_Message::print(std::cerr, "ERROR", "Select error", "case -1");
+                            Message::print(std::cerr, "ERROR", "Select error", "case -1");
 
                             //connection will be closed automatically by the socket destructor
 
@@ -447,7 +462,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                             if (timeWaited >= config->getTimeoutSeconds()) {  //if the time already waited is greater than TIMEOUT
                                 loop = false;           //then exit inner loop --> this will cause the connection to be closed
-                                TS_Message::print(std::cout, "INFO", "No changes detected", "Disconnecting from server..");
+                                Message::print(std::cout, "INFO", "No changes detected", "Disconnecting from server..");
                             }
 
                             break;
@@ -497,7 +512,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     case socketError::connect:  //error in socket connect
 
                         if(tries == 0)
-                            TS_Message::print(std::cout, "INFO", "Connection was closed by the server", "will reconnect if needed");
+                            Message::print(std::cout, "INFO", "Connection was closed by the server", "will reconnect if needed");
 
                         if(!pm.canSend() || !eventQueue.canGet())
                             break;
@@ -508,13 +523,13 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                             tries++;
                             std::stringstream tmp;
                             tmp << "Retry (" << tries << ") in " << config->getSecondsBetweenReconnections() << " seconds.";
-                            TS_Message::print(std::cerr, "WARNING", "Connection error", tmp.str());
+                            Message::print(std::cerr, "WARNING", "Connection error", tmp.str());
                             std::this_thread::sleep_for(std::chrono::seconds(config->getSecondsBetweenReconnections()));
                             break;
                         }
 
                         //maximum number of re-tries exceeded -> terminate program
-                        TS_Message::print(std::cerr, "ERROR", "Cannot establish connection");
+                        Message::print(std::cerr, "ERROR", "Cannot establish connection");
 
                     case socketError::getMac: //error retrieving the MAC
                     default:
@@ -530,7 +545,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                     case client::protocolManagerError::internal: //internal server error (exception)
                     case client::protocolManagerError::version: //version not supported error
                     case client::protocolManagerError::unsupported: //unsupported message type error
-                        TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
+                        Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                         //connection will be closed automatically by the socket destructor
 
@@ -540,7 +555,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
 
                     case client::protocolManagerError::unexpected: //unexpected message error
                         if(!authenticated){  //if I am not authenticated any unexpected message means error
-                            TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
+                            Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                             //connection will be closed automatically by the socket destructor
 
@@ -552,11 +567,11 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         //otherwise
                     case client::protocolManagerError::client: //client message error
                         //TODO go on -> skip the current message (Should be done.. check..)
-                        TS_Message::print(std::cerr, "WARNING", "Message error", "Message will be skipped");
+                        Message::print(std::cerr, "WARNING", "Message error", "Message will be skipped");
                         break;
 
                     default: //for unrecognised exception codes
-                        TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", "Unrecognised exception code");
+                        Message::print(std::cerr, "ERROR", "ProtocolManager Exception", "Unrecognised exception code");
 
                         //connection will be closed automatically by the socket destructor
 
@@ -566,42 +581,47 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                 }
             }
             catch (client::DatabaseException &e) {
-                //in case of a database exception the only thing we can do is to close the program
-                TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
-
-                //connection will be closed automatically by the socket destructor
-
-                //terminate filesystem watcher and close program
-                fileWatcher_stop.store(true);
-                return;
+                throw;  //rethrow the exception //TODO check this
             }
         }
     }
     catch (SocketException &e) {
         //we are here if the socket class couldn't create a socket
-        TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
+        Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);
         return;
     }
     catch (client::DatabaseException &e){
-        //we are here if the Database class couldn't open the database
-        TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
+        switch(e.getCode()){
+            case client::DatabaseError::path:   //no path was provided to the Database class -> (fatal) terminate client
+            case client::DatabaseError::create: //could not create the table in the database -> (fatal) terminate client
+            case client::DatabaseError::open:   //could not open the database -> (fatal) terminate client
+            case client::DatabaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate client
+            case client::DatabaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate client
+            case client::DatabaseError::insert: //could not insert into the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::read:   //could not read from the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::update: //could not update into the database -> (fatal) terminate client (not used here)
+            case client::DatabaseError::remove: //could not remove from the database -> (fatal) terminate client (not used here)
+            default:
+                //Fatal error -> close the server
+                Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
-        //terminate filesystem watcher and close program
-        fileWatcher_stop.store(true);
-        return;
+                //terminate filesystem watcher and close program
+                fileWatcher_stop.store(true);
+                return;
+        }
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
             case client::configError::justCreated:  //if the config file was not there and it has been created
             case client::configError::pathToWatch:  //if the configured path to watch was not specified or it does not exist (or it is not a directory) ask to modify it and return
-                TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+                Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
             case client::configError::open: //if there were some errors in opening the configuration file return
             default:
-                TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+                Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }
 
         //terminate filesystem watcher and close program
@@ -610,7 +630,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (...) {
         //any uncaught exception will terminate the program
-        TS_Message::print(std::cerr, "ERROR", "uncaught exception");
+        Message::print(std::cerr, "ERROR", "uncaught exception");
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);

@@ -1,10 +1,11 @@
 //
-// Created by michele on 01/11/2020.
+// Created by Michele Crepaldi s269551 on 01/11/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #ifndef RANDOMNUMBERGENERATOR_H
 #define RANDOMNUMBERGENERATOR_H
-
 
 #include <string>
 #include <wolfssl/options.h>
@@ -12,20 +13,34 @@
 #include <wolfssl/wolfcrypt/random.h>
 #include <stdexcept>
 
+
+/**
+ * RandomNumberGenerator class. It is used to get a cryptographically secure random number/bitstring
+ *
+ * @author Michele Crepaldi s269551
+ */
 class RandomNumberGenerator {
-    RNG rng{};
-
-    static int hex_value(unsigned char hex_digit);
-
 public:
-    RandomNumberGenerator();
-    ~RandomNumberGenerator();
+    RandomNumberGenerator(const RandomNumberGenerator &) = delete;    //copy constructor deleted
+    RandomNumberGenerator& operator=(const RandomNumberGenerator &) = delete; //assignment deleted
+    RandomNumberGenerator(RandomNumberGenerator &&) = delete; //move constructor deleted
+    RandomNumberGenerator& operator=(RandomNumberGenerator &&) = delete;  //move assignment deleted
 
-    void getRandom(char *buf, int size);
-    std::string getRandomString(int size);
-    std::string getHexString(int size);
+    RandomNumberGenerator();    //constructor
+    ~RandomNumberGenerator();   //destructor
+
+    //methods
+
+    void getRandom(char *buf, unsigned int size);
+    std::string getRandomString(unsigned int size);
+    std::string getHexString(unsigned int size);
     static std::string string_to_hex(const std::string& input);
     static std::string hex_to_string(const std::string& input);
+
+private:
+    RNG rng{};  //wolfSSL random number generator instance
+
+    static int hex_value(unsigned char hex_digit);
 };
 
 /*
@@ -34,50 +49,58 @@ public:
  */
 
 /**
- * RNGError class: it describes (enumerically) all the possible random number generator errors
+ * RngError class: it describes (enumerically) all the possible RandomNumberGenerator errors
  *
  * @author Michele Crepaldi s269551
  */
-enum class RNGError{init, generate};
+enum class RngError{
+    //error during rng initialization
+    init,
+
+    //error during random number generation
+    generate
+};
 
 /**
- * exceptions for the RNG class
+ * RngException exception class that may be returned by the RandomNumberGenerator class
  *
  * @author Michele Crepaldi s269551
  */
-class RNGException : public std::runtime_error {
-    RNGError code;
+class RngException : public std::runtime_error {
 public:
 
     /**
-     * RNG exception constructor
+     * rng exception constructor
      *
      * @param msg the error message
      * @param code RNGError code
      *
      * @author Michele Crepaldi s269551
      */
-    RNGException(const std::string& msg, RNGError code):
-            std::runtime_error(msg), code(code){
+    RngException(const std::string& msg, RngError code):
+            std::runtime_error(msg), _code(code){
     }
 
     /**
-     * RNG exception destructor.
+     * rng exception destructor
      *
      * @author Michele Crepaldi s269551
      */
-    ~RNGException() noexcept override = default;
+    ~RngException() noexcept override = default;
 
     /**
      * function to retrieve the error code from the exception
      *
-     * @return error code
+     * @return rng error code
      *
      * @author Michele Crepaldi s269551
      */
-    RNGError getCode() const noexcept{
-        return code;
+    RngError getCode() const noexcept{
+        return _code;
     }
+
+private:
+    RngError _code;
 };
 
 

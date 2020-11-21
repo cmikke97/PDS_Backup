@@ -4,6 +4,8 @@
 
 #include "FileSystemWatcher.h"
 
+//TODO check
+
 /**
  * constructor function for this class:
  * Keep a record of files from the base directory and their last modification time

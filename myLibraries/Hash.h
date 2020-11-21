@@ -5,6 +5,8 @@
 #ifndef HASH_H
 #define HASH_H
 
+//TODO check
+
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>

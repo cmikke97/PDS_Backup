@@ -1,5 +1,7 @@
 //
-// Created by michele on 27/07/2020.
+// Created by Michele Crepaldi s269551 on 27/07/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #ifndef SERVER_THREAD_GUARD_H
@@ -7,25 +9,35 @@
 
 #include <thread>
 #include <atomic>
-#include <sqlite3.h>
+#include <vector>
+
 
 /**
- * thread guard class
+ * PDS_Backup server namespace
  *
  * @author Michele Crepaldi s269551
  */
-class Thread_guard {
-    std::vector<std::thread> &t;
-    std::atomic<bool> &stop;
+namespace server {
+    /**
+     * Thread_guard class. It is used to join all the threads
+     *
+     * @author Michele Crepaldi s269551
+     */
+    class Thread_guard {
+    public:
+        Thread_guard(const Thread_guard &) = delete;    //copy constructor deleted
+        Thread_guard& operator=(const Thread_guard &) = delete; //assignment deleted
+        Thread_guard(Thread_guard &&) = delete; //move constructor deleted
+        Thread_guard& operator=(Thread_guard &&) = delete;  //move assignment deleted
 
-public:
-    Thread_guard(std::vector<std::thread> &t_, std::atomic<bool> &stop_);
-    ~Thread_guard();
+        Thread_guard(std::vector<std::thread> &t, std::atomic<bool> &stop);   //constructor
+        ~Thread_guard();    //destructor
 
-    Thread_guard(const Thread_guard &) = delete;
-    Thread_guard& operator=(const Thread_guard &) = delete;
-
-};
+    private:
+        std::vector<std::thread> &_tVector;    //reference to the vector of threads
+        std::atomic<bool> &_stop;   //reference to the atomic boolean used to stop the threads
+    };
+}
 
 
 #endif //SERVER_THREAD_GUARD_H
