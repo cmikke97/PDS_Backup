@@ -1,34 +1,63 @@
 //
-// Created by michele on 29/09/2020.
+// Created by Michele Crepaldi s269551 on 29/09/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
+
+#include "Config.h"
 
 #include <regex>
 #include <filesystem>
-#include <iostream>
-#include <utility>
-#include "Config.h"
-#include "../myLibraries/TS_Message.h"
+#include <fstream>
 
-//default values
-#define MILLIS_FILESYSTEM_WATCHER 5000 //how many milliseconds to wait before re-scan the watched directory
-#define EVENT_QUEUE_SIZE 20 //dimension of the event queue, a.k.a. how many events can be putted in queue at the same time
-#define SECONDS_BETWEEN_RECONNECTIONS 10 //seconds to wait before client retrying connection after connection lost
-#define MAX_CONNECTION_RETRIES 12 //maximum number of times the system will re-try to connect consecutively
-#define MAX_SERVER_ERROR_RETRIES 5 //maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the final outcome) after an internal server error
-#define TIMEOUT 15 //seconds to wait before client-server connection timeout
-#define SELECT_TIMEOUT 5 //seconds to wait between one select and the other
-#define MAX_RESPONSE_WAITING 1024 //maximum amount of messages that can be sent without response
-#define TEMP_FILE_NAME_SIZE 8   //Size of the name of temporary files
+#include "../myLibraries/Message.h"
+
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * default variables values definition
+ */
+
+#define MILLIS_FILESYSTEM_WATCHER 5000      //how many milliseconds to wait before re-scan the watched directory
+
+//dimension of the event queue, a.k.a. how many events can be putted in queue at the same time
+#define EVENT_QUEUE_SIZE 20
+
+#define SECONDS_BETWEEN_RECONNECTIONS 10    //seconds to wait before client retrying connection after connection lost
+#define MAX_CONNECTION_RETRIES 12           //maximum number of times the system will re-try to connect consecutively
+
+//maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the
+//final outcome) after an internal server error
+#define MAX_SERVER_ERROR_RETRIES 5
+
+#define TIMEOUT 15                          //seconds to wait before client-server connection timeout
+#define SELECT_TIMEOUT 5                    //seconds to wait between one select and the other
+#define MAX_RESPONSE_WAITING 1024           //maximum amount of messages that can be sent without response
+#define TEMP_FILE_NAME_SIZE 8               //Size of the name of temporary files
+
 #define DATABASE_PATH "../clientFiles/clientDB.sqlite"  //path of the client database
-#define CA_FILE_PATH "../../TLScerts/cacert.pem"    //path of the CA to use to check the server certificate
+#define CA_FILE_PATH "../../TLScerts/cacert.pem"        //path of the CA to use to check the server certificate
 
-//host dependant values (variables which depend on the specific host/machine which the program is running on)
-//so their default value is the empty string meaning that the user will be asked to properly specify them
+//Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
+//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that
+//(keeping in mind that there are also other fields in the message)
+#define MAX_DATA_CHUNK_SIZE 20480   //now set to 20KB
+
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * host dependant variables definition
+ * (variables which depend on the specific host/machine which the program is running on)
+ * so their default value is the empty string meaning that the user will be asked to properly specify them
+ */
+
 #define PATH_TO_WATCH ""    //path to watch for changes
 
-//20KB
-#define MAX_DATA_CHUNK_SIZE 20480   //Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
-//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that (keeping in mind that there are also other fields in the message)
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Config class methods
+ */
 
 //static variables definition
 std::shared_ptr<client::Config> client::Config::config_;
@@ -56,12 +85,12 @@ std::shared_ptr<client::Config> client::Config::getInstance(const std::string &p
  *
  * @author Michele Crepaldi s269551
  */
-client::Config::Config(std::string path) : path_(std::move(path)) {
-    load(path_);
+client::Config::Config(std::string path) : path_(std::move(path)) { //set path
+    _load(); //load the configuration variables from file
 }
 
 /**
- * function used to add a single configuration variable line to the config file
+ * utility function used to add a single configuration variable line to the config file
  *
  * @param f config file fstream to add the line to
  * @param variableName name of the variable to insert
@@ -74,7 +103,7 @@ void addConfigVariable(std::fstream &f, const std::string &variableName, const s
 }
 
 /**
- * function used to add a single comment line to the config file
+ * utility function used to add a single comment line to the config file
  *
  * @param f config file fstream to add the line to
  * @param comment comment to insert
@@ -86,77 +115,121 @@ void addSingleComment(std::fstream &f, const std::string &comment){
 }
 
 /**
- * function to add an array of comments to the config file
+ * utility function to add an array of comments to the config file
  *
- * @tparam rows number of rows of the comments array
+ * @tparam rows number of rows of the comments array (inserted by the compiler)
  * @param file config file fstream to add the lines to
- * @param comments reference to the comments array to insert into the config file
+ * @param comments reference to the comments array (vector) to insert into the config file
  *
  * @author Michele Crepaldi s269551
  */
 template <size_t rows>
 void addComments(std::fstream &file, const std::string (&comments)[rows])
 {
-    for (size_t i = 0; i < rows; ++i)
-        addSingleComment(file, comments[i]);
+    for (size_t i = 0; i < rows; ++i)   //for each comment in the comments array
+        addSingleComment(file, comments[i]);    //add the comment to the file
     file << std::endl;
 }
 
 /**
- * function to add an array (matrix) of variables to the config file
+ * utility function to add an array (matrix) of variables to the config file
  *
- * @tparam rows number of rows of the variables array
+ * @tparam rows number of rows of the variables array (inserted by the compiler)
  * @param file config file fstream to add the lines to
  * @param variables reference to the variables array (matrix) to insert into the config file
  */
 template <size_t rows>
 void addVariables(std::fstream &file, const std::string (&variables)[rows][3])
 {
-    for (size_t i = 0; i < rows; ++i){
-        addSingleComment(file, variables[i][2]);
+    for (size_t i = 0; i < rows; ++i){  //for each variable in the variables array
+        addSingleComment(file, variables[i][2]);    //add the comment to the file
+
+        //add the variable (name and default value) to the file
         addConfigVariable(file, variables[i][0], variables[i][1]);
+
         file << std::endl;
     }
     file << std::endl;
 }
 
 /**
- * function to load the configuration from the file (it creates it with default values if it does not exist)
+ * method to be used to load the configuration from file (it creates the file with default values if it does not exist)
  *
- * @param configFilePath path of the file to load configuration from
+ * @throws ConfigException:
+ * <b>justCreated</b> error in case the file did not exist and a new one was just created (some variables are host
+ * dependant, for these variables there are no default values; the user has to modify the file and restart the program).
+ * @throws ConfigException:
+ * <b>open</b> error in case the config file could not be opened.
  *
  * @author Michele Crepaldi s269551
  */
-void client::Config::load(const std::string &configFilePath) {
+void client::Config::_load() {
     std::fstream file;
     std::string str, key, value;
     std::smatch m;
-    std::regex e (R"(\s*(\w+)\s*=\s*(.+[/\w])\s*)");
+
+    //regex to format the strings got from file (get the key and value, ignoring comments and spaces)
+    std::regex eKeyValue (R"(\s*(\w+)\s*=\s*(.+[/\w])\s*)");
+    //regex to check if the value provided is actually a positive integer number
+    std::regex eUint (R"(^(\d+)$)");
 
     //if the file is not there then create (and populate with defaults) it
-    if(!std::filesystem::directory_entry(configFilePath).exists()){
-        file.open(configFilePath, std::ios::out);
+    if(!std::filesystem::exists(path_)){
+        file.open(path_, std::ios::out);    //create file
 
-        TS_Message::print(std::cout, "WARNING", "Configuration file does not exist", "it will now be created with default values");
+        Message::print(std::cout, "WARNING", "Configuration file does not exist",
+                          "it will now be created with default values");
 
-        std::string hostVariables[][3] = {  {"path_to_watch",                   PATH_TO_WATCH,                                  "# Path to back up on server"}};
+        //all host dependant variables
+        std::string hostVariables[][3] = {  {"path_to_watch",   PATH_TO_WATCH,
+                                                "# Path of the folder to back up on server"}};
 
-        std::string variables[][3] = {  {"database_path",                   DATABASE_PATH,                                  "# Client Databse path"},
-                                        {"ca_file_path",                    CA_FILE_PATH,                                   "# CA to use for server certificate verification"},
-                                        {"millis_filesystem_watcher",       std::to_string(MILLIS_FILESYSTEM_WATCHER),      "# Milliseconds the file system watcher will wait every cycle"},
-                                        {"event_queue_size",                std::to_string(EVENT_QUEUE_SIZE),               "# Max events queue size"},
-                                        {"seconds_between_reconnections",   std::to_string(SECONDS_BETWEEN_RECONNECTIONS),  "# Seconds the client will wait between successive connection attempts"},
-                                        {"max_connection_retries",          std::to_string(MAX_CONNECTION_RETRIES),         "# Maximum number of allowed connection attempts"},
-                                        {"max_server_error_retries",        std::to_string(MAX_SERVER_ERROR_RETRIES),       "# Maximum number of message retransmissions of the same message after a server error"},
-                                        {"timeout_seconds",                 std::to_string(TIMEOUT),                        "# Seconds to wait before the client will disconnect"},
-                                        {"select_timeout_seconds",          std::to_string(SELECT_TIMEOUT),                 "# Seconds the client will wait between 2 selects on the socket"},
-                                        {"max_response_waiting",            std::to_string(MAX_RESPONSE_WAITING),           "# Maximum number of messages waiting for a server response allowed"},
-                                        {"tmp_file_name_size",      std::to_string(TEMP_FILE_NAME_SIZE),    "# Size of the name of temporary files"},
-                                        {"max_data_chunk_size",             std::to_string(MAX_DATA_CHUNK_SIZE),            "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages)"
-                                                                                                                            "\n# the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB)"
-                                                                                                                            "\n# so keep it less than that (keeping in mind that there are also other fields in the message)"}};
+        //all default-able variables
+        std::string variables[][3] = {  {"database_path",                   DATABASE_PATH,
+                                            "# Client Database path"},
 
+                                        {"ca_file_path",                    CA_FILE_PATH,
+                                            "# CA to use for server certificate verification"},
 
+                                        {"millis_filesystem_watcher",       std::to_string(MILLIS_FILESYSTEM_WATCHER),
+                                            "# Milliseconds the file system watcher between one folder (to watch) polling"
+                                            "and the other"},
+
+                                        {"event_queue_size",                std::to_string(EVENT_QUEUE_SIZE),
+                                            "# Maximum size for the event queue (in practice how many events can be"
+                                            "detected before sending them to server)"},
+
+                                        {"seconds_between_reconnections",   std::to_string(SECONDS_BETWEEN_RECONNECTIONS),
+                                            "# Seconds the client will wait between one connection attempt and the other"},
+
+                                        {"max_connection_retries",          std::to_string(MAX_CONNECTION_RETRIES),
+                                            "# Maximum number of allowed connection attempts"},
+
+                                        {"max_server_error_retries",        std::to_string(MAX_SERVER_ERROR_RETRIES),
+                                            "# Maximum number of message retransmissions of the same message after a"
+                                            "message error"},
+
+                                        {"timeout_seconds",                 std::to_string(TIMEOUT),
+                                            "# Seconds to wait before the client will disconnect"},
+
+                                        {"select_timeout_seconds",          std::to_string(SELECT_TIMEOUT),
+                                            "# Seconds the client will wait between 2 subsequent selects on the socket"},
+
+                                        {"max_response_waiting",            std::to_string(MAX_RESPONSE_WAITING),
+                                            "# Maximum number of messages waiting for a server response allowed"},
+
+                                        {"tmp_file_name_size",              std::to_string(TEMP_FILE_NAME_SIZE),
+                                            "# Temporary files name size"},
+
+                                        {"max_data_chunk_size",             std::to_string(MAX_DATA_CHUNK_SIZE),
+                                            "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA"
+                                            "messages)\n"
+                                            "# the maximum size for a protocol buffer message is 64MB (for a TCP socket"
+                                            "it is 1GB)\n"
+                                            "# so keep it less than that (keeping in mind that there are also other"
+                                            "fields in the message)"}};
+
+        //comments on top of the file
         std::string initial_comments[] = {          "###########################################################################",
                                                     "#                                                                         #",
                                                     "#         Configuration file for the CLIENT of PDS_Backup project         #",
@@ -164,134 +237,150 @@ void client::Config::load(const std::string &configFilePath) {
                                                     "#                                                                         #",
                                                     "###########################################################################"};
 
+        //comments before the host dependant variables
         std::string host_variables_comments[] = {   "###########################################################################",
                                                     "#         Host specific variables: no default values are provided         #",
                                                     "###########################################################################"};
 
+        //comments before the default-able variables
         std::string variables_comments[] = {        "###########################################################################",
                                                     "#                             Other variables                             #",
                                                     "#        -  in case of empty fields default values will be used  -        #",
                                                     "###########################################################################"};
 
+        //comments at the end of the file
         std::string final_comments[]  = {           "###########################################################################",
                                                     "#                                                                         #",
                                                     "#        -              Configuration file finished              -        #",
                                                     "#                                                                         #",
                                                     "###########################################################################"};
 
-        //add initial comments
-        addComments(file, initial_comments);
+        addComments(file, initial_comments);    //add initial comments
+        addComments(file, host_variables_comments); //add host variables comments
+        addVariables(file, hostVariables);  //add host variables
+        addComments(file, variables_comments);  //add variables comments
+        addVariables(file, variables);  //add other variables
+        addComments(file, final_comments);  //add final comments
 
-        //add host variables comments
-        addComments(file, host_variables_comments);
+        file.close();   //close file
 
-        //add host variables
-        addVariables(file, hostVariables);
-
-        //add variables comments
-        addComments(file, variables_comments);
-
-        //add other variables
-        addVariables(file, variables);
-
-        //add final comments
-        addComments(file, final_comments);
-
-        file.close();
-
+        //when I create the file some values cannot be defaulted, since they are host dependant;
+        //ask the user to modify them shutting down the program
         throw ConfigException("Configuration file created, modify it and restart.", configError::justCreated);
     }
 
-    //open configuration file
-    file.open(configFilePath, std::ios::in);
+    //open configuration file as input
+    file.open(path_, std::ios::in);
 
     if(file.is_open()) {
-        //for each line
-        while(getline(file,str)) {
-            //regex match
-            if(std::regex_match (str,m,e)){
+        while(getline(file,str)) {  //for each line
+            if(std::regex_match (str,m,eKeyValue)){   //regex match
                 //get the key and the value
                 key = m[1];
                 value = m[2];
 
-                //convert all characters in upper case
-                std::transform(key.begin(),key.end(),key.begin(), ::tolower);
+                std::transform(key.begin(),key.end(),key.begin(), ::tolower);   //convert all characters in upper case
 
-                //folders
+                /*
+                 * +---------------------------------------------------------------------------------------------------+
+                 * folder variables
+                 */
                 if(key == "path_to_watch"){
-                    //replace all \ (backward slashes) to / (slashes) in case of a different path representation
+                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
+                    //(windows vs. unix)
                     value = std::regex_replace(value, std::regex(R"(\\)"), "/");
 
-                    //delete the tailing / that may be there at the end of the path
-                    path_to_watch = std::regex_replace(value, std::regex(R"(\/$)"), "");
+                    //delete the tailing "/" that may be there at the end of the path (since this is a folder path)
+                    _path_to_watch = std::regex_replace(value, std::regex(R"(\/$)"), "");
                 }
 
-                //files
-                if(key == "database_path") {
-                    //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                /*
+                 * +---------------------------------------------------------------------------------------------------+
+                 * file variables
+                 */
+                else if(key == "database_path") {
+                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
+                    //(windows vs. unix)
+                    _database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
-                if(key == "ca_file_path") {
-                    //replace all \ (backward slashes) to / (slashes) in case of a different path representation
-                    ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                else if(key == "ca_file_path") {
+                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
+                    //(windows vs. unix)
+                    _ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
                 }
 
-                //integers
-                if(key == "millis_filesystem_watcher")
-                    millis_filesystem_watcher = stoi(value);
-                if(key == "event_queue_size")
-                    event_queue_size = stoi(value);
-                if(key == "seconds_between_reconnections")
-                    seconds_between_reconnections = stoi(value);
-                if(key == "max_connection_retries")
-                    max_connection_retries = stoi(value);
-                if(key == "max_server_error_retries")
-                    max_server_error_retries = stoi(value);
-                if(key == "timeout_seconds")
-                    timeout_seconds = stoi(value);
-                if(key == "select_timeout_seconds")
-                    select_timeout_seconds = stoi(value);
-                if(key == "max_response_waiting")
-                    max_response_waiting = stoi(value);
-                if(key == "tmp_file_name_size")
-                    tmp_file_name_size = stoi(value);
-                if(key == "max_data_chunk_size")
-                    max_data_chunk_size = stoi(value);
+                /*
+                 * +---------------------------------------------------------------------------------------------------+
+                 * other variables (all positive integers)
+                 */
+                else {
+                    if (!std::regex_match(str, m, eUint))  //if the value is not a positive integer number just skip it
+                        continue;
 
+                    //convert the string representation of the integer to an unsigned long (there is no stoui for unsigned integers)
+
+                    unsigned long l = stoul(value);
+                    if (l > UINT32_MAX)  //check if the value provided fits in an unsigned integer
+                        continue;   //if not just continue with the next key-value pair
+
+                    //assign it to the corresponding unsigned integer member variable
+                    if (key == "millis_filesystem_watcher")
+                        _millis_filesystem_watcher = static_cast<unsigned int>(l);
+                    else if (key == "event_queue_size")
+                        _event_queue_size = static_cast<unsigned int>(l);
+                    else if (key == "seconds_between_reconnections")
+                        _seconds_between_reconnections = static_cast<unsigned int>(l);
+                    else if (key == "max_connection_retries")
+                        _max_connection_retries = static_cast<unsigned int>(l);
+                    else if (key == "max_server_error_retries")
+                        _max_server_error_retries = static_cast<unsigned int>(l);
+                    else if (key == "timeout_seconds")
+                        _timeout_seconds = static_cast<unsigned int>(l);
+                    else if (key == "select_timeout_seconds")
+                        _select_timeout_seconds = static_cast<unsigned int>(l);
+                    else if (key == "max_response_waiting")
+                        _max_response_waiting = static_cast<unsigned int>(l);
+                    else if (key == "tmp_file_name_size")
+                        _tmp_file_name_size = static_cast<unsigned int>(l);
+                    else if (key == "max_data_chunk_size")
+                        _max_data_chunk_size = static_cast<unsigned int>(l);
+                }
             }
         }
-        file.close();
+        file.close();   //close file
     }
     else{
-        //if the file could not be opened
+        //if the file could not be opened throw exception
         throw ConfigException("Could not open configuration file", configError::open);
     }
 }
 
 /**
- * path to watch getter (HOST specific, this has no default values; so if no value was provided an exception will be thrown)
+ * path to watch (folder) getter (HOST specific, this has no default values; so if no value was provided an exception
+ * will be thrown)
  *
  * @return path to watch
  *
- * @throw ConfigException in case no value was provided (there are no defaults for this variable) OR in case the value provided
- * references a non existing directory OR something which is not a directory
+ * @throws ConfigException:
+ * <b>pathToWatch</b> error in case no value was provided (there are no defaults for this variable) OR if the value
+ * provided references a non existing directory or something which is not a directory.
  *
  * @author Michele Crepaldi s269551
  */
-std::string& client::Config::getPathToWatch() {
+const std::string& client::Config::getPathToWatch() {
+    //value required.. if it is empty throw exception (there is no default value for this variable)
+    if(_path_to_watch.empty())
+        throw ConfigException("Path to watch was not set", configError::pathToWatch);
 
-    if(path_to_watch.empty())    //if it is empty it means there is no default value for this element (it is required from the user)
-        throw ConfigException("Path to watch was not set", configError::pathToWatch);   //throw an exception
-
-    //if the path to watch set references a non-existant folder
-    if(!std::filesystem::exists(path_to_watch))
-        throw ConfigException("Path to watch does not exist", configError::pathToWatch);   //throw an exception
+    //if the path to watch set references a non-existent folder
+    if(!std::filesystem::exists(_path_to_watch))
+        throw ConfigException("Path to watch does not exist", configError::pathToWatch);
 
     //if the path to watch set references something which is not a folder
-    if(!std::filesystem::is_directory(path_to_watch))
-        throw ConfigException("Path to watch is not a directory", configError::pathToWatch);   //throw an exception
+    if(!std::filesystem::is_directory(_path_to_watch))
+        throw ConfigException("Path to watch is not a directory", configError::pathToWatch);
 
-    return path_to_watch;
+    return _path_to_watch;
 }
 
 /**
@@ -301,13 +390,13 @@ std::string& client::Config::getPathToWatch() {
  *
  * @author Michele Crepaldi s269551
  */
-std::string& client::Config::getDatabasePath() {
-    if(database_path.empty())
-        database_path = DATABASE_PATH;
+const std::string& client::Config::getDatabasePath() {
+    if(_database_path.empty())
+        _database_path = DATABASE_PATH;   //set to default
 
-    //the database path will be verified by the Database class
+    //database path will be verified by the Database class
 
-    return database_path;
+    return _database_path;
 }
 
 /**
@@ -317,13 +406,13 @@ std::string& client::Config::getDatabasePath() {
  *
  * @author Michele Crepaldi s269551
  */
-std::string& client::Config::getCAFilePath(){
-    if(ca_file_path.empty())
-        ca_file_path = CA_FILE_PATH;
+const std::string& client::Config::getCAFilePath(){
+    if(_ca_file_path.empty())
+        _ca_file_path = CA_FILE_PATH;   //set to default
 
     //the CA file path will be verified by the Socket class
 
-    return ca_file_path;
+    return _ca_file_path;
 }
 
 /**
@@ -333,11 +422,11 @@ std::string& client::Config::getCAFilePath(){
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getMillisFilesystemWatcher() {
-    if(millis_filesystem_watcher == 0)
-        millis_filesystem_watcher = MILLIS_FILESYSTEM_WATCHER;
+unsigned int client::Config::getMillisFilesystemWatcher() {
+    if(_millis_filesystem_watcher == 0)
+        _millis_filesystem_watcher = MILLIS_FILESYSTEM_WATCHER;   //set to default
 
-    return millis_filesystem_watcher;
+    return _millis_filesystem_watcher;
 }
 
 /**
@@ -347,11 +436,11 @@ int client::Config::getMillisFilesystemWatcher() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getEventQueueSize() {
-    if(event_queue_size == 0)
-        event_queue_size = EVENT_QUEUE_SIZE;
+unsigned int client::Config::getEventQueueSize() {
+    if(_event_queue_size == 0)
+        _event_queue_size = EVENT_QUEUE_SIZE;   //set to default
 
-    return event_queue_size;
+    return _event_queue_size;
 }
 
 /**
@@ -361,11 +450,11 @@ int client::Config::getEventQueueSize() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getSecondsBetweenReconnections() {
-    if(seconds_between_reconnections == 0)
-        seconds_between_reconnections = SECONDS_BETWEEN_RECONNECTIONS;
+unsigned int client::Config::getSecondsBetweenReconnections() {
+    if(_seconds_between_reconnections == 0)
+        _seconds_between_reconnections = SECONDS_BETWEEN_RECONNECTIONS;   //set to default
 
-    return seconds_between_reconnections;
+    return _seconds_between_reconnections;
 }
 
 /**
@@ -375,11 +464,11 @@ int client::Config::getSecondsBetweenReconnections() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getMaxConnectionRetries() {
-    if(max_connection_retries == 0)
-        max_connection_retries = MAX_CONNECTION_RETRIES;
+unsigned int client::Config::getMaxConnectionRetries() {
+    if(_max_connection_retries == 0)
+        _max_connection_retries = MAX_CONNECTION_RETRIES;   //set to default
 
-    return max_connection_retries;
+    return _max_connection_retries;
 }
 
 /**
@@ -389,11 +478,11 @@ int client::Config::getMaxConnectionRetries() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getMaxServerErrorRetries() {
-    if(max_server_error_retries == 0)
-        max_server_error_retries = MAX_SERVER_ERROR_RETRIES;
+unsigned int client::Config::getMaxServerErrorRetries() {
+    if(_max_server_error_retries == 0)
+        _max_server_error_retries = MAX_SERVER_ERROR_RETRIES;   //set to default
 
-    return max_server_error_retries;
+    return _max_server_error_retries;
 }
 
 /**
@@ -403,11 +492,11 @@ int client::Config::getMaxServerErrorRetries() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getTimeoutSeconds() {
-    if(timeout_seconds == 0)
-        timeout_seconds = TIMEOUT;
+unsigned int client::Config::getTimeoutSeconds() {
+    if(_timeout_seconds == 0)
+        _timeout_seconds = TIMEOUT;   //set to default
 
-    return timeout_seconds;
+    return _timeout_seconds;
 }
 
 /**
@@ -417,11 +506,11 @@ int client::Config::getTimeoutSeconds() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getSelectTimeoutSeconds() {
-    if(select_timeout_seconds == 0)
-        select_timeout_seconds = SELECT_TIMEOUT;
+unsigned int client::Config::getSelectTimeoutSeconds() {
+    if(_select_timeout_seconds == 0)
+        _select_timeout_seconds = SELECT_TIMEOUT;   //set to default
 
-    return select_timeout_seconds;
+    return _select_timeout_seconds;
 }
 
 /**
@@ -431,25 +520,25 @@ int client::Config::getSelectTimeoutSeconds() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getMaxResponseWaiting() {
-    if(max_response_waiting == 0)
-        max_response_waiting = MAX_RESPONSE_WAITING;
+unsigned int client::Config::getMaxResponseWaiting() {
+    if(_max_response_waiting == 0)
+        _max_response_waiting = MAX_RESPONSE_WAITING;   //set to default
 
-    return max_response_waiting;
+    return _max_response_waiting;
 }
 
 /**
  * temp file name size getter (if no value was provided in the config file use a default one)
  *
- * @return path to watch
+ * @return temp file name size
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getTmpFileNameSize() {
-    if(tmp_file_name_size == 0)
-        tmp_file_name_size = TEMP_FILE_NAME_SIZE;
+unsigned int client::Config::getTmpFileNameSize() {
+    if(_tmp_file_name_size == 0)
+        _tmp_file_name_size = TEMP_FILE_NAME_SIZE;   //set to default
 
-    return tmp_file_name_size;
+    return _tmp_file_name_size;
 }
 
 /**
@@ -459,9 +548,9 @@ int client::Config::getTmpFileNameSize() {
  *
  * @author Michele Crepaldi s269551
  */
-int client::Config::getMaxDataChunkSize() {
-    if(max_data_chunk_size == 0)
-        max_data_chunk_size = MAX_DATA_CHUNK_SIZE;
+unsigned int client::Config::getMaxDataChunkSize() {
+    if(_max_data_chunk_size == 0)
+        _max_data_chunk_size = MAX_DATA_CHUNK_SIZE;   //set to default
 
-    return max_data_chunk_size;
+    return _max_data_chunk_size;
 }

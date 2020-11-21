@@ -5,12 +5,14 @@
 #ifndef SERVER_PROTOCOLMANAGER_H
 #define SERVER_PROTOCOLMANAGER_H
 
+//TODO check
+
 
 #include "../myLibraries/Socket.h"
 #include "../myLibraries/Directory_entry.h"
 #include "messages.pb.h"
 #include "Database.h"
-#include "PWD_Database.h"
+#include "Database_pwd.h"
 #include "Config.h"
 
 #define CONFIG_FILE_PATH "../config.txt"
@@ -53,7 +55,7 @@ namespace server {
     class ProtocolManager {
         Socket &s;
         std::shared_ptr<Database> db;
-        std::shared_ptr<PWD_Database> password_db;
+        std::shared_ptr<Database_pwd> password_db;
         messages::ClientMessage clientMessage;
         messages::ServerMessage serverMessage;
         std::string username, mac, basePath, temporaryPath, address;

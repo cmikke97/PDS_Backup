@@ -1,18 +1,26 @@
 //
-// Created by michele on 27/07/2020.
+// Created by Michele Crepaldi s269551 on 27/07/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #include "Event.h"
 
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Event class methods
+ */
+
 /**
- * constructor of Event Object
+ * Event class constructor
  *
  * @param element directory entry associated to this event
- * @param status event modification
+ * @param type type of modification
  *
  * @author Michele Crepaldi s269551
  */
-Event::Event(Directory_entry& element, FileSystemStatus status) : element(element), status(status) {
+Event::Event(Directory_entry& element, FileSystemStatus type) : _element(element), _type(type) {
 }
 
 /**
@@ -22,17 +30,17 @@ Event::Event(Directory_entry& element, FileSystemStatus status) : element(elemen
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry & Event::getElement() {
-    return element;
+Directory_entry& Event::getElement() {
+    return _element;
 }
 
 /**
- * function to get the status from this event
+ * method used to get the type of modification from this event
  *
- * @return status of this event
+ * @return type of modification
  *
  * @author Michele Crepaldi s269551
  */
-FileSystemStatus Event::getStatus() {
-    return status;
+FileSystemStatus Event::getType() {
+    return _type;
 }

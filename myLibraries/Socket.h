@@ -5,6 +5,8 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
+//TODO check
+
 #include <iostream>
 #include <sys/socket.h>
 #include <cstring>
@@ -38,7 +40,7 @@
 class SocketBridge {
 public:
     //pure abstract methods
-    virtual void connect(const std::string& addr, int port) = 0;
+    virtual void connect(const std::string& addr, unsigned int port) = 0;
     [[nodiscard]] virtual std::string recvString() const = 0;
     virtual ssize_t sendString(std::string &stringBuffer) const = 0;
     [[nodiscard]] virtual int getSockfd() const = 0;
@@ -98,7 +100,7 @@ public:
     TCP_Socket();
     TCP_Socket(TCP_Socket &&other) noexcept;
     TCP_Socket& operator=(TCP_Socket &&other) noexcept;
-    void connect(const std::string& addr, int port) override;
+    void connect(const std::string& addr, unsigned int port) override;
     ssize_t read(char *buffer, size_t len, int options) const;
     [[nodiscard]] std::string recvString() const override;
     ssize_t write(const char *buffer, size_t len, int options) const;
@@ -124,7 +126,7 @@ public:
  */
 class TCP_ServerSocket: public ServerSocketBridge, public TCP_Socket{
 public:
-    explicit TCP_ServerSocket(int port, int n);
+    explicit TCP_ServerSocket(unsigned int port, unsigned int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
     ~TCP_ServerSocket() override;
 };
@@ -184,7 +186,7 @@ public:
     TLS_Socket();
     TLS_Socket(TLS_Socket &&other) noexcept;
     TLS_Socket& operator=(TLS_Socket &&other) noexcept;
-    void connect(const std::string& addr, int port) override;
+    void connect(const std::string& addr, unsigned int port) override;
     ssize_t read(char *buffer, size_t len) const;
     [[nodiscard]] std::string recvString() const override;
     ssize_t write(const char *buffer, size_t len) const;
@@ -211,7 +213,7 @@ public:
 class TLS_ServerSocket: public ServerSocketBridge, public TLS_Socket{
     std::unique_ptr<TCP_ServerSocket> serverSock;
 public:
-    explicit TLS_ServerSocket(int port, int n);
+    explicit TLS_ServerSocket(unsigned int port, unsigned int n);
     SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
     ~TLS_ServerSocket() override;
 };
@@ -265,7 +267,7 @@ public:
     Socket(Socket &&other) noexcept;    //define move constructor
     Socket& operator=(Socket &&other) noexcept; //define move assignment
 
-    void connect(const std::string& addr, int port);
+    void connect(const std::string& addr, unsigned int port);
     [[nodiscard]] std::string recvString() const;
     ssize_t sendString(std::string &stringBuffer) const;
     [[nodiscard]] int getSockfd() const;
@@ -299,7 +301,7 @@ class ServerSocket : public Socket {
 public:
     static void specifyCertificates(const std::string &cert, const std::string &prikey, const std::string &cacert);
 
-    explicit ServerSocket(int port, int n, socketType type);
+    explicit ServerSocket(unsigned int port, unsigned int n, socketType type);
 
     ServerSocket(const ServerSocket &other) = delete;   //delete copy constructor
     ServerSocket& operator=(const ServerSocket& source) = delete;   //delete copy assignment

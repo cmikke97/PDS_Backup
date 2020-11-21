@@ -11,12 +11,14 @@
 #include "../myLibraries/Socket.h"
 #include "../myLibraries/TSCircular_vector.h"
 #include "Thread_guard.h"
-#include "PWD_Database.h"
+#include "Database_pwd.h"
 #include "Database.h"
 #include "Config.h"
 #include "ProtocolManager.h"
-#include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Message.h"
 #include "../myLibraries/Validator.h"
+
+//TODO check
 
 #define VERSION 1
 
@@ -58,8 +60,8 @@ void displayHelp(const std::string &programName){
 }
 
 int main(int argc, char** argv) {
-    // Verify that the version of the library that we linked against is
-    // compatible with the version of the headers we compiled against.
+    //verify that the version of the library that we linked against is
+    //compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
     //--options management--
@@ -187,45 +189,47 @@ int main(int argc, char** argv) {
         std::string lastArgument = argv[optind-1];  //get last argument
 
         if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
-            TS_Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
+            Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
             return 1;
         }
     }
 
     //perform some checks on the options
     if((addU && updateU) || (addU && removeU) || (updateU && removeU)){ //only one of these should be true (they are mutually exclusive)
-        TS_Message::print(std::cerr, "ERROR", "Mutual exclusive options.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "Mutual exclusive options.", "Use -h (or --help) for help.");
         return 1;
     }
 
     if((addU && !passSet) || (updateU && !passSet)){    //if addU/updateU is active then I need the password
-        TS_Message::print(std::cerr, "ERROR", "Password option needed.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "Password option needed.", "Use -h (or --help) for help.");
         return 1;
     }
 
     if(macSet && !deleteSet){
-        TS_Message::print(std::cerr, "ERROR", "--mac option requires --delete option.", "Use -h (or --help) for help.");
+        Message::print(std::cerr, "ERROR", "--mac option requires --delete option.", "Use -h (or --help) for help.");
         return 1;
     }
 
     try{
         auto config = server::Config::getInstance(CONFIG_FILE_PATH);
-        auto pass_db = server::PWD_Database::getInstance(config->getPasswordDatabasePath());
-        auto db = server::Database::getInstance(config->getServerDatabasePath());
+        server::Database::setPath(config->getServerDatabasePath()); //set the database path
+        server::Database_pwd::setPath(config->getPasswordDatabasePath());   //set the password database path
+        auto pass_db = server::Database_pwd::getInstance();
+        auto db = server::Database::getInstance();
 
         if(addU){   //add user to the server
             pass_db->addUser(username, password);
-            TS_Message::print(std::cout, "SUCCESS", "User " + username + " added to server.");
+            Message::print(std::cout, "SUCCESS", "User " + username + " added to server.");
         }
 
         if(updateU){    //update user in the server
             pass_db->updateUser(username, password);
-            TS_Message::print(std::cout, "SUCCESS", "User " + username + " updated on server.");
+            Message::print(std::cout, "SUCCESS", "User " + username + " updated on server.");
         }
 
         if(removeU){    //remove user from the server
             pass_db->removeUser(username);
-            TS_Message::print(std::cout, "SUCCESS", "User " + username + " removed from server.");
+            Message::print(std::cout, "SUCCESS", "User " + username + " removed from server.");
 
             std::vector<std::string> macAddrs = db->getAllMacAddresses(username);    //get all the mac addresses associated to the user
 
@@ -238,11 +242,11 @@ int main(int argc, char** argv) {
                 std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
             }
 
-            TS_Message::print(std::cout, "SUCCESS", "All " + username + " backups deleted.");
+            Message::print(std::cout, "SUCCESS", "All " + username + " backups deleted.");
         }
 
         if(viewU){  //view all users registered in the server
-            TS_Message::print(std::cout, "INFO", "Registered Users:");
+            Message::print(std::cout, "INFO", "Registered Users:");
             std::function<void (const std::string &)> f = [](const std::string &username){
                 std::cout << "\t" << username << std::endl;
             };
@@ -258,7 +262,7 @@ int main(int argc, char** argv) {
                 tmp << config->getServerBasePath() << "/" << delUsername << "_" << std::regex_replace(delMac, std::regex(":"), "-");
                 std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
 
-                TS_Message::print(std::cout, "SUCCESS", "All elements in " + delUsername + "@" + delMac + " backup deleted.");
+                Message::print(std::cout, "SUCCESS", "All elements in " + delUsername + "@" + delMac + " backup deleted.");
             }
             else{   //else delete all backups elements for the specified user (ALL OF THEM!)
                 std::vector<std::string> macAddrs = db->getAllMacAddresses(delUsername);    //get all the mac addresses associated to the user
@@ -272,13 +276,13 @@ int main(int argc, char** argv) {
                     std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
                 }
 
-                TS_Message::print(std::cout, "SUCCESS", "All " + delUsername + " backups deleted.");
+                Message::print(std::cout, "SUCCESS", "All " + delUsername + " backups deleted.");
             }
         }
 
         if(startSet) { //start the server
-            TS_Message::print(std::cout, "SERVICE", "Starting service..");
-            TS_Message::print(std::cout, "INFO", "Server base path:", config->getServerBasePath());
+            Message::print(std::cout, "SERVICE", "Starting service..");
+            Message::print(std::cout, "INFO", "Server base path:", config->getServerBasePath());
             ServerSocket::specifyCertificates(config->getCertificatePath(), config->getPrivateKeyPath(), config->getCaFilePath());
             ServerSocket server{PORT, config->getListenQueue(), SOCKET_TYPE};   //initialize server socket with port
             TSCircular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
@@ -289,7 +293,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < config->getNThreads(); i++)  //create N_THREADS threads and start them
                 threads.emplace_back(single_server, std::ref(sockets), std::ref(server_thread_stop), std::ref(main_stop));
 
-            Thread_guard td{threads, server_thread_stop};
+            server::Thread_guard td{threads, server_thread_stop};
 
             struct sockaddr_in addr{};
             unsigned long addr_len = sizeof(addr);
@@ -315,61 +319,62 @@ int main(int argc, char** argv) {
             case socketError::create:
             case socketError::accept:
             default:
-                TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
+                Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
                 return 1;
         }
     }
-    catch (server::PWD_DatabaseException &e) {
+    catch (server::DatabaseException_pwd &e) {
         switch(e.getCode()){
-            case server::pwd_databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
-                TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", "User already exists.");
-            case server::pwd_databaseError::create: //could not create the table in the database -> (fatal) terminate server
-            case server::pwd_databaseError::open:   //could not open the database -> (fatal) terminate server
-            case server::pwd_databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
-            case server::pwd_databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
-            case server::pwd_databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
-            case server::pwd_databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
-            case server::pwd_databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
-            case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError_pwd::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+                Message::print(std::cerr, "ERROR", "PWD_Database Exception", "User already exists.");
+            case server::DatabaseError_pwd::path:   //no path was provided to the Database_pwd class
+            case server::DatabaseError_pwd::create: //could not create the table in the database -> (fatal) terminate server
+            case server::DatabaseError_pwd::open:   //could not open the database -> (fatal) terminate server
+            case server::DatabaseError_pwd::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+            case server::DatabaseError_pwd::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+            case server::DatabaseError_pwd::read:   //could not read from the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError_pwd::update: //could not update into the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError_pwd::remove: //could not remove from the database -> (fatal) terminate server (not used here)
             default:
                 //Fatal error -> close the server
-                TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
+                Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
 
                 return 1; //return -> the thread guard will stop and join all the server threads
         }
     }
     catch (server::DatabaseException &e) {
         switch(e.getCode()){
-            case server::databaseError::create: //could not create the table in the database -> (fatal) terminate server
-            case server::databaseError::open:   //could not open the database -> (fatal) terminate server
-            case server::databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
-            case server::databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
-            case server::databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
-            case server::databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
-            case server::databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
-            case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError::path:   //no path was provided to the Database class
+            case server::DatabaseError::create: //could not create the table in the database -> (fatal) terminate server
+            case server::DatabaseError::open:   //could not open the database -> (fatal) terminate server
+            case server::DatabaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+            case server::DatabaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+            case server::DatabaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
+            case server::DatabaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
             default:
                 //Fatal error -> close the server
-                TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
+                Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
                 return 1; //return -> the thread guard will stop and join all the server threads
         }
     }
     catch (server::ConfigException &e) {
         switch(e.getCode()){
-            case server::configError::justCreated:  //if the config file was not there and it has been created
-            case server::configError::serverBasePath:  //if the configured server base path was not specified or it does not exist (or it is not a directory) ask to modify it and return
-            case server::configError::tempPath: //if the configured server temporary path was not specified ask to modify it and return
-                TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+            case server::ConfigError::justCreated:  //if the config file was not there and it has been created
+            case server::ConfigError::serverBasePath:  //if the configured server base path was not specified or it does not exist (or it is not a directory) ask to modify it and return
+            case server::ConfigError::tempPath: //if the configured server temporary path was not specified ask to modify it and return
+                Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
-            case server::configError::open: //if there were some errors in opening the configuration file return
+            case server::ConfigError::open: //if there were some errors in opening the configuration file return
             default:
-                TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+                Message::print(std::cerr, "ERROR", "Config Exception", e.what());
                 return 1;
         }
     }
     catch (std::exception &e) {
-        TS_Message::print(std::cerr, "ERROR", "exception", e.what());
+        Message::print(std::cerr, "ERROR", "exception", e.what());
         return 1;
     }
 
@@ -385,7 +390,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         std::string address = pair.first;
         Socket sock = std::move(pair.second);
 
-        TS_Message::print(std::cout, "EVENT", address, "New Connection");   //print ip address and port of the newly connected client
+        Message::print(std::cout, "EVENT", address, "New Connection");   //print ip address and port of the newly connected client
 
         //for select
         fd_set read_fds;
@@ -416,7 +421,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 switch (activity) {
                     case -1:
                         //I should never get here
-                        TS_Message::print(std::cerr, "ERROR", "Select error");
+                        Message::print(std::cerr, "ERROR", "Select error");
 
                         loop = false;      //exit loop --> this will cause the current connection to be closed
                         break;
@@ -426,7 +431,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                         if (timeWaited >= config->getTimeoutSeconds()) {  //if the time already waited is greater than TIMEOUT
                             loop = false;      //then exit loop --> this will cause the current connection to be closed
-                            TS_Message::print(std::cout, "INFO", "Disconnecting client ", address);
+                            Message::print(std::cout, "INFO", "Disconnecting client ", address);
                         }
 
                         break;
@@ -452,9 +457,9 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 //in these 2 cases connection with the client is not valid and needs to be closed
                 case server::protocolManagerError::auth:    //the current user failed authentication
                 case server::protocolManagerError::version: //the current client uses a different version
-                    TS_Message::print(std::cerr, "WARNING", "ProtocolManager Exception", e.what());
+                    Message::print(std::cerr, "WARNING", "ProtocolManager Exception", e.what());
                     sock.closeConnection(); //close the connection with the client
-                    TS_Message::print(std::cout, "INFO", "Closing connection with client", "I will proceed with next connections");
+                    Message::print(std::cout, "INFO", "Closing connection with client", "I will proceed with next connections");
                     continue;   //the error is in the current socket, continue with the next one
 
                 //in these 2 cases (and default) the errors are so important that they require the closing of the whole program
@@ -462,7 +467,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
                 default:
                     //Fatal error -> close the server
-                    TS_Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
+                    Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -481,7 +486,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case socketError::read: //error in reading from socket
                 case socketError::write:    //error in writing to socket
                 case socketError::closed:    //socket was closed by client
-                    TS_Message::print(std::cout, "EVENT", address, "disconnected.");
+                    Message::print(std::cout, "EVENT", address, "disconnected.");
                     continue; //error in the current socket, continue with the next one
 
                 //added for completeness, will never be triggered in the server threads
@@ -492,7 +497,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                 case socketError::getMac:   //error in getting the machine MAC address -> Fatal error
                 default:
                     //Fatal error -> close the server
-                    TS_Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
+                    Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
@@ -504,23 +509,22 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
                     return; //then return
             }
         }
-        catch (server::PWD_DatabaseException &e) {
+        catch (server::DatabaseException_pwd &e) {
             switch(e.getCode()){
                 //these errors were added for completeness but will never be triggered in the server threads
-                case server::pwd_databaseError::create: //could not create the table in the database -> (fatal) terminate server
-                case server::pwd_databaseError::open:   //could not open the database -> (fatal) terminate server
-                case server::pwd_databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
-                case server::pwd_databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
-                case server::pwd_databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
-                case server::pwd_databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
-                case server::pwd_databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
-                case server::pwd_databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError_pwd::create: //could not create the table in the database -> (fatal) terminate server
+                case server::DatabaseError_pwd::open:   //could not open the database -> (fatal) terminate server
+                case server::DatabaseError_pwd::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+                case server::DatabaseError_pwd::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+                case server::DatabaseError_pwd::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError_pwd::update: //could not update into the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError_pwd::remove: //could not remove from the database -> (fatal) terminate server (not used here)
 
                 //this is the only PWT_Database error that could happen in the server threads
-                case server::pwd_databaseError::hash:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError_pwd::read:   //could not get hash,salt pair from the database -> (fatal) terminate server (not used here)
                 default:
                     //Fatal error -> close the server
-                    TS_Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
+                    Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -536,17 +540,17 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         }
         catch (server::DatabaseException &e) {
             switch(e.getCode()){
-                case server::databaseError::create: //could not create the table in the database -> (fatal) terminate server
-                case server::databaseError::open:   //could not open the database -> (fatal) terminate server
-                case server::databaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
-                case server::databaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
-                case server::databaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
-                case server::databaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
-                case server::databaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
-                case server::databaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError::create: //could not create the table in the database -> (fatal) terminate server
+                case server::DatabaseError::open:   //could not open the database -> (fatal) terminate server
+                case server::DatabaseError::prepare:    //could not prepare a SQL statement -> (fatal) terminate server
+                case server::DatabaseError::finalize:   //could not finalize SQL statement -> (fatal) terminate server
+                case server::DatabaseError::insert: //could not insert into the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError::read:   //could not read from the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError::update: //could not update into the database -> (fatal) terminate server (not used here)
+                case server::DatabaseError::remove: //could not remove from the database -> (fatal) terminate server (not used here)
                 default:
                     //Fatal error -> close the server
-                    TS_Message::print(std::cerr, "ERROR", "Database Exception", e.what());
+                    Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -562,14 +566,14 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         }
         catch (server::ConfigException &e) {
             switch(e.getCode()){
-                case server::configError::justCreated:  //if the config file was not there and it has been created
-                case server::configError::serverBasePath:  //if the configured server base path was not specified or it does not exist (or it is not a directory) ask to modify it and return
-                case server::configError::tempPath: //if the configured server temporary path was not specified ask to modify it and return
-                    TS_Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
+                case server::ConfigError::justCreated:  //if the config file was not there and it has been created
+                case server::ConfigError::serverBasePath:  //if the configured server base path was not specified or it does not exist (or it is not a directory) ask to modify it and return
+                case server::ConfigError::tempPath: //if the configured server temporary path was not specified ask to modify it and return
+                    Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
-                case server::configError::open: //if there were some errors in opening the configuration file return
+                case server::ConfigError::open: //if there were some errors in opening the configuration file return
                 default:
-                    TS_Message::print(std::cerr, "ERROR", "Config Exception", e.what());
+                    Message::print(std::cerr, "ERROR", "Config Exception", e.what());
 
                     sock.closeConnection(); //close the connection with the client
 
@@ -585,7 +589,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         }
         catch (std::exception &e) {
             //Fatal error -> close the server
-            TS_Message::print(std::cerr, "ERROR", "exception", e.what());
+            Message::print(std::cerr, "ERROR", "exception", e.what());
 
             sock.closeConnection(); //close the connection with the client
 

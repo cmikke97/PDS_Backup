@@ -4,7 +4,10 @@
 
 #include <fstream>
 #include "ProtocolManager.h"
-#include "../myLibraries/TS_Message.h"
+#include "../myLibraries/Message.h"
+#include "../myLibraries/RandomNumberGenerator.h"
+
+//TODO check
 
 #define TEMP_RELATIVE_PATH "/temp"
 
@@ -20,10 +23,10 @@
  *
  * @author Michele Crepaldi s269551
  */
-client::ProtocolManager::ProtocolManager(Socket &s, int max, int ver, int maxTries, std::string  path) : s(s), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver), path_to_watch(std::move(path)) {
+client::ProtocolManager::ProtocolManager(Socket &s, unsigned int max, unsigned int ver, unsigned int maxTries, std::string  path) : s(s), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver), path_to_watch(std::move(path)) {
     auto config = Config::getInstance(CONFIG_FILE_PATH);
     waitingForResponse.resize(size+1);
-    db = Database::getInstance(config->getDatabasePath());
+    db = Database::getInstance();
     max_data_chunk_size = config->getMaxDataChunkSize();
     tempNameSize = config->getTmpFileNameSize();
 
@@ -62,7 +65,7 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             code = serverMessage.code();
             switch(static_cast<client::okCode>(code)) {
                 case okCode::authenticated: //user authentication successful
-                    TS_Message::print(std::cout, "AUTH", "Authenticated");
+                    Message::print(std::cout, "AUTH", "Authenticated");
                     return;
                 case okCode::found: //probe file found the file
                 case okCode::created:   //file/directory create was successful
@@ -93,13 +96,13 @@ void client::ProtocolManager::authenticate(const std::string& username, const st
             }
         case messages::ServerMessage_Type_VER:
             //server response contains the version to use
-            TS_Message::print(std::cout, "VER", "Change version to", std::to_string(serverMessage.newversion()));
+            Message::print(std::cout, "VER", "Change version to", std::to_string(serverMessage.newversion()));
             //for future use (not implemented now, to implement when a new version is written)
             //for now terminate the program
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
 
         default: //i should never arrive here
-            TS_Message::print(std::cerr, "ERROR", "Unsupported message type");
+            Message::print(std::cerr, "ERROR", "Unsupported message type");
             throw ProtocolManagerException("Unsupported message type error", protocolManagerError::unsupported);
     }
 
@@ -132,23 +135,23 @@ bool client::ProtocolManager::isWaiting() const{
 /**
  * function used to send a message relative to an event to the server
  *
- * @param e event to create the message from
+ * @param event event to create the message from
  *
  * @throw SocketException in case it cannot write data to socket
  *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::send(Event &e) {
-    if (!e.getElement().is_regular_file() && !e.getElement().is_directory()) {  //if it is not a file nor a directory then return
-        TS_Message::print(std::cerr, "WARNING", "Change to an unsupported type", e.getElement().getRelativePath());
+void client::ProtocolManager::send(Event &event) {
+    if (!event.getElement().is_regular_file() && !event.getElement().is_directory()) {  //if it is not a file nor a directory then return
+        Message::print(std::cerr, "WARNING", "Change to an unsupported type", event.getElement().getRelativePath());
         return;
     }
 
     //compose the message based on event
-    composeMessage(e);
+    composeMessage(event);
 
     //save a copy of the event in a local list (to then wait for its response)
-    waitingForResponse[end] = e;
+    waitingForResponse[end] = event;
     end = (end+1)%size;
 }
 
@@ -170,7 +173,7 @@ void client::ProtocolManager::receive() {
     serverMessage.ParseFromString(server_temp);
 
     //get the first event on the waiting list -> this is the message we received a response for
-    Event e = waitingForResponse[start];
+    Event event = waitingForResponse[start];
 
     //check version
     if(protocolVersion != serverMessage.version())
@@ -180,7 +183,7 @@ void client::ProtocolManager::receive() {
     switch (serverMessage.type()) {
         case messages::ServerMessage_Type_SEND:
             //only if the element is a file then it is right to send it
-            if(e.getElement().is_regular_file() && (e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified)){
+            if(event.getElement().is_regular_file() && (event.getType() == FileSystemStatus::created || event.getType() == FileSystemStatus::modified)){
                 //send file
 
                 /* TODO evaluate if to add this
@@ -201,10 +204,10 @@ void client::ProtocolManager::receive() {
                 //distinguish between file creation and modification in the waiting queue (in order to know what to do later)
                 //TODO reconsider this
                 Event tmp;
-                if(e.getStatus() == FileSystemStatus::created)
-                    tmp = Event(e.getElement(), FileSystemStatus::storeSent); //file created
+                if(event.getType() == FileSystemStatus::created)
+                    tmp = Event(event.getElement(), FileSystemStatus::storeSent); //file created
                 else
-                    tmp = Event(e.getElement(), FileSystemStatus::modifySent); //file modified
+                    tmp = Event(event.getElement(), FileSystemStatus::modifySent); //file modified
 
                 //compose the message based on send event
                 composeMessage(tmp);
@@ -213,12 +216,12 @@ void client::ProtocolManager::receive() {
                 waitingForResponse[end] = std::move(tmp);
                 end = (end+1)%size;
 
-                sendFile(e.getElement());
+                sendFile(event.getElement());
                 break;
             }
             //if I am here then I got a send message but the element is not a file so this is a protocol error (I should never get here)
             //TODO throw exception
-            TS_Message::print(std::cerr, "ERROR", "protocol error");
+            Message::print(std::cerr, "ERROR", "protocol error");
             break;
         case messages::ServerMessage_Type_OK:
             //if(start != end) this condition is true if I receive something
@@ -231,16 +234,16 @@ void client::ProtocolManager::receive() {
 
             switch(static_cast<client::okCode>(code)) {
                 case okCode::found:     //probe file found the file
-                    TS_Message::print(std::cout, "SUCCESS", "PROB", e.getElement().getRelativePath());
+                    Message::print(std::cout, "SUCCESS", "PROB", event.getElement().getRelativePath());
                     break;
 
                 case okCode::created:   //file/directory create was successful
-                    TS_Message::print(std::cout, "SUCCESS", "STOR/MKD", e.getElement().getRelativePath());
+                    Message::print(std::cout, "SUCCESS", "STOR/MKD", event.getElement().getRelativePath());
                     break;
 
                 case okCode::notThere:  //file/directory remove did not find the file/directory (the end effect is the same as a successful remove)
                 case okCode::removed:   //file/directory remove was successful
-                    TS_Message::print(std::cout, "SUCCESS", "DELE/RMD", e.getElement().getRelativePath());
+                    Message::print(std::cout, "SUCCESS", "DELE/RMD", event.getElement().getRelativePath());
                     break;
 
                 case okCode::authenticated: //user authentication successful
@@ -249,17 +252,17 @@ void client::ProtocolManager::receive() {
 
             }
 
-            if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::modified ||
-                e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
+            if(event.getType() == FileSystemStatus::created || event.getType() == FileSystemStatus::modified ||
+               event.getType() == FileSystemStatus::storeSent || event.getType() == FileSystemStatus::modifySent){
 
                 //insert or update element in db
-                if(e.getStatus() == FileSystemStatus::created || e.getStatus() == FileSystemStatus::storeSent)
-                    db->insert(e.getElement()); //insert element into db
+                if(event.getType() == FileSystemStatus::created || event.getType() == FileSystemStatus::storeSent)
+                    db->insert(event.getElement()); //insert element into db
                 else
-                    db->update(e.getElement()); //update element in db
+                    db->update(event.getElement()); //update element in db
             }
-            else if(e.getStatus() == FileSystemStatus::deleted)
-                db->remove(e.getElement().getRelativePath()); //delete element from db
+            else if(event.getType() == FileSystemStatus::deleted)
+                db->remove(event.getElement().getRelativePath()); //delete element from db
 
             break;
 
@@ -279,7 +282,7 @@ void client::ProtocolManager::receive() {
                     if(tries > maxTries)
                         throw ProtocolManagerException("Error from sent message", protocolManagerError::client);
 
-                    TS_Message::print(std::cerr, "WARNING", "Message error", "Will now retry");
+                    Message::print(std::cerr, "WARNING", "Message error", "Will now retry");
 
                     //otherwise try to recover from the error
                     recoverFromError();
@@ -298,7 +301,7 @@ void client::ProtocolManager::receive() {
             throw ProtocolManagerException("Version not supported", protocolManagerError::version);
         default:
             //unrecognised message type
-            TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
+            Message::print(std::cerr, "ERROR", "Unsupported message type", "");
             throw ProtocolManagerException("Unsupported message type error", client::protocolManagerError::unsupported);
     }
 
@@ -327,21 +330,21 @@ bool client::ProtocolManager::canSend() const {
  */
 void client::ProtocolManager::recoverFromError() {
     for(int i = start; i != end; i = (i+1)%size){
-        Event e = waitingForResponse[i];    //get the element from the queue
+        Event event = waitingForResponse[i];    //get the element from the queue
 
-        if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
+        if(event.getType() == FileSystemStatus::storeSent || event.getType() == FileSystemStatus::modifySent){
             //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of
             //the file present in the filesystem then it means that the file was deleted or modified --> I can't send it anymore
-            std::string ap = e.getElement().getAbsolutePath();
-            if(!std::filesystem::directory_entry(ap).exists() || Directory_entry(path_to_watch, ap).getHash() != e.getElement().getHash())
+            std::string ap = event.getElement().getAbsolutePath();
+            if(!std::filesystem::directory_entry(ap).exists() || Directory_entry(path_to_watch, ap).getHash() != event.getElement().getHash())
                 break;
         }
 
         //compose message based on event
-        composeMessage(e);
+        composeMessage(event);
 
-        if(e.getStatus() == FileSystemStatus::storeSent || e.getStatus() == FileSystemStatus::modifySent){
-            sendFile(e.getElement()); //send the actual file
+        if(event.getType() == FileSystemStatus::storeSent || event.getType() == FileSystemStatus::modifySent){
+            sendFile(event.getElement()); //send the actual file
         }
     }
 }
@@ -370,7 +373,7 @@ void client::ProtocolManager::sendFile(Directory_entry &element) {
 
     if(file.is_open()){
         int64_t totRead = 0;
-        TS_Message message{"SENDING", "Sending file:", element.getRelativePath()};
+        Message message{"SENDING", "Sending file:", element.getRelativePath()};
         std::cout << message;
 
         while(file.read(buff, max_data_chunk_size)) { //read file in max_data_chunk_size-wide blocks
@@ -406,7 +409,7 @@ void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool 
     send_RETR(macAddress, all);
 
     std::string tempDir = destFolder  + TEMP_RELATIVE_PATH;
-    int tempFileNameSize = tempNameSize;
+    unsigned int tempFileNameSize = tempNameSize;
 
     while(true) {
         //get server response
@@ -426,7 +429,7 @@ void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool 
                 makeDir(destFolder);
                 break;
             case messages::ServerMessage_Type_STOR: //store a file from server
-                storeFile(destFolder, tempDir, tempFileNameSize);
+                storeFile(destFolder, tempDir);
                 break;
             case messages::ServerMessage_Type_SEND:
             case messages::ServerMessage_Type_OK:   //end of the server messages -> return
@@ -436,7 +439,7 @@ void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool 
 
                 switch(static_cast<client::okCode>(code)) {
                     case okCode::retrieved:
-                        TS_Message::print(std::cout, "SUCCESS", "RETR", "Saved all your data to " + destFolder);
+                        Message::print(std::cout, "SUCCESS", "RETR", "Saved all your data to " + destFolder);
                         return;
 
                     case okCode::found:     //probe file found the file
@@ -474,7 +477,7 @@ void client::ProtocolManager::retrieveFiles(const std::string &macAddress, bool 
                 throw ProtocolManagerException("Version not supported", protocolManagerError::version);
             default:
                 //unrecognised message type
-                TS_Message::print(std::cerr, "ERROR", "Unsupported message type", "");
+                Message::print(std::cerr, "ERROR", "Unsupported message type", "");
                 throw ProtocolManagerException("Unsupported message type error",
                                                client::protocolManagerError::unsupported);
         }
@@ -685,49 +688,49 @@ void client::ProtocolManager::send_RETR(const std::string &macAddress, bool all)
 void client::ProtocolManager::composeMessage(Event &e) {
     //evaluate what to do
     if (e.getElement().is_regular_file()) {   //if the element is a file
-        switch (e.getStatus()) {
+        switch (e.getType()) {
             case FileSystemStatus::modified: //file modified
             case FileSystemStatus::created: //file created
-                TS_Message::print(std::cout, "EVENT", "File created/modified", e.getElement().getRelativePath());
+                Message::print(std::cout, "EVENT", "File created/modified", e.getElement().getRelativePath());
 
                 send_PROB(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //file deleted
-                TS_Message::print(std::cout, "EVENT", "File deleted", e.getElement().getRelativePath());
+                Message::print(std::cout, "EVENT", "File deleted", e.getElement().getRelativePath());
 
                 send_DELE(e.getElement());
                 break;
 
             case FileSystemStatus::modifySent: //modify message sent
             case FileSystemStatus::storeSent: //store message sent
-                //TS_Message::print(std::cout, "SENDING", "Sending file", e.getElement().getRelativePath());
+                //Message::print(std::cout, "SENDING", "Sending file", e.getElement().getRelativePath());
 
                 send_STOR(e.getElement());
                 break;
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                TS_Message::print(std::cerr, "ERROR", "Unknown file status.");
+                Message::print(std::cerr, "ERROR", "Unknown file status.");
         }
     } else { //if the element is a directory
-        switch (e.getStatus()) {
+        switch (e.getType()) {
             case FileSystemStatus::modified: //directory modified
             case FileSystemStatus::created: //directory created
-                TS_Message::print(std::cout, "EVENT", "Directory created/modified", e.getElement().getRelativePath());
+                Message::print(std::cout, "EVENT", "Directory created/modified", e.getElement().getRelativePath());
 
                 send_MKD(e.getElement());
                 break;
 
             case FileSystemStatus::deleted: //directory deleted
-                TS_Message::print(std::cout, "EVENT", "Directory deleted", e.getElement().getRelativePath());
+                Message::print(std::cout, "EVENT", "Directory deleted", e.getElement().getRelativePath());
 
                 send_RMD(e.getElement());
                 break;
 
             default:    //I should never arrive here
                 //TODO probably throw error
-                TS_Message::print(std::cerr, "ERROR", "Unknown file status.");
+                Message::print(std::cerr, "ERROR", "Unknown file status.");
         }
     }
 }
@@ -748,13 +751,13 @@ void client::ProtocolManager::composeMessage(Event &e) {
  *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::storeFile(const std::string &destFolder, const std::string &temporaryPath, int tempNameSize){
+void client::ProtocolManager::storeFile(const std::string &destFolder, const std::string &temporaryPath){
     //create expected Directory entry element from the client message
     Directory_entry expected{destFolder, serverMessage.path(), serverMessage.filesize(), "file",
                              serverMessage.lastwritetime(), Hash{serverMessage.hash()}};
     serverMessage.Clear();  //clear the client message
 
-    TS_Message::print(std::cout, "STOR", expected.getRelativePath(), "in " + destFolder);
+    Message::print(std::cout, "STOR", expected.getRelativePath(), "in " + destFolder);
 
     //create a random temporary name for the file
     RandomNumberGenerator rng;
@@ -772,7 +775,7 @@ void client::ProtocolManager::storeFile(const std::string &destFolder, const std
         try {
             bool loop;
             int64_t totRead = 0;
-            TS_Message msg{"RECV", "Receiving file:", expected.getRelativePath()};
+            Message msg{"RECV", "Receiving file:", expected.getRelativePath()};
             std::cout << msg;
 
             do {
@@ -889,7 +892,7 @@ void client::ProtocolManager::makeDir(const std::string &destFolder){
     const std::string lastWriteTime = serverMessage.lastwritetime();
     serverMessage.Clear();
 
-    TS_Message::print(std::cout, "MKD", path, "in " + destFolder);
+    Message::print(std::cout, "MKD", path, "in " + destFolder);
 
     //get the parent path (to then get its lastWriteTime in order to keep it the same after the dir create
     auto parentPath = std::filesystem::path(destFolder + path).parent_path();

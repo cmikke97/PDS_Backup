@@ -5,6 +5,8 @@
 #ifndef TSCIRCULAR_VECTOR_H
 #define TSCIRCULAR_VECTOR_H
 
+//TODO check
+
 #include <vector>
 #include <mutex>
 #include <condition_variable>
@@ -33,7 +35,7 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    explicit TSCircular_vector(int size): start(0), end(0), size(size + 1){
+    explicit TSCircular_vector(unsigned int size): start(0), end(0), size(size + 1){
         v.resize(size+1);
     }
 

@@ -1,111 +1,133 @@
 //
-// Created by michele on 29/09/2020.
+// Created by Michele Crepaldi s269551 on 29/09/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
 #ifndef SERVER_CONFIG_H
 #define SERVER_CONFIG_H
 
 #include <string>
-#include <fstream>
 #include <mutex>
+#include <memory>
 
-/*
- * +-------------------------------------------------------------------------------------------------------------------+
- * Config class
+
+/**
+ * PDS_Backup server namespace
+ *
+ * @author Michele Crepaldi s269551
  */
-
 namespace server {
     /**
-     * Config class; used to retrive the configuration for the execution of the program from file (singleton)
+     * ConfigError class: it describes (enumerically) all the possible Config errors
+     *
+     * @author Michele Crepaldi s269551
+     */
+    enum class ConfigError {
+        //the config file could not be opened
+        open,
+
+        //the file did not exist and a new one was just created (some variables are host dependant,
+        //for these variables there are no default values; the user has to modify the file and restart the program)
+        justCreated,
+
+        //no value was provided for this variable (there are no defaults for this variable) OR the value provided
+        //references a non existing directory or something which is not a directory
+        serverBasePath,
+
+        //no value was provided for this variable (there are no defaults for this variable)
+        tempPath
+    };
+
+    /*
+     * +---------------------------------------------------------------------------------------------------------------+
+     * Config class
+     */
+
+    /**
+     * Config class. Used to retrieve the configuration for the execution of the program from file (singleton)
      *
      * @author Michele Crepaldi s269551
      */
     class Config {
-        std::string password_database_path;
-        std::string server_database_path;
-        std::string server_base_path;
-        std::string temp_path;
-        std::string certificate_path;
-        std::string private_key_path;
-        std::string ca_file_path;
-        int listen_queue{};
-        int n_threads{};
-        int socket_queue_size{};
-        int select_timeout_seconds{};
-        int timeout_seconds{};
-        int tmp_file_name_size{};
-        int max_data_chunk_size{};
-
-        void load(const std::string &configFilePath);
-
-    protected:
-        explicit Config(std::string path);
-
-        //to sincronize threads during the first creation of the Singleton object
-        static std::mutex mutex_;
-        //singleton instance
-        static std::shared_ptr<Config> config_;
-        std::string path_;
-
     public:
-        Config(Config *other) = delete;
+        Config(const Config &) = delete;    //copy constructor deleted
+        Config& operator=(const Config &) = delete; //assignment deleted
+        Config(Config &&) = delete; //move constructor deleted
+        Config& operator=(Config &&) = delete;  //move assignment deleted
+        ~Config() = default;
 
-        void operator=(const Config &) = delete;
-
+        //singleton instance getter
         static std::shared_ptr<Config> getInstance(const std::string &path);
 
-        const std::string &getPasswordDatabasePath();
+        //getters
 
-        const std::string &getServerDatabasePath();
+        const std::string& getPasswordDatabasePath();
+        const std::string& getServerDatabasePath();
+        const std::string& getServerBasePath();
+        const std::string& getTempPath();
+        const std::string& getCertificatePath();
+        const std::string& getPrivateKeyPath();
+        const std::string& getCaFilePath();
+        unsigned int getListenQueue();
+        unsigned int getNThreads();
+        unsigned int getSocketQueueSize();
+        unsigned int getSelectTimeoutSeconds();
+        unsigned int getTimeoutSeconds();
+        unsigned int getTmpFileNameSize();
+        unsigned int getMaxDataChunkSize();
 
-        const std::string &getServerBasePath();
+    protected:
+        //protected constructor
+        explicit Config(std::string path);
 
-        const std::string &getTempPath();
+        //mutex to synchronize threads during the first creation of the Singleton object
+        static std::mutex mutex_;
 
-        const std::string &getCertificatePath();
+        //singleton instance
+        static std::shared_ptr<Config> config_;
 
-        const std::string &getPrivateKeyPath();
+        //path of the config file
+        std::string path_;
 
-        const std::string &getCaFilePath();
+    private:
+        //host dependant variables
 
-        int getListenQueue();
+        std::string _server_base_path;
+        std::string _temp_path;
 
-        int getNThreads();
+        //default-able variables
 
-        int getSocketQueueSize();
+        std::string _password_database_path;
+        std::string _server_database_path;
+        std::string _certificate_path;
+        std::string _private_key_path;
+        std::string _ca_file_path;
+        unsigned int _listen_queue{};
+        unsigned int _n_threads{};
+        unsigned int _socket_queue_size{};
+        unsigned int _select_timeout_seconds{};
+        unsigned int _timeout_seconds{};
+        unsigned int _tmp_file_name_size{};
+        unsigned int _max_data_chunk_size{};
 
-        int getSelectTimeoutSeconds();
-
-        int getTimeoutSeconds();
-
-        int getTmpFileNameSize();
-
-        int getMaxDataChunkSize();
+        //config file load function
+        void _load();
     };
 
     /*
-     * +-------------------------------------------------------------------------------------------------------------------+
+     * +---------------------------------------------------------------------------------------------------------------+
      * ConfigException class
      */
 
     /**
-     * configError class: it describes (enumerically) all the possible config errors
-     *
-     * @author Michele Crepaldi s269551
-     */
-    enum class configError {
-        open, serverBasePath, tempPath, justCreated
-    };
-
-    /**
-     * exceptions for the config class
+     * ConfigException exception class that may be returned by the Config class
+     * (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */
     class ConfigException : public std::runtime_error {
-        configError code;
     public:
-
         /**
          * config exception constructor
          *
@@ -113,12 +135,12 @@ namespace server {
          *
          * @author Michele Crepaldi s269551
          */
-        explicit ConfigException(const std::string &msg, configError code) :
-                std::runtime_error(msg), code(code) {
+        explicit ConfigException(const std::string &msg, ConfigError code) :
+                std::runtime_error(msg), _code(code) {
         }
 
         /**
-         * config exception destructor.
+         * config exception destructor
          *
          * @author Michele Crepaldi s269551
          */
@@ -127,13 +149,16 @@ namespace server {
         /**
         * function to retrieve the error code from the exception
         *
-        * @return error code
+        * @returns config error code
         *
         * @author Michele Crepaldi s269551
         */
-        configError getCode() const noexcept {
-            return code;
+        ConfigError getCode() const noexcept {
+            return _code;
         }
+
+    private:
+        ConfigError _code;   //code describing the error
     };
 }
 

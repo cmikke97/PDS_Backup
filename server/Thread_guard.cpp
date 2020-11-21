@@ -1,35 +1,45 @@
 //
-// Created by michele on 27/07/2020.
+// Created by Michele Crepaldi s269551 on 27/07/2020
+// Finished on 20/11/2020
+// Last checked on 20/11/2020
 //
 
-#include <google/protobuf/stubs/common.h>
 #include "Thread_guard.h"
 
+#include <google/protobuf/stubs/common.h>
+
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Thread_guard class methods
+ */
+
 /**
- * thread guard constructor
+ * Thread_guard class constructor
  *
- * @param t_ thread to join on
- * @param stop_ atomic boolean used to signal the end of program
+ * @param t vector of all threads to join on
+ * @param stop atomic boolean used to signal to the threads to stop
  *
  * @author Michele Crepaldi s269551
  */
-Thread_guard::Thread_guard(std::vector<std::thread> &t_, std::atomic<bool> &stop_) : t(t_), stop(stop_) {
+server::Thread_guard::Thread_guard(std::vector<std::thread> &t, std::atomic<bool> &stop) : _tVector(t), _stop(stop) {
 }
 
 /**
- * thread guard destructor; it signals the thread to stop and waits it (it also shuts down the protobuf library)
+ * Thread_guard class destructor; it signals the threads to stop and waits for them
+ * (it also shuts down the protobuf library)
  *
  * @author Michele Crepaldi s269551
  */
-Thread_guard::~Thread_guard() {
-    //tell the connection thread to stop
-    stop.store(true);
+server::Thread_guard::~Thread_guard() {
+    //tell the single server threads to stop
+    _stop.store(true);
 
     //then join on all threads
-    for(int i=0; i<t.size(); i++)
-        if(t[i].joinable())
-            t[i].join();
+    for(auto &t : _tVector)
+        if(t.joinable())
+            t.join();
 
-    // Optional:  Delete all global objects allocated by libprotobuf.
+    //delete all global objects allocated by libprotobuf
     google::protobuf::ShutdownProtobufLibrary();
 }
