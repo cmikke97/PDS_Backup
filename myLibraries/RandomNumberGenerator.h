@@ -1,7 +1,7 @@
 //
 // Created by Michele Crepaldi s269551 on 01/11/2020
-// Finished on 20/11/2020
-// Last checked on 20/11/2020
+// Finished on 21/11/2020
+// Last checked on 21/11/2020
 //
 
 #ifndef RANDOMNUMBERGENERATOR_H

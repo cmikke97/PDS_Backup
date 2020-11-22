@@ -10,7 +10,7 @@
 #include <regex>
 #include "FileSystemWatcher.h"
 #include "Event.h"
-#include "../myLibraries/TSCircular_vector.h"
+#include "../myLibraries/Circular_vector.h"
 #include "Thread_guard.h"
 #include "../myLibraries/Socket.h"
 #include "messages.pb.h"
@@ -22,9 +22,9 @@
 
 #define VERSION 1
 
-#define SOCKET_TYPE socketType::TLS
+#define SOCKET_TYPE SocketType::TLS
 
-void communicate(std::atomic<bool> &, std::atomic<bool> &, TSCircular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
+void communicate(std::atomic<bool> &, std::atomic<bool> &, Circular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
 void displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
@@ -237,7 +237,8 @@ int main(int argc, char **argv) {
 
     try {
         //get the configuration
-        auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
+        client::Config::setPath(CONFIG_FILE_PATH);
+        auto config = client::Config::getInstance();
         //get the database instance and open the database (and if not previously there create also the needed table)
         client::Database::setPath(config->getDatabasePath());
         auto db = client::Database::getInstance();
@@ -286,7 +287,7 @@ int main(int argc, char **argv) {
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
 
         // create a circular vector instance that will contain all the events happened
-        TSCircular_vector<Event> eventQueue(config->getEventQueueSize());
+        Circular_vector<Event> eventQueue(config->getEventQueueSize());
 
         //initialize some atomic boolean to make the different threads stop
         std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
@@ -339,11 +340,11 @@ int main(int argc, char **argv) {
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
-            case client::configError::justCreated:  //if the config file was not there and it has been created
-            case client::configError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
+            case client::ConfigError::justCreated:  //if the config file was not there and it has been created
+            case client::ConfigError::pathToWatch:  //if the configured path to watch does not exist ask to modify it and return
                 Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
-            case client::configError::open: //if there were some errors in opening the configuration file return
+            case client::ConfigError::open: //if there were some errors in opening the configuration file return
             default:
                 Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }
@@ -367,13 +368,14 @@ int main(int argc, char **argv) {
  *
  * @author Michele Crepaldi
  */
-void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, TSCircular_vector<Event> &eventQueue, const std::string &server_ip,
+void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, Circular_vector<Event> &eventQueue, const std::string &server_ip,
                  int server_port, const std::string &username, const std::string &password) {
 
     try {
 
         //get the configuration
-        auto config = client::Config::getInstance(std::string(CONFIG_FILE_PATH));
+        client::Config::setPath(CONFIG_FILE_PATH);
+        auto config = client::Config::getInstance();
 
         Socket::specifyCertificates(config->getCAFilePath());
 
@@ -505,11 +507,11 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (SocketException &e) {
                 switch (e.getCode()) {
-                    case socketError::closed:    //socket was closed by server
+                    case SocketError::closed:    //socket was closed by server
                     //case socketError::create:   //error in socket create
-                    case socketError::read:     //error in socket read
-                    case socketError::write:    //error in socket write
-                    case socketError::connect:  //error in socket connect
+                    case SocketError::read:     //error in socket read
+                    case SocketError::write:    //error in socket write
+                    case SocketError::connect:  //error in socket connect
 
                         if(tries == 0)
                             Message::print(std::cout, "INFO", "Connection was closed by the server", "will reconnect if needed");
@@ -531,7 +533,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         //maximum number of re-tries exceeded -> terminate program
                         Message::print(std::cerr, "ERROR", "Cannot establish connection");
 
-                    case socketError::getMac: //error retrieving the MAC
+                    case SocketError::getMac: //error retrieving the MAC
                     default:
                         //terminate filesystem watcher and close program
                         fileWatcher_stop.store(true);
@@ -615,11 +617,11 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
     }
     catch (client::ConfigException &e) {
         switch(e.getCode()){
-            case client::configError::justCreated:  //if the config file was not there and it has been created
-            case client::configError::pathToWatch:  //if the configured path to watch was not specified or it does not exist (or it is not a directory) ask to modify it and return
+            case client::ConfigError::justCreated:  //if the config file was not there and it has been created
+            case client::ConfigError::pathToWatch:  //if the configured path to watch was not specified or it does not exist (or it is not a directory) ask to modify it and return
                 Message::print(std::cout, "ERROR", "Please check config file: ", CONFIG_FILE_PATH);
 
-            case client::configError::open: //if there were some errors in opening the configuration file return
+            case client::ConfigError::open: //if there were some errors in opening the configuration file return
             default:
                 Message::print(std::cerr, "ERROR", "Config Exception", e.what());
         }

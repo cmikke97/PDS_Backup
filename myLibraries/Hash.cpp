@@ -1,11 +1,13 @@
 //
-// Created by michele on 14/10/2020.
+// Created by Michele Crepaldi s269551 on 14/10/2020
+// Finished on 21/11/2020
+// Last checked on 21/11/2020
 //
 
-#include <sstream>
 #include "Hash.h"
 
-//TODO check
+#include <sstream>
+
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -13,37 +15,37 @@
  */
 
 /**
- * hash constructor from a buffer and its length
+ * Hash class constructor from a char buffer and its length
  *
- * @param buf buffer where to find data
- * @param len length of the data
+ * @param buf pre-computed hash buffer to copy
+ * @param len pre-computed hash buffer length
+ *
+ * @throws HashException:
+ *  <b>set</b> in case the given buffer length is wrong (!= SHA256_DIGEST_SIZE)
  *
  * @author Michele Crepaldi s269551
  *
  */
 Hash::Hash(const char *buf, size_t len) {
-    memcpy(shaSum, buf, len);
+    if(len != SHA256_DIGEST_SIZE)
+        throw HashException("Wrong buffer length, cannot construct Hash", HashError::set);
+
+    memcpy(_shaSum, buf, len);
 }
 
 /**
- * hash constructor from a string buffer
+ * Hash class constructor from a string buffer
  *
- * @param buf string buffer where to find data
- *
- * @throw HashException in case the given string length is wrong
+ * @param buf pre-computed hash string to copy
  *
  * @author Michele Crepaldi s269551
  */
-Hash::Hash(const std::string& h) {
-    if(h.size() != SHA256_DIGEST_SIZE)
-        throw HashException("Given string hash has wrong length",hashError::set);
-
-    memcpy(shaSum, h.data(), h.length());
+Hash::Hash(const std::string& h) : Hash(h.data(), h.length()) {
 }
 
 /**
  * implementation of a constant time memcmp (to avoid side channel timing attacks)
- * (taken from openSSL since wolfSSL does not support it yet)
+ *  (copied from openSSL source since wolfSSL does not support it yet)
  *
  * @param b1 first hash
  * @param b2 second hash
@@ -64,7 +66,8 @@ int CRYPTO_memcmp(const void * in_a, const void * in_b, size_t len)
 }
 
 /**
- * function to compare the two hashes in constant time
+ * Hash class operator== overloading.
+ *  Compares 2 Hash objects in constant time (to avoid side channel timing attacks)
  *
  * @param other hash to compare with this one
  * @return whether the two hashes are the same or not
@@ -72,34 +75,35 @@ int CRYPTO_memcmp(const void * in_a, const void * in_b, size_t len)
  * @author Michele Crepaldi s269551
  */
 bool Hash::operator==(Hash &other) {
-    auto myHash = this->str();  //get my hash value
-    auto otherHash = other.str();   //get the other's hash value
-    if(myHash.size() == otherHash.size()) //if the size is the same (they should be unless there are errors)
+    auto myHash = this->str();      //my hash value
+    auto otherHash = other.str();   //the other's hash value
+    if(myHash.size() == otherHash.size())   //if the size is the same (they should be, unless there are errors)
         return !CRYPTO_memcmp(myHash.c_str(), otherHash.c_str(), myHash.length()); //then compare the two hashes in constant time
     return false;
 }
 
 /**
- * get the hash associated to this Hash object as a pair of char* and len
+ * method used to get the hash associated to this Hash object as a pair of char* and len
  *
- * @return the hash and len
+ * @return the hash (as char*) and len
  *
  * @author Michele Crepaldi s269551
  */
 std::pair<char*, size_t> Hash::get() {
-    return std::make_pair(shaSum, sizeof(shaSum));
+    return std::make_pair(_shaSum, sizeof(_shaSum));    //return the pair
 }
 
 /**
- * get the hash associated to this Hash object as a string
+ * method used to get the hash associated to this Hash object as a string
  *
  * @return the hash as string
  *
  * @author Michele Crepaldi s269551
  */
 std::string Hash::str() {
-    return std::string(shaSum,sizeof(shaSum));
+    return std::string(_shaSum, sizeof(_shaSum));
 }
+
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
@@ -107,36 +111,31 @@ std::string Hash::str() {
  */
 
 /**
- * function to handle Crypto errors (Openssl)
+ * utility function to handle Crypto errors (wolfSSL)
  *
  * @author Michele Crepaldi s269551
  */
-void handleErrors(int err, const std::string& msg, hashError type)
+void handleErrors(int err, const std::string& msg, HashError type)
 {
     std::stringstream errMsg;
-    errMsg << msg << ": " << wc_GetErrorString(err);
-    throw HashException(errMsg.str(), type);
+    errMsg << msg << ": " << wc_GetErrorString(err);    //get also the error string from wolfSSL
+    throw HashException(errMsg.str(), type);            //throw exception
 }
 
 /**
- * default constructor of HashMaker class
- *
- * @throw HashException in case it cannot initialize the HashMaker object
+ * default HashMaker constructor
  *
  * @author Michele Crepaldi s269551
  */
 HashMaker::HashMaker() {
-    init();
+    _init();    //initialize the wolfSSL SHA256 object
 };
 
 /**
- * constructor of this HashMaker object with a string as input, it can be used to initialize the hash with already a value;
- * it is still possible to update.
+ * HashMaker constructor with a string as input, it can be used to initialize the hash with an initial value;
+ *  it is still possible to update the hash.
  *
- * @param string to be hashed
- *
- * @throw HashException in case it cannot initialize the hash object
- * @throw HashException in case it cannot update the hash object
+ * @param string initial string to use to compute the Hash object
  *
  * @author Michele Crepaldi s269551
  */
@@ -144,14 +143,11 @@ HashMaker::HashMaker(const std::string& buffer) : HashMaker(buffer.data(), buffe
 }
 
 /**
- * constructor of this HashMaker object with a char * (and its length) as input, it can be used to initialize the hash
- * with already a value; it is still possible to update.
+ * HashMaker constructor with a char * (and its length) as input, it can be used to initialize the hash
+ *  with an initial value; it is still possible to update.
  *
- * @param buf data to be hashed
- * @param len of the data
- *
- * @throw HashException in case it cannot initialize the hash object
- * @throw HashException in case it cannot update the hash object
+ * @param buf initial buffer to use to compute the Hash object
+ * @param len length of the buffer
  *
  * @author Michele Crepaldi s269551
  */
@@ -160,72 +156,79 @@ HashMaker::HashMaker(const char *buf, size_t len) : HashMaker() {
 }
 
 /**
- * function to initialize the HashMaker object
+ * method to initialize the HashMaker object
  *
- * @throw HashException in case it cannot initialize the HashMaker object
+ * @throws HashException:
+ *  <b>init</b> in case wolfSSL Sha256 object cannot be initialized
  *
  * @author Michele Crepaldi s269551
 */
-void HashMaker::init() {
-    int err = wc_InitSha256(&sha);
+void HashMaker::_init() {
+    //initialize the wolfSSL Sha256 object
+
+    int err = wc_InitSha256(&_sha); //wolfSSL Sha256 method error code
+
     if(err != 0)
-        handleErrors(err, "Cannot initialize hash", hashError::init);
+        handleErrors(err, "Cannot initialize hash", HashError::init);
 }
 
 /**
- * function to update the current HashMaker with a block of data
+ * method to update the current wolfSSL Sha256 object with a block of data
  *
  * @param buf buffer containing data to be hashed
  * @param len length of the buffer
  *
- * @throw HashException in case it cannot update the HashMaker object
+ * @throws HashException:
+ *  <b>update</b> in case wolfSSL Sha256 object cannot be updated with the provided data
  *
  * @author Michele Crepaldi s269551
 */
 void HashMaker::update(const char *buf, size_t len) {
-    int err = wc_Sha256Update(&sha, reinterpret_cast<const byte *>(buf), len);
+    //update the wolfSSL Sha256 object with the provided buffer
+
+    int err = wc_Sha256Update(&_sha, reinterpret_cast<const byte *>(buf), len); //wolfSSL Sha256 method error code
+
     if(err != 0)
-        handleErrors(err, "Cannot update hash", hashError::update);
+        handleErrors(err, "Cannot update hash", HashError::update);
 }
 
 /**
- * function to update the current HashMaker with a block of data
+ * method to update the current wolfSSL Sha256 object with a string of data
  *
  * @param buf string buffer containing data to be hashed
  *
- * @throw HashException in case it cannot update the HashMaker object
- *
  * @author Michele Crepaldi s269551
 */
-void HashMaker::update(std::string buf) {
+void HashMaker::update(const std::string &buf) {
     update(buf.data(), buf.size());
 }
 
 /**
- * function to finalize the content of the HashMaker after hashing the last block
- * <p>
- * <b>(it is necessary to use this!)
+ * method to finalize the _shaSum after hashing the last block
  *
- * @throw HashException in case it cannot finalize the HashMaker object
+ * @throws HashException:
+ *  <b>finalize</b> in case wolfSSL Sha256 object cannot be finalized
  *
  * @author Michele Crepaldi s269551
 */
-void HashMaker::finalize() {
-    int err = wc_Sha256Final(&sha, reinterpret_cast<byte *>(shaSum));
+void HashMaker::_finalize() {
+    //finalize the wolfSSL Sha256 object and get the final _shaSum value
+
+    int err = wc_Sha256Final(&_sha, reinterpret_cast<byte *>(_shaSum)); //wolfSSL Sha256 method error code
     if(err != 0)
-        handleErrors(err, "Cannot finalize hash", hashError::finalize);
+        handleErrors(err, "Cannot finalize hash", HashError::finalize);
 }
 
 /**
- * function to get the final Hash object constructed by the HashMaker
+ * method to get the final Hash object constructed by the HashMaker
  *
- * @return Hash constructed
+ *  <p>After this method this HashMaker object should not be any more used</p>
  *
- * @throw HashException in case it cannot finalize the HashMaker object
+ * @return constructed Hash object
  *
  * @author Michele Crepaldi s269551
  */
 Hash HashMaker::get() {
-    finalize();
-    return Hash(shaSum, sizeof(shaSum));
+    _finalize();    //finalize the wolfSSL Sha256 object and get the _shaSum
+    return Hash(_shaSum, sizeof(_shaSum));  //return the Hash object
 }

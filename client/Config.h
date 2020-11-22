@@ -23,7 +23,10 @@ namespace client {
      *
      * @author Michele Crepaldi s269551
      */
-    enum class configError {
+    enum class ConfigError {
+        //no path set
+        path,
+
         //the config file could not be opened
         open,
 
@@ -54,8 +57,10 @@ namespace client {
         Config& operator=(Config &&) = delete;  //move assignment deleted
         ~Config() = default;
 
+        static void setPath(std::string path);
+
         //singleton instance getter
-        static std::shared_ptr<Config> getInstance(const std::string &path);
+        static std::shared_ptr<Config> getInstance();
 
         //getters
 
@@ -75,7 +80,7 @@ namespace client {
 
     protected:
         //protected constructor
-        explicit Config(std::string path);
+        Config();
 
         //mutex to synchronize threads during the first creation of the Singleton object
         static std::mutex mutex_;
@@ -84,7 +89,7 @@ namespace client {
         static std::shared_ptr<Config> config_;
 
         //path of the config file
-        std::string path_;
+        static std::string path_;
 
     private:
         //host dependant variables
@@ -117,7 +122,7 @@ namespace client {
 
     /**
      * ConfigException exception class that may be returned by the Config class
-     * (derives from runtime_error)
+     *  (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */
@@ -130,7 +135,7 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        explicit ConfigException(const std::string &msg, configError code) :
+        explicit ConfigException(const std::string &msg, ConfigError code) :
                 std::runtime_error(msg), _code(code) {
         }
 
@@ -148,12 +153,12 @@ namespace client {
         *
         * @author Michele Crepaldi s269551
         */
-        configError getCode() const noexcept {
+        ConfigError getCode() const noexcept {
             return _code;
         }
 
     private:
-        configError _code;   //code describing the error
+        ConfigError _code;   //code describing the error
     };
 }
 

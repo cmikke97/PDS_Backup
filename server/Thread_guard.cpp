@@ -27,7 +27,7 @@ server::Thread_guard::Thread_guard(std::vector<std::thread> &t, std::atomic<bool
 
 /**
  * Thread_guard class destructor; it signals the threads to stop and waits for them
- * (it also shuts down the protobuf library)
+ *  (it also shuts down the protobuf library)
  *
  * @author Michele Crepaldi s269551
  */

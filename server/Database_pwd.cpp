@@ -52,6 +52,9 @@ std::shared_ptr<server::Database_pwd> server::Database_pwd::getInstance() {
 /**
  * (protected) constructor of the Database_pwd object
  *
+ * @throws DatabaseException_pwd:
+ *  <b>path</b> if no path was set before this call
+ *
  * @author Michele Crepaldi s269551
  */
 server::Database_pwd::Database_pwd(){
@@ -67,7 +70,7 @@ server::Database_pwd::Database_pwd(){
  * @param err databaseError_pwd to insert into the possible exception
  *
  * @throws DatabaseException_pwd:
- * <b>[err]</b> in case rc != check
+ *  <b>[err]</b> in case rc != check
  *
  * @author Michele Crepaldi s269551
  */
@@ -84,12 +87,12 @@ void server::Database_pwd::_handleSQLError(int rc, int check, std::string &&mess
 
 /**
  * method used to open the connection to a sqlite3 database; if the database already exists then it opens it,
- * otherwise it also creates the needed table
+ *  otherwise it also creates the needed table
  *
  * @throws DatabaseException_pwd:
- * <b>open</b> if the database could not be opened
+ *  <b>open</b> if the database could not be opened
  * @throws DatabaseException_pwd:
- * <b>create</b> if the (new) database could not be created
+ *  <b>create</b> if the (new) database could not be created
  *
  * @author Michele Crepaldi s269551
  */
@@ -145,11 +148,11 @@ void server::Database_pwd::_open() {
  * @return pair with salt (string) and hash (Hash)
  *
  * @throws DatabaseException_pwd:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException_pwd:
- * <b>read</b> if the database could not be read (ho hash could be retrieved)
+ *  <b>read</b> if the database could not be read (ho hash could be retrieved)
  * @throws DatabaseException_pwd:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -230,11 +233,11 @@ std::pair<std::string, Hash> server::Database_pwd::getHash(const std::string &us
  * @param password password
  *
  * @throws DatabaseException_pwd:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException_pwd:
- * <b>insert</b> if the row could not be inserted into the database
+ *  <b>insert</b> if the row could not be inserted into the database
  * @throws DatabaseException_pwd:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -296,11 +299,11 @@ void server::Database_pwd::addUser(const std::string &username, const std::strin
  * @param password new password
  *
  * @throws DatabaseException_pwd:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException_pwd:
- * <b>update</b> if the row could not be updated in the database
+ *  <b>update</b> if the row could not be updated in the database
  * @throws DatabaseException_pwd:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -361,11 +364,11 @@ void server::Database_pwd::updateUser(const std::string &username, const std::st
  * @param username username
  *
  * @throws DatabaseException_pwd:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException_pwd:
- * <b>remove</b> if the row could not be removed from the database
+ *  <b>remove</b> if the row could not be removed from the database
  * @throws DatabaseException_pwd:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -409,11 +412,11 @@ void server::Database_pwd::removeUser(const std::string &username){
  * @param f function to be used for each row extracted from the database
  *
  * @throws DatabaseException_pwd:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException_pwd:
- * <b>read</b> if the database could not be read
+ *  <b>read</b> if the database could not be read
  * @throws DatabaseException_pwd:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */

@@ -33,8 +33,8 @@ public:
     FileSystemStatus getType();
 
 private:
-    Directory_entry _element;   //directory entry element this event refers to
-    FileSystemStatus _type;     //type of modification
+    Directory_entry _element{};   //directory entry element this event refers to
+    FileSystemStatus _type{};     //type of modification
 };
 
 

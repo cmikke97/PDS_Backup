@@ -1,39 +1,30 @@
 //
-// Created by michele on 28/07/2020.
+// Created by Michele Crepaldi s269551 on 28/07/2020
+// Finished on 21/11/2020
+// Last checked on 21/11/2020
 //
 
 #ifndef SOCKET_H
 #define SOCKET_H
 
-//TODO check
-
-#include <iostream>
-#include <sys/socket.h>
-#include <cstring>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <filesystem>
-#include <sys/ioctl.h>
-#include <net/if.h>
 #include <memory>
-#include <cstdio>
 #include <string>
+#include <stdexcept>
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
 
+
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * Interfaces
+ * SocketBridge Interfaces
  */
 
 /**
- * Socket interface (users of this library will see this class and none of the implementations)
+ * SocketBridge interface (users of the Socket library will "see" this class and none of the implementations)
  *
- * <p>
- * It contains all methods needed by a socket to work, most of them are abstract;
- * just one function (which is static) is actually implemented (it is independent from all implementations)
- * and it is the getMAC method
- * </p>
+ *  <p>
+ *  It contains pure abstract methods needed by a socket to work
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
@@ -48,17 +39,18 @@ public:
     [[nodiscard]] virtual std::string getIP() const = 0;
     virtual void closeConnection() = 0;
 
+    //virtual destructor
     virtual ~SocketBridge() = 0;
 };
 
 /**
- * ServerSocket interface (users of this library will see this class and none of the implementations)
+ * ServerSocketBridge interface (users of the Socket library will "see" this class and none of the implementations)
  *
- * <p>
- * It contains all methods needed by a socket to work, all of them are abstract;
- * (it directly contains just the accept method, all other methods are publicly (and virtually)
- * inherited from the Socket class
- * </p>
+ *  <p>
+ *  It contains pure abstract methods needed by a server socket to work.
+ *  (it directly contains just the accept method, all other methods are publicly (and virtually)
+ *  inherited from the SocketBridge class)
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
@@ -69,71 +61,81 @@ public:
     ~ServerSocketBridge() override = 0;
 };
 
+
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * TCP Socket implmementation
+ * TCP_Socket class implementation
  */
 
 /**
  * Socket class (TCP)
  *
- * <p>
- * It implements all the abstract methods of the Socket interface and some additional methods to make it work.
- * </p>
- * <p>
- * <b>Not to be used directly
- * </p>
+ *  <p>
+ *  It implements all the abstract methods of the SocketBridge interface and some additional methods to make it work.
+ *  It inherits publicly and virtually from SocketBridge interface
+ *  </p>
+ *  <p>
+ *  <b>Not to be used directly
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
 class TCP_Socket : public virtual SocketBridge {
-    int sockfd;
+public:
+    TCP_Socket(const TCP_Socket &) = delete;                //deleted copy constructor
+    TCP_Socket& operator=(const TCP_Socket &) = delete;     //deleted copy assignment
 
-    explicit TCP_Socket(int sockfd);
+    TCP_Socket();   //empty constructor
+    TCP_Socket(TCP_Socket &&other) noexcept;            //move constructor
+    TCP_Socket& operator=(TCP_Socket &&other) noexcept; //move assignment
+    ~TCP_Socket() override; //destructor
+
+    void connect(const std::string& addr, unsigned int port) override;  //connect method
+    ssize_t read(char *buffer, size_t len, int options) const;          //read buffer method
+    [[nodiscard]] std::string recvString() const override;              //receive string method
+    ssize_t write(const char *buffer, size_t len, int options) const;   //write buffer method
+    ssize_t sendString(std::string &stringBuffer) const override;       //send string method
+
+    [[nodiscard]] int getSockfd() const override;       //get socket file descriptor method
+    [[nodiscard]] std::string getMAC() const override;  //get MAC address of this machine's network card
+    [[nodiscard]] std::string getIP() const override;   //get IP address of this machine's network card
+
+    void closeConnection() override;    //close connection method
+
+private:
+    int _sockfd;     //soket file descriptor
+
+    explicit TCP_Socket(int sockfd);    //explicit constructor (from socket file descriptor)
+
     friend class TCP_ServerSocket;
     friend class TLS_Socket;
-
-public:
-    TCP_Socket(const TCP_Socket &) = delete;
-    TCP_Socket& operator=(const TCP_Socket &) = delete;
-
-    TCP_Socket();
-    TCP_Socket(TCP_Socket &&other) noexcept;
-    TCP_Socket& operator=(TCP_Socket &&other) noexcept;
-    void connect(const std::string& addr, unsigned int port) override;
-    ssize_t read(char *buffer, size_t len, int options) const;
-    [[nodiscard]] std::string recvString() const override;
-    ssize_t write(const char *buffer, size_t len, int options) const;
-    ssize_t sendString(std::string &stringBuffer) const override;
-    [[nodiscard]] int getSockfd() const override;
-    [[nodiscard]] std::string getMAC() const override;
-    [[nodiscard]] std::string getIP() const override;
-    void closeConnection() override;
-    ~TCP_Socket() override;
 };
 
 /**
  * Server Socket class (TCP)
  *
- * <p>
- * It implements all the abstract methods of the ServerSocket interface and some additional methods to make it work.
- * </p>
- * <p>
- * <b>Not to be used directly
- * </p>
+ *  <p>
+ *  It implements all the abstract methods of the ServerSocket interface and some additional methods to make it work.
+ *  It inherits publicly from ServerSocketBridge interface and TCP_Socket class
+ *  </p>
+ *  <p>
+ *  <b>Not to be used directly
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
 class TCP_ServerSocket: public ServerSocketBridge, public TCP_Socket{
 public:
-    explicit TCP_ServerSocket(unsigned int port, unsigned int n);
-    SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
-    ~TCP_ServerSocket() override;
+    TCP_ServerSocket(unsigned int port, unsigned int n);    //constructor with port and length of the listen queue
+    ~TCP_ServerSocket() override;   //destructor
+
+    SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;    //accept method
 };
+
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * WolfSSL TLS Socket implmementation
+ * (wolfSSL) TLS_Socket class implementation
  */
 
 /**
@@ -142,19 +144,42 @@ public:
  * @author Michele Crepaldi s269551
  */
 namespace tls_socket {
+    /**
+     * custom deleter template for class T
+     *
+     * @tparam T class of the object to delete
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<class T>
     struct DeleterOf;
 
+    /**
+     * template specialization for the WOLFSSL class
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<>
     struct DeleterOf<WOLFSSL> {
         void operator()(WOLFSSL *p) const { wolfSSL_free(p); }
     };
 
+    /**
+     * template specialization for the wolfSSL_CTX class
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<>
     struct DeleterOf<WOLFSSL_CTX> {
         void operator()(WOLFSSL_CTX *p) const { wolfSSL_CTX_free(p); }
     };
 
+    /*
+     * definition of the UniquePtr construct, it is simply a unique_ptr object with the deleter for the
+     * wolfSSLType template class redefined
+     *
+     * @author Michele Crepaldi s269551
+     */
     template<class wolfSSLType>
     using UniquePtr = std::unique_ptr<wolfSSLType, DeleterOf<wolfSSLType>>;
 }
@@ -162,177 +187,231 @@ namespace tls_socket {
 /**
  * Secure Socket class (TLS)
  *
- * <p>
- * It implements all the abstract methods of the Socket interface and some additional methods to make it work.
- * </p>
- * <p>
- * <b>Not to be used directly
- * </p>
+ *  <p>
+ *  It implements all the abstract methods of the Socket interface and some additional methods to make it work.
+ *  It inherits publicly and virtually from SocketBridge interface
+ *  </p>
+ *  <p>
+ *  <b>Not to be used directly
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
 class TLS_Socket : public virtual SocketBridge {
-    std::unique_ptr<TCP_Socket> sock;
-    tls_socket::UniquePtr<WOLFSSL_CTX> ctx;
-    tls_socket::UniquePtr<WOLFSSL> ssl;
-
-    explicit TLS_Socket(int sockfd, WOLFSSL *ssl);
-    friend class TLS_ServerSocket;
-
 public:
-    TLS_Socket(const TLS_Socket &) = delete;
-    TLS_Socket& operator=(const TLS_Socket &) = delete;
+    TLS_Socket(const TLS_Socket &) = delete;                //delete copy constructor
+    TLS_Socket& operator=(const TLS_Socket &) = delete;     //delete copy assignment
 
-    TLS_Socket();
-    TLS_Socket(TLS_Socket &&other) noexcept;
-    TLS_Socket& operator=(TLS_Socket &&other) noexcept;
-    void connect(const std::string& addr, unsigned int port) override;
-    ssize_t read(char *buffer, size_t len) const;
-    [[nodiscard]] std::string recvString() const override;
-    ssize_t write(const char *buffer, size_t len) const;
-    ssize_t sendString(std::string &stringBuffer) const override;
-    [[nodiscard]] int getSockfd() const override;
-    [[nodiscard]] std::string getMAC() const override;
-    [[nodiscard]] std::string getIP() const override;
-    void closeConnection() override;
-    ~TLS_Socket() override;
+    TLS_Socket();   //empty constructor
+    TLS_Socket(TLS_Socket &&other) noexcept;                //move constructor
+    TLS_Socket& operator=(TLS_Socket &&other) noexcept;     //move assignment
+    ~TLS_Socket() override; //destructor
+
+    void connect(const std::string& addr, unsigned int port) override;  //connect method
+    ssize_t read(char *buffer, size_t len) const;                       //read buffer method
+    [[nodiscard]] std::string recvString() const override;              //receive string method
+    ssize_t write(const char *buffer, size_t len) const;                //write buffer method
+    ssize_t sendString(std::string &stringBuffer) const override;       //send string method
+
+    [[nodiscard]] int getSockfd() const override;       //get socket file descriptor method
+    [[nodiscard]] std::string getMAC() const override;  //get MAC address of this machine's network card
+    [[nodiscard]] std::string getIP() const override;   //get IP address of this machine's network card
+
+    void closeConnection() override;    //close connection method
+
+private:
+    std::unique_ptr<TCP_Socket> _sock;          //unique pointer to the underlying TCP socket
+    tls_socket::UniquePtr<WOLFSSL_CTX> _ctx;    //Unique pointer to WOLFSSL_CTX
+    tls_socket::UniquePtr<WOLFSSL> _ssl;        //Unique pointer to WOLFSSL
+
+    TLS_Socket(int sockfd, WOLFSSL *ssl);   //constructor (from socket file descriptor and WOLFSSL object)
+
+    friend class TLS_ServerSocket;
 };
 
 /**
  * Secure Server Socket class (TLS)
  *
- * <p>
- * It implements all the abstract methods of the ServerSocket interface and some additional methods to make it work.
- * </p>
- * <p>
- * <b>Not to be used directly
- * </p>
+ *  <p>
+ *  It implements all the abstract methods of the ServerSocket interface and some additional methods to make it work.
+ *  It inherits publicly from ServerSocketBridge interface and TLS_Socket class
+ *  </p>
+ *  <p>
+ *  <b>Not to be used directly
+ *  </p>
  *
  * @author Michele Crepaldi s269551
  */
 class TLS_ServerSocket: public ServerSocketBridge, public TLS_Socket{
-    std::unique_ptr<TCP_ServerSocket> serverSock;
 public:
-    explicit TLS_ServerSocket(unsigned int port, unsigned int n);
-    SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;
-    ~TLS_ServerSocket() override;
+    explicit TLS_ServerSocket(unsigned int port, unsigned int n);   //constructor with port and length of the listen queue
+    ~TLS_ServerSocket() override;   //destructor
+
+    SocketBridge* accept(struct sockaddr_in* addr, unsigned long* len) override;    //accept method
+
+private:
+    std::unique_ptr<TCP_ServerSocket> _serverSock;   //unique pointer to the underlying TCP server socket
 };
+
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * socket class
+ * Socket class
  */
 
 /**
- * sokcetType class: it describes (enumerically) all the possible socket types (TCP or TLS)
+ * SocketType class: it describes (enumerically) all the possible socket types (TCP or TLS)
  *
  * @author Michele Crepaldi s269551
  */
-enum class socketType{TCP, TLS};
+enum class SocketType{
+    //TCP socket type
+    TCP,
+
+    //TLS socket type
+    TLS};
 
 /**
  * Socket class
  *
- * <p>
- * Class which implements the 2 possible sockets abstracting from implementation (bridge pattern):
- * </p>
- * <ul>
- *      <li>socketType::TCP for an unsecure TCP socket (make sure the server is using the same socket type!)
- *      <li>socketType::TLS for a secure TLS socket (make sure the server is using the same socket type!)
- * </ul>
- * <b>
- * This class and the ServerSocket class are the only 2 to be used directly of this library.
- * </b>
+ *  <p>
+ *  Class which implements the 2 possible sockets abstracting from implementation (bridge pattern):
+ *  </p>
+ *  <ul>
+ *       <li>socketType::TCP for an unsecure TCP socket (make sure the server is using the same socket type!)
+ *       <li>socketType::TLS for a secure TLS socket (make sure the server is using the same socket type!)
+ *  </ul>
+ *  <b>
+ *  This class and the ServerSocket class are the only 2 to be used directly of this library.
+ *  </b>
  *
  * @author Michele Crepaldi s269551
  */
 class Socket {
-    std::unique_ptr<SocketBridge> socket;
-    explicit Socket(SocketBridge *sb);
-    friend class ServerSocket;
-
-    static std::string ca_file_path;
-    friend class TLS_Socket;
-
 public:
-
     static void specifyCertificates(const std::string &cacert);
 
-    Socket(const Socket &) = delete;    //delete copy constructor
-    Socket& operator=(const Socket &) = delete; //delete copy assignment
-    Socket() = default;
+    Socket(const Socket &) = delete;                //delete copy constructor
+    Socket& operator=(const Socket &) = delete;     //delete copy assignment
+    Socket() = default; //default constructor
 
-    explicit Socket(socketType type);
+    explicit Socket(SocketType type);   //explicit constructor with type
 
-    Socket(Socket &&other) noexcept;    //define move constructor
-    Socket& operator=(Socket &&other) noexcept; //define move assignment
+    Socket(Socket &&other) noexcept;                //move constructor
+    Socket& operator=(Socket &&other) noexcept;     //move assignment
 
-    void connect(const std::string& addr, unsigned int port);
-    [[nodiscard]] std::string recvString() const;
-    ssize_t sendString(std::string &stringBuffer) const;
-    [[nodiscard]] int getSockfd() const;
-    [[nodiscard]] std::string getMAC();
-    [[nodiscard]] std::string getIP();
-    void closeConnection();
+    void connect(const std::string& addr, unsigned int port);   //connect method
+    [[nodiscard]] std::string recvString() const;               //receive string method
+    ssize_t sendString(std::string &stringBuffer) const;        //send string method
+
+    [[nodiscard]] int getSockfd() const;    //get socket file descriptor method
+    [[nodiscard]] std::string getMAC();     //get MAC address of this machine's network card
+    [[nodiscard]] std::string getIP();      //get IP address of this machine's network card
+
+    void closeConnection(); //close connection method
+
+private:
+    std::unique_ptr<SocketBridge> _socket;  //unique pointer to SocketBridge object
+
+    std::string _macAddress;    //mac address of this machine's network card
+    std::string _ipAddress;     //ip address of this machine's network card
+
+    explicit Socket(SocketBridge *sb);  //explicit constructor with pointer to SocketBridge object
+
+    static std::string _ca_file_path;    //path to the certification authority file
+
+    friend class ServerSocket;
+    friend class TLS_Socket;
 };
 
 /**
  * Server Socket class
  *
- * <p>
- * Class which implements the 2 possible server sockets abstracting from implementation (bridge pattern):
- * </p>
- * <ul>
- *      <li>socketType::TCP for an unsecure TCP server socket (make sure the client is using the same socket type!)
- *      <li>socketType::TLS for a secure TLS server socket (make sure the client is using the same socket type!)
- * </ul>
- * <b>
- * This class and the Socket class are the only 2 to be used directly of this library.
- * </b>
+ *  <p>
+ *  Class which implements the 2 possible server sockets abstracting from implementation (bridge pattern):
+ *  </p>
+ *  <ul>
+ *       <li>socketType::TCP for an unsecure TCP server socket (make sure the client is using the same socket type!)
+ *       <li>socketType::TLS for a secure TLS server socket (make sure the client is using the same socket type!)
+ *  </ul>
+ *  <b>
+ *  This class and the Socket class are the only 2 to be used directly of this library.
+ *  </b>
  *
  * @author Michele Crepaldi s269551
  */
 class ServerSocket : public Socket {
-    std::unique_ptr<ServerSocketBridge> serverSocket;
-
-    static std::string certificate_path, privatekey_path;
-    friend class TLS_ServerSocket;
-
 public:
+    //specify certificates methods
     static void specifyCertificates(const std::string &cert, const std::string &prikey, const std::string &cacert);
 
-    explicit ServerSocket(unsigned int port, unsigned int n, socketType type);
+    //constructor with port, length of the listen queue and type
+    ServerSocket(unsigned int port, unsigned int n, SocketType type);
 
-    ServerSocket(const ServerSocket &other) = delete;   //delete copy constructor
+    ServerSocket(const ServerSocket &other) = delete;               //delete copy constructor
     ServerSocket& operator=(const ServerSocket& source) = delete;   //delete copy assignment
 
-    ServerSocket(ServerSocket &&other) noexcept;    //define move constructor
-    ServerSocket& operator=(ServerSocket &&source) noexcept;    //define move assignment
+    ServerSocket(ServerSocket &&other) noexcept;                //move constructor
+    ServerSocket& operator=(ServerSocket &&source) noexcept;    //move assignment
 
-    Socket accept(struct sockaddr_in* addr, unsigned long* len);
+    Socket accept(struct sockaddr_in* addr, unsigned long* len);    //accept method
+
+private:
+    std::unique_ptr<ServerSocketBridge> _serverSocket;   //unique pointer to ServerSocketBridge object
+
+    static std::string _certificate_path;    //path to the server certificate file
+    static std::string _privatekey_path;     //path to the server private key file
+
+    friend class TLS_ServerSocket;
 };
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * exceptions
+ * SocketException
  */
 
 /**
- * sokcetError class: it describes (enumerically) all the possible socket errors
+ * SokcetError class: it describes (enumerically) all the possible socket errors
  *
  * @author Michele Crepaldi s269551
  */
-enum class socketError{create, bind, accept, read, write, connect, getMac, getIP, closed};
+enum class SocketError{
+    //could not create socket
+    create,
+
+    //could not bind socket
+    bind,
+
+    //could not accept client
+    accept,
+
+    //could not read from socket
+    read,
+
+    //could not write to socket
+    write,
+
+    //could not connect to server
+    connect,
+
+    //could not get mac address
+    getMac,
+
+    //could not get ip address
+    getIP,
+
+    //socket is closed
+    closed
+};
 
 /**
- * exceptions for the socket class
+ * SocketException exception class that may be returned by the Socket/ServerSocket class
+ *  (derives from runtime_error)
  *
  * @author Michele Crepaldi s269551
  */
 class SocketException : public std::runtime_error {
-    socketError code;
 public:
-
     /**
      * socket exception constructor
      *
@@ -340,12 +419,12 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    SocketException(const std::string& msg, socketError code):
-            std::runtime_error(msg), code(code){
+    SocketException(const std::string& msg, SocketError code):
+            std::runtime_error(msg), _code(code){
     }
 
     /**
-     * socket exception destructor.
+     * socket exception destructor
      *
      * @author Michele Crepaldi s269551
      */
@@ -354,13 +433,16 @@ public:
     /**
      * function to retrieve the error code from the exception
      *
-     * @return error code
+     * @return socket error code
      *
      * @author Michele Crepaldi s269551
      */
-    socketError getCode() const noexcept{
-        return code;
+    SocketError getCode() const noexcept{
+        return _code;
     }
+
+private:
+    SocketError _code;   //code describing the error
 };
 
 #endif //SOCKET_H

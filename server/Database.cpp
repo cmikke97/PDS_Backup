@@ -50,6 +50,9 @@ std::shared_ptr<server::Database> server::Database::getInstance() {
 /**
  * (protected) constructor of the database object
  *
+ * @throws DatabaseException:
+ *  <b>path</b> if no path was set before this call
+ *
  * @author Michele Crepaldi s269551
  */
 server::Database::Database() {
@@ -68,7 +71,7 @@ server::Database::Database() {
  * @param err databaseError to insert into the possible exception
  *
  * @throws DatabaseException:
- * <b>[err]</b> in case rc != check
+ *  <b>[err]</b> in case rc != check
  *
  * @author Michele Crepaldi s269551
  */
@@ -85,12 +88,12 @@ void server::Database::_handleSQLError(int rc, int check, std::string &&message,
 
 /**
  * method used to open the connection to a sqlite3 database; if the database already exists then it opens it,
- * otherwise it also creates the needed table
+ *  otherwise it also creates the needed table
  *
  * @throws DatabaseException:
- * <b>open</b> if the database could not be opened
+ *  <b>open</b> if the database could not be opened
  * @throws DatabaseException:
- * <b>create</b> if the (new) database could not be created
+ *  <b>create</b> if the (new) database could not be created
  *
  * @author Michele Crepaldi s269551
  */
@@ -150,11 +153,11 @@ void server::Database::_open() {
  * @param f function to be used for each row extracted from the database
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>read</b> if the database could not be read
+ *  <b>read</b> if the database could not be read
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -248,11 +251,11 @@ void server::Database::forAll(const std::string &username, const std::string &ma
  * @param lastWriteTime last write time of the element to be inserted
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>insert</b> if the row could not be inserted into the database
+ *  <b>insert</b> if the row could not be inserted into the database
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -338,11 +341,11 @@ void server::Database::insert(const std::string &username, const std::string &ma
  * @param path path of the element to be removed
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>remove</b> if the row could not be removed from the database
+ *  <b>remove</b> if the row could not be removed from the database
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -390,11 +393,11 @@ void server::Database::remove(const std::string &username, const std::string &ma
  * @param username
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>remove</b> if the rows could not be removed from the database
+ *  <b>remove</b> if the rows could not be removed from the database
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -439,11 +442,11 @@ void server::Database::removeAll(const std::string &username){
  * @param mac mac address of the client host
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>remove</b> if the rows could not be removed from the database
+ *  <b>remove</b> if the rows could not be removed from the database
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -491,11 +494,11 @@ void server::Database::removeAll(const std::string &username, const std::string 
  * @return vector of strings containing all mac addresses associated to the provided user
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>read</b> if the database could not be read
+ *  <b>read</b> if the database could not be read
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */
@@ -571,11 +574,11 @@ std::vector<std::string> server::Database::getAllMacAddresses(const std::string 
  * @param lastWriteTime last write time of the element to be updated
  *
  * @throws DatabaseException:
- * <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
+ *  <b>prepare</b> if the sql statement could not be prepared (or there is an error in some parameter binding)
  * @throws DatabaseException:
- * <b>update</b> if the element could not be updated in the database
+ *  <b>update</b> if the element could not be updated in the database
  * @throws DatabaseException:
- * <b>finalize</b> if the sql statement could not be finalized
+ *  <b>finalize</b> if the sql statement could not be finalized
  *
  * @author Michele Crepaldi s269551
  */

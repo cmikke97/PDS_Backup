@@ -19,7 +19,7 @@
 
 /**
  * function used to check that the inserted optional cmd argument is actually valid (syntactically)
- * -> it has no heading '-' (so it is not a command)
+ *  -> it has no heading '-' (so it is not a command)
  *
  * @param optArg optional argument to be checked
  * @return whether the specified argument is syntactically correct or not
@@ -77,14 +77,14 @@ bool Validator::validatePassword(std::string &password){
 
 /**
  * function used to check that the inserted mac cmd argument is actually valid (syntactically) and to transform it to a
- * consistent mac address representation
+ *  consistent mac address representation
  *
- * <p><b>examples of transformations applied:</b>
- * <br>:::::               ->  0:0:0:0:0:0
- * <br>00:00:00:00:00:00   ->  0:0:0:0:0:0
- * <br>01:02:00:20:10:00   ->  1:2:0:20:10:0
- * <br>a:b::c::            ->  a:b:0:c:0:0
- * </p>
+ *  <p><b>examples of transformations applied:</b>
+ *  <br>:::::               ->  0:0:0:0:0:0
+ *  <br>00:00:00:00:00:00   ->  0:0:0:0:0:0
+ *  <br>01:02:00:20:10:00   ->  1:2:0:20:10:0
+ *  <br>a:b::c::            ->  a:b:0:c:0:0
+ *  </p>
  *
  * @param mac mac to be checked/translated
  * @return whether the specified mac is syntactically correct or not
@@ -133,7 +133,7 @@ bool Validator::validateIPAddress(std::string &ipAddress){
 
 /**
  * function used to check that the inserted folder cmd argument is actually valid (syntactically), and to
- * transform the folder representation to a consistent one ('\' -> '/'; no trailing "/")
+ *  transform the folder representation to a consistent one ('\' -> '/'; no trailing "/")
  *
  * @param folder folder to be checked/translated
  * @return whether the specified folder is syntactically correct or not
