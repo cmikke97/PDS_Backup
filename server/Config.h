@@ -24,6 +24,9 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class ConfigError {
+        //no path set
+        path,
+
         //the config file could not be opened
         open,
 
@@ -57,8 +60,10 @@ namespace server {
         Config& operator=(Config &&) = delete;  //move assignment deleted
         ~Config() = default;
 
+        static void setPath(std::string path);
+
         //singleton instance getter
-        static std::shared_ptr<Config> getInstance(const std::string &path);
+        static std::shared_ptr<Config> getInstance();
 
         //getters
 
@@ -79,7 +84,7 @@ namespace server {
 
     protected:
         //protected constructor
-        explicit Config(std::string path);
+        Config();
 
         //mutex to synchronize threads during the first creation of the Singleton object
         static std::mutex mutex_;
@@ -88,7 +93,7 @@ namespace server {
         static std::shared_ptr<Config> config_;
 
         //path of the config file
-        std::string path_;
+        static std::string path_;
 
     private:
         //host dependant variables
@@ -122,7 +127,7 @@ namespace server {
 
     /**
      * ConfigException exception class that may be returned by the Config class
-     * (derives from runtime_error)
+     *  (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */

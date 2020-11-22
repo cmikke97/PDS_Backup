@@ -1,289 +1,305 @@
 //
-// Created by michele on 25/07/2020.
+// Created by Michele Crepaldi s269551 on 25/07/2020
+// Finished on 21/11/2020
+// Last checked on 21/11/2020
 //
 
 #include <iomanip>
 #include <fstream>
-#include <utility>
+#include <chrono>
+#include <utime.h>
 #include <regex>
 #include "Directory_entry.h"
 
-//TODO check
-
 #define MAXBUFFSIZE 1024
 
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Directory_entry class
+ */
+
 /**
- * default constructor (it is needed by the pair class in map)
+ * Directory_entry empty constructor
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(): size(0), type(Directory_entry_TYPE::notAType) {
+Directory_entry::Directory_entry(): _size(0), _type(Directory_entry_TYPE::notFileNorDirectory) {
 }
 
 /**
- * constructor with a filesystem::path as input
+ * Directory_entry constructor overload with base path and element's absolute path
  *
- * @param basePath base path of the entry
- * @param entry std::filesystem::path of the element to be represented
+ * @param basePath base path to be used for the relative path computation
+ * @param absolutePath element's absolute path (in filesystem)
  *
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::string &basePath, const std::string &absolutePath) :
-        Directory_entry(
-                basePath,
-                std::filesystem::directory_entry(absolutePath)){
+        Directory_entry(basePath, std::filesystem::directory_entry(absolutePath)){
 }
 
 /**
- * constructor with a filesystem::directory_entry as input
+ * Directory_entry constructor overload with the base path and the element as directory_entry
  *
- * @param basePath base path of the entry
- * @param entry std::filesystem::directory_entry to be represented
+ * @param basePath base path to be used for the relative path computation
+ * @param entry element as directory_entry
  *
  * @author Michele Crepaldi s269551
  */
 Directory_entry::Directory_entry(const std::string &basePath, const std::filesystem::directory_entry& entry) :
-        Directory_entry(
-                basePath,
-                entry.path(),
-                entry.is_regular_file()?entry.file_size():0,
-                entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType)){
+        Directory_entry(basePath, entry.path(), entry.is_regular_file()?entry.file_size():0,
+                entry.is_regular_file()?Directory_entry_TYPE::file:
+                (entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notFileNorDirectory)){
 }
 
 /**
- * constructor with all the parameters
+ * Directory_entry constructor overload with the base path, element's absolute path, size and type
  *
- * @param basePath base path of the entry
- * @param path absolute path of the directory entry
- * @param size size of the file (only to be used if this is a file)
- * @param type type od the entry: file or directory
- * @param file_time last modification time
+ * @param basePath base path to be used for the relative path computation
+ * @param absolutePath element's absolute path (in filesystem)
+ * @param size element's size (0 for directories)
+ * @param type element's type: file or directory (or notFileNorDirectory)
  *
- * @throw filesystem_error (if std::filesystem::relative fails)
+ * @throw filesystem_error if the absolute path does not contain the base path, so the relative path could not
+ *  be obtained
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string& basePath, const std::string& absolutePath, uintmax_t size, Directory_entry_TYPE type) :
-        absolutePath(absolutePath),
-        type(type){
+Directory_entry::Directory_entry(const std::string& basePath, std::string  absolutePath, uintmax_t size,
+                                 Directory_entry_TYPE type) : _absolutePath(std::move(absolutePath)), _type(type){
 
     //get relative path from absolutePath and baseDir
-    std::smatch m;
-    std::regex e ("(" + std::regex_replace(basePath, std::regex("\\/"), "\\/") + ")(.*)");
 
-    if(std::regex_match (absolutePath,m,e))
-        relativePath = m[2];
-    else    //TODO maybe it is better to create an exception class for Directory entry
-        throw std::runtime_error("Error getting relative from absolute path"); //if the absolute path does not contain the basePath
+    std::smatch m;  //regex match
+    std::regex e ("(" + basePath + ")(.*)");    //regex to be used to extract the relative path from the absolute path
 
-    //if it is a file then set its size, if it is a directory then size is 0
-    this->size = type==Directory_entry_TYPE::file?size:0;
+    //match the absolute path against the regex (does the absolute path contain the base path?)
+    if(std::regex_match (_absolutePath,m,e))
+        //if there was a match extract the relative path (group number 2)
+        _relativePath = m[2];
+    else
+        //if the absolute path does not contain the basePath
+        throw std::runtime_error("Could not obtain relative path from absolute path");
 
-    //get last write time from the file and convert it to string
-    last_write_time = get_time_from_file();
+    //set the size, if the element is a file then use its size,
+    //if it is a directory (or notFileNorDirectory) then the size is 0
+    _size = _type == Directory_entry_TYPE::file ? size : 0;
 
-    if(type == Directory_entry_TYPE::file){
-        //calculate hash
+    //get last write time from filesystem
+    _lastWriteTime = get_time_from_file();
+
+    //if the element si a file then calculate also its hash
+    if(_type == Directory_entry_TYPE::file){
         HashMaker hm;
 
-        std::ifstream infile;
-        infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
-        if(infile.is_open()){
-            while(infile){
-                char buf[MAXBUFFSIZE] = {0};    //I need this buffer to be all 0s for every line
-                infile.getline(buf, MAXBUFFSIZE);
-                hm.update(buf, MAXBUFFSIZE);
+        std::ifstream file;
+        file.open(_absolutePath, std::ifstream::in | std::ifstream::binary);   //open the file
+
+        char buff[MAXBUFFSIZE]; //buffer
+
+        if(file.is_open()){
+            while(file.read(buff, MAXBUFFSIZE)) {  //get bytes from file
+                hm.update(buff, file.gcount());    //update the HashMaker hash with the
             }
         }
 
-        hash = hm.get();
+        file.close();   //close the file
+
+        _hash = hm.get();   //get the computed Hash
     }
 }
 
 /**
- * alternative constructor useful when handling data retrieved from a db
+ * Directory_entry constructor overload with the base path, element's absolute path, size, type,
+ *  last write time and hash
  *
- * @param basePath base path of the entry
- * @param relativePath relative path of the entry
- * @param size size of the entry
- * @param type type of the entry (file or directory)
- * @param lastWriteTime lastWriteTime of the entry in textual format
+ * @param basePath base path to be used for the relative path computation
+ * @param absolutePath element's absolute path (in filesystem)
+ * @param size element's size (0 for directories)
+ * @param type element's type: file or directory (or notFileNorDirectory)
+ * @param lastWriteTime element's lastWriteTime in textual format
+ * @param hash element's hash
  *
  * @author Michele Crepaldi s269551
  */
-Directory_entry::Directory_entry(const std::string& basePath, const std::string& relativePath, uintmax_t size, const std::string &type, std::string  lastWriteTime, Hash h):
-        relativePath(relativePath),
-        absolutePath(basePath + relativePath),
-        last_write_time(std::move(lastWriteTime)),
-        size(size),
-        hash(h){
+Directory_entry::Directory_entry(const std::string &basePath, const std::string &relativePath, uintmax_t size,
+                                 const std::string &type, std::string lastWriteTime, Hash hash):
+        _relativePath(relativePath),
+        _absolutePath(basePath + relativePath),
+        _lastWriteTime(std::move(lastWriteTime)),
+        _size(size),
+        _hash(hash){
 
     if(type == "file")
-        this->type = Directory_entry_TYPE::file;
+        this->_type = Directory_entry_TYPE::file;
     else if(type == "directory")
-        this->type = Directory_entry_TYPE::directory;
+        this->_type = Directory_entry_TYPE::directory;
     else
-        this->type = Directory_entry_TYPE::notAType;
+        this->_type = Directory_entry_TYPE::notFileNorDirectory;
 }
 
 /**
- * operator == redefinition for the Directory_entry class
+ * Directory_entry class operator== override
  *
- * @param other the other Directory_entry to compare this to
+ * @param other the other Directory_entry to compare this Directory_entry with
  * @return true if the two Directory entries are equal, false otherwise
  *
  * @author Michele Crepaldi s269551
  */
 bool Directory_entry::operator==(Directory_entry &other){
-    if(this->getType() != other.getType())
+    if(this->getType() != other.getType())  //check the type
         return false;
 
-    if(this->getAbsolutePath() != other.getAbsolutePath())
+    if(this->getAbsolutePath() != other.getAbsolutePath())  //check the absolute path
         return false;
 
-    if(this->getRelativePath() != other.getRelativePath())
+    if(this->getRelativePath() != other.getRelativePath())  //check the relative path
         return false;
 
-    if(this->getSize() != other.getSize())
+    if(this->getSize() != other.getSize())  //check the size
         return false;
 
-    if(this->getLastWriteTime() != other.getLastWriteTime())
+    if(this->getLastWriteTime() != other.getLastWriteTime())    //check the last write time
         return false;
 
-    if(this->getHash() != other.getHash())
+    if(this->getHash() != other.getHash())  //check the Hash
         return false;
 
     return true;
 }
 
 /**
- * get directory entry path
+ * directory entry relative path getter method
  *
- * @return path string
+ * @return element relative path
  *
  * @author Michele Crepaldi s269551
  */
 std::string& Directory_entry::getRelativePath() {
-    return relativePath;
+    return _relativePath;
 }
 
 /**
- * get directory entry name
+ * directory entry absolute path getter method
  *
- * @return name string
+ * @return element absolute path
  *
  * @author Michele Crepaldi s269551
  */
 std::string& Directory_entry::getAbsolutePath() {
-    return absolutePath;
+    return _absolutePath;
 }
 
 /**
- * get directory entry size
+ * directory entry size getter method
  *
- * @return size
+ * @return element size
  *
  * @author Michele Crepaldi s269551
  */
 uintmax_t Directory_entry::getSize() const {
-    return size;
+    return _size;
 }
 
 /**
- * get directory entry type
+ * directory entry type getter method
  *
- * @return type
+ * @return element type
  *
  * @author Michele Crepaldi s269551
  */
 Directory_entry_TYPE Directory_entry::getType() {
-    return type;
+    return _type;
 }
 
 /**
- * get directory entry last write time
+ * directory entry last write time getter method
  *
- * @return last write time
+ * @return element last write time
  *
  * @author Michele Crepaldi s269551
  */
 std::string& Directory_entry::getLastWriteTime() {
-    return last_write_time;
+    return _lastWriteTime;
 }
 
 /**
+ * directory entry type checker method, it checks if the element is a file
  *
- * @return true if this represents a file, false otherwise
+ * @return whether this this element is a file or not
  *
  * @author Michele Crepaldi s269551
  */
 bool Directory_entry::is_regular_file() {
-    return type == Directory_entry_TYPE::file;
+    return _type == Directory_entry_TYPE::file;
 }
 
 /**
+ * directory entry type checker method, it checks if the element is a directory
  *
- * @return true if this represents a directory, false otherwise
+ * @return whether this this element is a directory or not
  *
  * @author Michele Crepaldi s269551
  */
 bool Directory_entry::is_directory() {
-    return type == Directory_entry_TYPE::directory;
+    return _type == Directory_entry_TYPE::directory;
 }
 
 /**
- * get the Hash associated to this directory entry
+ * directory entry Hash getter method
  *
- * @return Hash object associated to this element
+ * @return element Hash
  *
  * @author Michele Crepaldi s269551
  */
 Hash& Directory_entry::getHash() {
-    return hash;
+    return _hash;
 }
 
 /**
- * Utility function to get the last write (modify) time of a file as string;
- * <p> It is needed until c++20 because until then the lastWriteTime function of std::filesystem returns a file_time_type
- * variable which cannot be portably converted to a time_t nor to a string and then back
+ * Directory_entry utility method to get the last write (modify) time of a file as string;
+ *  <p> It is needed until c++20 because for now the lastWriteTime function of std::filesystem returns a
+ *  file_time_type variable which cannot be portably converted to a time_t nor to a string and then back
  *
- * @param path of the file to get the last write time of
- * @return string (readable) representation of the time got
+ * @return string (readable) representation of the last write time got from filesystem
  *
  * @throw runtime_error in case of errors with stat function
  *
  * @author Michele Crepaldi s269551
  */
 std::string Directory_entry::get_time_from_file(){
-    setenv("TZ", "UTC", 1);
-    struct stat buf{};
-    if(stat(absolutePath.data(), &buf) != 0)    //get file info
-        throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
+    setenv("TZ", "UTC", 1); //set "TZ" (Time zone) environment variable to "UTC"
 
-    std::time_t tt = buf.st_mtime;  //get file last modified time
+    struct stat buf{};
+    if(stat(_absolutePath.data(), &buf) != 0)    //get file info
+        throw std::runtime_error("Error in retrieving directory entry info");
+
+    std::time_t tt = buf.st_mtime;      //get file last modified time
     std::tm *gmt = std::localtime(&tt); //convert std::time_t to std::tm
+
     std::stringstream buffer;
     buffer << std::put_time(gmt, "%A, %d %B %Y %H:%M %Z"); //convert std::tm to a readable string
-    return buffer.str();
+    return std::move(buffer.str());
 }
 
 /**
- * Utility function to set the last write (modify) time of a file given as string (readable);
- * <p> It is needed until c++20 because until then the lastWriteTime function of std::filesystem returns a file_time_type
- * variable which cannot be portably converted to a time_t nor to a string and then back
+ * Directory_entry utility method to set the last write (modify) time of a file given as string (readable);
+ *  <p> It is needed until c++20 because for now the lastWriteTime function of std::filesystem returns a
+ *  file_time_type variable which cannot be portably converted to a time_t nor to a string and then back
  *
- * @param absolutePath of the file to get the last write time of
- * @param time string (readable) representation of the time to use
+ * @param time string (readable) representation of the time to set
  *
  * @throw runtime_error in case of errors with stat or utime functions
  *
  * @author Michele Crepaldi s269551
  */
 void Directory_entry::set_time_to_file(const std::string &time){
-    setenv("TZ", "UTC", 1);
+    setenv("TZ", "UTC", 1); //set "TZ" (Time zone) environment variable to "UTC"
+
     struct stat buf{};
-    if(stat(absolutePath.data(), &buf) != 0)    //get file info
-        throw std::runtime_error("Error in retrieving file info"); //throw exception in case of errors
+    if(stat(_absolutePath.data(), &buf) != 0)    //get file info
+        throw std::runtime_error("Error in retrieving directory entry info");
 
     std::tm gmt{};
     std::stringstream buffer;
@@ -292,41 +308,62 @@ void Directory_entry::set_time_to_file(const std::string &time){
     std::time_t tt = mktime(&gmt);  //convert std::tm to time_t
 
     struct utimbuf new_times{};
-    new_times.actime = buf.st_atime; //keep atime unchanged
-    new_times.modtime = tt; //set mtime to the time given as input
-    if(utime(absolutePath.data(), &new_times) != 0) //set the new times for the file
-        throw std::runtime_error("Error in setting file time"); //throw exception in case of errors
+    new_times.actime = buf.st_atime;    //keep atime unchanged
+    new_times.modtime = tt;             //set mtime to the time given as input
+    if(utime(_absolutePath.data(), &new_times) != 0) //set the new times for the file
+        throw std::runtime_error("Error in setting file time");
 
-    //get last write time from the file and convert it to string
-    last_write_time = get_time_from_file();
+    //get last write time from the file and convert it to string (in order to update _lastWriteTime)
+    _lastWriteTime = get_time_from_file();
 }
 
+/**
+ * Directory_entry utility method, it checks if the element exists in the filesystem
+ *
+ * @return whether the element exists or not
+ *
+ * @author Michele Crepaldi s269551
+ */
 bool Directory_entry::exists(){
-    return std::filesystem::exists(absolutePath);
+    return std::filesystem::exists(_absolutePath);
 }
 
+/**
+ * Directory_entry utility method, it updates all the fields of this element using the values found in the
+ *  filesystem (the element is identified by its absolute path)
+ *
+ * @throw runtime_error if the element does not exist anymore
+ *
+ * @author Michele Crepaldi s269551
+ */
 void Directory_entry::updateValues(){
-    std::filesystem::directory_entry entry{absolutePath};
-    size = entry.is_regular_file()?entry.file_size():0;
-    type = entry.is_regular_file()?Directory_entry_TYPE::file:(entry.is_directory()?Directory_entry_TYPE::directory:Directory_entry_TYPE::notAType);
+    if(!std::filesystem::exists(_absolutePath))
+        throw std::runtime_error("Error updating directory entry, it does not exist");
 
-    //get last write time from the file and convert it to string
-    last_write_time = get_time_from_file();
+    std::filesystem::directory_entry entry{_absolutePath};  //actual entry in filesystem
+    _size = entry.is_regular_file() ? entry.file_size() : 0;
+    _type = entry.is_regular_file() ? Directory_entry_TYPE::file : (entry.is_directory() ? Directory_entry_TYPE::directory : Directory_entry_TYPE::notFileNorDirectory);
 
-    if(type == Directory_entry_TYPE::file){
-        //calculate hash
+    //get last write time from filesystem
+    _lastWriteTime = get_time_from_file();
+
+    //if the element si a file then calculate also its hash
+    if(_type == Directory_entry_TYPE::file){
         HashMaker hm;
 
-        std::ifstream infile;
-        infile.open(absolutePath, std::ifstream::in | std::ifstream::binary);
-        if(infile.is_open()){
-            while(infile){
-                char buf[MAXBUFFSIZE] = {0};    //I need this buffer to be all 0s for every line
-                infile.getline(buf, MAXBUFFSIZE);
-                hm.update(buf, MAXBUFFSIZE);
+        std::ifstream file;
+        file.open(_absolutePath, std::ifstream::in | std::ifstream::binary);   //open the file
+
+        char buff[MAXBUFFSIZE]; //buffer
+
+        if(file.is_open()){
+            while(file.read(buff, MAXBUFFSIZE)) {  //get bytes from file
+                hm.update(buff, file.gcount());    //update the HashMaker hash with the
             }
         }
 
-        hash = hm.get();
+        file.close();   //close the file
+
+        _hash = hm.get();   //get the computed Hash
     }
 }

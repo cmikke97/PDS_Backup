@@ -27,6 +27,7 @@
 namespace client {
     /**
      * custom deleter template for class T
+     *
      * @tparam T class of the object to delete
      *
      * @author Michele Crepaldi s269551
@@ -35,7 +36,7 @@ namespace client {
     struct DeleterOf;
 
     /**
-     * template specialization for the class sqlite3
+     * template specialization for the sqlite3 class
      *
      * @author Michele Crepaldi s269551
      */
@@ -153,7 +154,7 @@ namespace client {
 
     /**
      * DatabaseException exception class that may be returned by the Database class
-     * (derives from runtime_error)
+     *  (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */

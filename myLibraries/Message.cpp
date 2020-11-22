@@ -20,9 +20,9 @@ std::mutex Message::_access;
 
 /**
  * Message constructor, the message will contain a progress percentage, if you don't want it use the static
- * method TS_Message::print. The TS_Message object can be used with << operator.
- * <p>The format used is the following:</p>
- * <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
+ *  method TS_Message::print. The TS_Message object can be used with << operator.
+ *  <p>The format used is the following:</p>
+ *  <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
  *
  * @param head head of the message
  * @param body body of the message
@@ -42,8 +42,8 @@ Message::Message(std::string  head, std::string  body, std::string  tail) :
 
 /**
  * method used to print the message (in a thread safe way)
- * <p>The format used is the following:</p>
- * <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
+ *  <p>The format used is the following:</p>
+ *  <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
  *
  * @param out ostream to print to
  *
@@ -76,8 +76,8 @@ void Message::update(int newPerc){
 
 /**
  * TS_message operator<< override; used to print the message (always in a thread safe way)
- * <p>The format used is the following:</p>
- * <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
+ *  <p>The format used is the following:</p>
+ *  <p>(TIME) - [HEAD] - BODY [          ] xxx% - TAIL
  *
  * @param out ostream to print to
  * @param m Message to print
@@ -92,8 +92,8 @@ std::ostream& operator<< (std::ostream &out, Message &m){
 
 /**
  * static function to print to ostream in a thread safe way.
- * <p>The format used is the following (if the TAIL is "" it is not printed):</p>
- * <p>(TIME) - [HEAD] - BODY - TAIL</p>
+ *  <p>The format used is the following (if the TAIL is "" it is not printed):</p>
+ *  <p>(TIME) - [HEAD] - BODY - TAIL</p>
  *
  * @param out ostream to print to
  * @param head message head
@@ -122,8 +122,8 @@ void Message::print(std::ostream &out, const std::string &head, const std::strin
 
 /**
  * static function to print to ostream in a thread safe way. Overload with no tail.
- * <p>The format used is the following:</p>
- * <p>(TIME) - [HEAD] - BODY</p>
+ *  <p>The format used is the following:</p>
+ *  <p>(TIME) - [HEAD] - BODY</p>
  *
  * @param out ostream to print to
  * @param head head of the message

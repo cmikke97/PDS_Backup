@@ -24,7 +24,7 @@
  * @author Michele Crepaldi s269551
  */
 client::ProtocolManager::ProtocolManager(Socket &s, unsigned int max, unsigned int ver, unsigned int maxTries, std::string  path) : s(s), start(0), end(0), tries(0), maxTries(maxTries), size(max), protocolVersion(ver), path_to_watch(std::move(path)) {
-    auto config = Config::getInstance(CONFIG_FILE_PATH);
+    auto config = Config::getInstance();
     waitingForResponse.resize(size+1);
     db = Database::getInstance();
     max_data_chunk_size = config->getMaxDataChunkSize();

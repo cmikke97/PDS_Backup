@@ -1,7 +1,7 @@
 //
 // Created by Michele Crepaldi s269551 on 01/11/2020
-// Finished on 20/11/2020
-// Last checked on 20/11/2020
+// Finished on 21/11/2020
+// Last checked on 21/11/2020
 //
 
 #include "RandomNumberGenerator.h"
@@ -16,7 +16,7 @@
  * RandomNumberGenerator constructor
  *
  * @throws RngException:
- * <b>init</b> in case the RNG could not be initialized
+ *  <b>init</b> in case the RNG could not be initialized
  *
  * @author Michele Crepaldi s269551
  */
@@ -44,7 +44,7 @@ RandomNumberGenerator::~RandomNumberGenerator() {
  * @param sz size (bytes) of the randomly generated number
  *
  * @throws RngException:
- * <b>generate</b> in case the RNG could not generate a random number
+ *  <b>generate</b> in case the RNG could not generate a random number
  *
  * @author Michele Crepaldi s269551
  */
@@ -108,9 +108,9 @@ std::string RandomNumberGenerator::string_to_hex(const std::string& input)
 
 /**
  * lookup table from ASCII char to its byte value
- * <p><b>examples:</p>
- * <p>('0' = 48, hexvalues[48] = 0)
- * <p>('A' = 65, hexvalues[65] = 10)
+ *  <p><b>examples:</p>
+ *  <p>('0' = 48, hexvalues[48] = 0)
+ *  <p>('A' = 65, hexvalues[65] = 10)
  *
  * @param hex_digit hex digit to convert to byte
  * @return byte representation of the hex digit passed as input

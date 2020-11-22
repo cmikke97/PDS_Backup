@@ -28,6 +28,7 @@
 namespace server {
     /**
      * custom deleter template for class T
+     *
      * @tparam T class of the object to delete
      *
      * @author Michele Crepaldi s269551
@@ -36,7 +37,7 @@ namespace server {
     struct DeleterOf_pwd;
 
     /**
-     * template specialization for the class sqlite3
+     * template specialization for the sqlite3 class
      *
      * @author Michele Crepaldi s269551
      */
@@ -150,7 +151,7 @@ namespace server {
 
     /**
      * DatabaseException_pwd exception class that may be returned by the Database_pwd class
-     * (derives from runtime_error)
+     *  (derives from runtime_error)
      *
      * @author Michele Crepaldi s269551
      */

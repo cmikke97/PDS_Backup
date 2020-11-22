@@ -9,7 +9,7 @@
 #include <getopt.h>
 #include <regex>
 #include "../myLibraries/Socket.h"
-#include "../myLibraries/TSCircular_vector.h"
+#include "../myLibraries/Circular_vector.h"
 #include "Thread_guard.h"
 #include "Database_pwd.h"
 #include "Database.h"
@@ -23,9 +23,9 @@
 #define VERSION 1
 
 #define PORT 8081
-#define SOCKET_TYPE socketType::TLS
+#define SOCKET_TYPE SocketType::TLS
 
-void single_server(TSCircular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
+void single_server(Circular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
 void displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
@@ -211,7 +211,8 @@ int main(int argc, char** argv) {
     }
 
     try{
-        auto config = server::Config::getInstance(CONFIG_FILE_PATH);
+        server::Config::setPath(CONFIG_FILE_PATH);
+        auto config = server::Config::getInstance();
         server::Database::setPath(config->getServerDatabasePath()); //set the database path
         server::Database_pwd::setPath(config->getPasswordDatabasePath());   //set the password database path
         auto pass_db = server::Database_pwd::getInstance();
@@ -285,7 +286,10 @@ int main(int argc, char** argv) {
             Message::print(std::cout, "INFO", "Server base path:", config->getServerBasePath());
             ServerSocket::specifyCertificates(config->getCertificatePath(), config->getPrivateKeyPath(), config->getCaFilePath());
             ServerSocket server{PORT, config->getListenQueue(), SOCKET_TYPE};   //initialize server socket with port
-            TSCircular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
+
+            Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(server.getIP()) + ":" + std::to_string(PORT) + "]");
+
+            Circular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
 
             std::atomic<bool> server_thread_stop = false, main_stop = false;   //atomic boolean to force the server threads to stop
             std::vector<std::thread> threads;
@@ -316,8 +320,8 @@ int main(int argc, char** argv) {
     }
     catch (SocketException &e) {
         switch(e.getCode()){
-            case socketError::create:
-            case socketError::accept:
+            case SocketError::create:
+            case SocketError::accept:
             default:
                 Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
                 return 1;
@@ -381,7 +385,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
+void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
     while(!thread_stop.load()){ //loop until we are told to stop
         //Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
 
@@ -398,7 +402,8 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         bool loop = true;
 
         try{
-            auto config = server::Config::getInstance(CONFIG_FILE_PATH);
+            server::Config::setPath(CONFIG_FILE_PATH);
+            auto config = server::Config::getInstance();
 
             server::ProtocolManager pm{sock, address, VERSION};
 
@@ -473,7 +478,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-                    Socket tmp{socketType::TCP};
+                    Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
@@ -483,25 +488,25 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
         }
         catch (SocketException &e) {
             switch(e.getCode()){
-                case socketError::read: //error in reading from socket
-                case socketError::write:    //error in writing to socket
-                case socketError::closed:    //socket was closed by client
+                case SocketError::read: //error in reading from socket
+                case SocketError::write:    //error in writing to socket
+                case SocketError::closed:    //socket was closed by client
                     Message::print(std::cout, "EVENT", address, "disconnected.");
                     continue; //error in the current socket, continue with the next one
 
                 //added for completeness, will never be triggered in the server threads
-                case socketError::create:   //error in creating socket -> Fatal error
-                case socketError::accept:   //error in accepting on serverSocket -> Fatal error
-                case socketError::bind:     //error in binding serverSocket -> Fatal error
-                case socketError::connect:  //error in connecting to serverSocket (on socket) -> Fatal error
-                case socketError::getMac:   //error in getting the machine MAC address -> Fatal error
+                case SocketError::create:   //error in creating socket -> Fatal error
+                case SocketError::accept:   //error in accepting on serverSocket -> Fatal error
+                case SocketError::bind:     //error in binding serverSocket -> Fatal error
+                case SocketError::connect:  //error in connecting to serverSocket (on socket) -> Fatal error
+                case SocketError::getMac:   //error in getting the machine MAC address -> Fatal error
                 default:
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "Socket Exception", e.what());
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-                    Socket tmp{socketType::TCP};
+                    Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
@@ -530,7 +535,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-                    Socket tmp{socketType::TCP};
+                    Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
@@ -556,7 +561,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-                    Socket tmp{socketType::TCP};
+                    Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
@@ -579,7 +584,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-                    Socket tmp{socketType::TCP};
+                    Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
@@ -595,7 +600,7 @@ void single_server(TSCircular_vector<std::pair<std::string, Socket>> &sockets, s
 
             server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
-            Socket tmp{socketType::TCP};
+            Socket tmp{SocketType::TCP};
             tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
             tmp.closeConnection();

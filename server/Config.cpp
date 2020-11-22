@@ -57,30 +57,45 @@
 
 std::shared_ptr<server::Config> server::Config::config_;
 std::mutex server::Config::mutex_;
+std::string server::Config::path_;
+
+/**
+ * Config class path_ variable setter
+ *
+ * @param path path of the config file on disk
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::Config::setPath(std::string path){
+    path_ = std::move(path);    //set the path_
+}
 
 /**
  * Config class singleton instance getter method
  *
- * @param path path of the config file on disk
  * @return Config instance
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<server::Config> server::Config::getInstance(const std::string &path) {
+std::shared_ptr<server::Config> server::Config::getInstance() {
     std::lock_guard<std::mutex> lock(mutex_);
     if(config_ == nullptr) //first time, or when it was released from everybody
-        config_ = std::shared_ptr<Config>(new Config(path));  //create the database object
+        config_ = std::shared_ptr<Config>(new Config());  //create the database object
     return config_;
 }
 
 /**
  * (protected) constructor ot the configuration object
  *
- * @param path path of the file to retrieve configuration from
+ * @throws ConfigException:
+ *  <b>path</b> if no path was set before this call
  *
  * @author Michele Crepaldi s269551
  */
-server::Config::Config(std::string path) : path_(std::move(path)) { //set path
+server::Config::Config() {
+    if(path_.empty())   //a path must be previously set
+        throw ConfigException("No path set", ConfigError::path);
+
     _load(); //load the configuration variables from file
 }
 
@@ -151,10 +166,10 @@ void addVariables(std::fstream &file, const std::string (&variables)[Rows][3])
  * method to be used to load the configuration from file (it creates the file with default values if it does not exist)
  *
  * @throws ConfigException:
- * <b>justCreated</b> in case the file did not exist and a new one was just created (some variables are host
- * dependant, for these variables there are no default values; the user has to modify the file and restart the program).
+ *  <b>justCreated</b> in case the file did not exist and a new one was just created (some variables are host
+ *  dependant, for these variables there are no default values; the user has to modify the file and restart the program).
  * @throws ConfigException:
- * <b>open</b> in case the config file could not be opened.
+ *  <b>open</b> in case the config file could not be opened.
  *
  * @author Michele Crepaldi s269551
  */
@@ -404,13 +419,13 @@ const std::string& server::Config::getServerDatabasePath() {
 
 /**
  * server base folder path getter method (HOST specific, this has no default values; so if no value was provided
- * an exception will be thrown)
+ *  an exception will be thrown)
  *
  * @return server base folder path
  *
  * @throws ConfigException:
- * <b>serverBasePath</b> in case no value was provided (there are no defaults for this variable) OR if the
- * value provided references a non existing directory or something which is not a directory.
+ *  <b>serverBasePath</b> in case no value was provided (there are no defaults for this variable) OR if the
+ *  value provided references a non existing directory or something which is not a directory.
  *
  * @author Michele Crepaldi s269551
  */
@@ -429,12 +444,12 @@ const std::string& server::Config::getServerBasePath() {
 
 /**
  * temp folder path getter method (HOST specific, this has no default values; so if no value was provided
- * an exception will be thrown)
+ *  an exception will be thrown)
  *
  * @return temp folder path
  *
  * @throws ConfigException:
- * <b>tempPath</b> in case no value was provided (there are no defaults for this variable).
+ *  <b>tempPath</b> in case no value was provided (there are no defaults for this variable).
  *
  * @author Michele Crepaldi s269551
  */

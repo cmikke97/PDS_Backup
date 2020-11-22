@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(SOURCE_FILES main.cpp Thread_guard.h Thread_guard.cpp ProtocolManager.h ProtocolManager.cpp Database_pwd.cpp
         Database_pwd.h Database.h Database.cpp Config.h Config.cpp)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
-        ../myLibraries/TSCircular_vector.cpp ../myLibraries/TSCircular_vector.h ../myLibraries/Directory_entry.cpp
+        ../myLibraries/Circular_vector.cpp ../myLibraries/Circular_vector.h ../myLibraries/Directory_entry.cpp
         ../myLibraries/Directory_entry.h ../myLibraries/RandomNumberGenerator.h ../myLibraries/RandomNumberGenerator.cpp
         ../myLibraries/Message.cpp ../myLibraries/Message.h ../myLibraries/Validator.cpp ../myLibraries/Validator.h)
 

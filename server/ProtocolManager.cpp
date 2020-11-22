@@ -678,7 +678,7 @@ server::ProtocolManager::ProtocolManager(Socket &s, std::string address, int ver
     protocolVersion(ver),
     recovered(false){
 
-    auto config = Config::getInstance(CONFIG_FILE_PATH);
+    auto config = Config::getInstance();
     basePath = config->getServerBasePath();
     temporaryPath = config->getTempPath();
     tempNameSize = config->getTmpFileNameSize();

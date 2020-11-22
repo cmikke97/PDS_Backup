@@ -4,8 +4,8 @@
 // Last checked on 21/11/2020
 //
 
-#ifndef TS_MESSAGE_H
-#define TS_MESSAGE_H
+#ifndef MESSAGE_H
+#define MESSAGE_H
 
 #include <iostream>
 #include <mutex>
@@ -13,7 +13,7 @@
 
 /**
  * Message class. Simple class to print messages to an ostream in a thread safe way
- * and to display a progress bar.
+ *  and to display a progress bar.
  *
  * <p>Static print methods may be used if the progress bar is not needed
  *
@@ -51,4 +51,4 @@ private:
 };
 
 
-#endif //TS_MESSAGE_H
+#endif //MESSAGE_H

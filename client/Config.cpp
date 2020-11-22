@@ -62,30 +62,45 @@
 //static variables definition
 std::shared_ptr<client::Config> client::Config::config_;
 std::mutex client::Config::mutex_;
+std::string client::Config::path_;
+
+/**
+ * Config class path_ variable setter
+ *
+ * @param path path of the config file on disk
+ *
+ * @author Michele Crepaldi s269551
+ */
+void client::Config::setPath(std::string path){
+    path_ = std::move(path);    //set the path_
+}
 
 /**
  * Config class singleton instance getter
  *
- * @param path path of the config file on disk
  * @return Config instance
  *
  * @author Michele Crepaldi s269551
  */
-std::shared_ptr<client::Config> client::Config::getInstance(const std::string &path) {
+std::shared_ptr<client::Config> client::Config::getInstance() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if(config_ == nullptr)
-        config_ = std::shared_ptr<Config>(new Config(path));  //create the database object
+    if(config_ == nullptr) //first time, or when it was released from everybody
+        config_ = std::shared_ptr<Config>(new Config());  //create the database object
     return config_;
 }
 
 /**
  * (protected) constructor ot the configuration object
  *
- * @param path path of the file to retrieve configuration from
+ * @throws ConfigException:
+ *  <b>path</b> if no path was set before this call
  *
  * @author Michele Crepaldi s269551
  */
-client::Config::Config(std::string path) : path_(std::move(path)) { //set path
+client::Config::Config() {
+    if(path_.empty())   //a path must be previously set
+        throw ConfigException("No path set", ConfigError::path);
+
     _load(); //load the configuration variables from file
 }
 
@@ -156,10 +171,10 @@ void addVariables(std::fstream &file, const std::string (&variables)[rows][3])
  * method to be used to load the configuration from file (it creates the file with default values if it does not exist)
  *
  * @throws ConfigException:
- * <b>justCreated</b> error in case the file did not exist and a new one was just created (some variables are host
- * dependant, for these variables there are no default values; the user has to modify the file and restart the program).
+ *  <b>justCreated</b> error in case the file did not exist and a new one was just created (some variables are host
+ *  dependant, for these variables there are no default values; the user has to modify the file and restart the program).
  * @throws ConfigException:
- * <b>open</b> error in case the config file could not be opened.
+ *  <b>open</b> error in case the config file could not be opened.
  *
  * @author Michele Crepaldi s269551
  */
@@ -266,7 +281,7 @@ void client::Config::_load() {
 
         //when I create the file some values cannot be defaulted, since they are host dependant;
         //ask the user to modify them shutting down the program
-        throw ConfigException("Configuration file created, modify it and restart.", configError::justCreated);
+        throw ConfigException("Configuration file created, modify it and restart.", ConfigError::justCreated);
     }
 
     //open configuration file as input
@@ -351,34 +366,34 @@ void client::Config::_load() {
     }
     else{
         //if the file could not be opened throw exception
-        throw ConfigException("Could not open configuration file", configError::open);
+        throw ConfigException("Could not open configuration file", ConfigError::open);
     }
 }
 
 /**
  * path to watch (folder) getter (HOST specific, this has no default values; so if no value was provided an exception
- * will be thrown)
+ *  will be thrown)
  *
  * @return path to watch
  *
  * @throws ConfigException:
- * <b>pathToWatch</b> error in case no value was provided (there are no defaults for this variable) OR if the value
- * provided references a non existing directory or something which is not a directory.
+ *  <b>pathToWatch</b> error in case no value was provided (there are no defaults for this variable) OR if the value
+ *  provided references a non existing directory or something which is not a directory.
  *
  * @author Michele Crepaldi s269551
  */
 const std::string& client::Config::getPathToWatch() {
     //value required.. if it is empty throw exception (there is no default value for this variable)
     if(_path_to_watch.empty())
-        throw ConfigException("Path to watch was not set", configError::pathToWatch);
+        throw ConfigException("Path to watch was not set", ConfigError::pathToWatch);
 
     //if the path to watch set references a non-existent folder
     if(!std::filesystem::exists(_path_to_watch))
-        throw ConfigException("Path to watch does not exist", configError::pathToWatch);
+        throw ConfigException("Path to watch does not exist", ConfigError::pathToWatch);
 
     //if the path to watch set references something which is not a folder
     if(!std::filesystem::is_directory(_path_to_watch))
-        throw ConfigException("Path to watch is not a directory", configError::pathToWatch);
+        throw ConfigException("Path to watch is not a directory", ConfigError::pathToWatch);
 
     return _path_to_watch;
 }
