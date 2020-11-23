@@ -11,7 +11,7 @@ message ClientMessage{
 
   string path = 4;            //for PROB, STOR, MKD
   uint64 fileSize = 5;        //for STOR
-  string lastWriteTime = 6;   //for STOR, MKD
+  string lastWriteTime = 6;   //for PROB, STOR, MKD
   bytes hash = 7;             //for PROB, STOR, DELE, MKD, RMD
   bytes data = 8;             //for DATA
   string username = 9;        //for AUTH
@@ -22,7 +22,7 @@ message ClientMessage{
 
   enum Type{
     NOOP = 0;   //has version, type
-    PROB = 1;   //has version, type, path, hash
+    PROB = 1;   //has version, type, path, hash, lastWriteTime
     STOR = 2;   //has version, type, path, fileSize, lastWriteTime, hash
     DELE = 3;   //has version, type, path, hash
     MKD = 4;    //has version, type, path, lastWriteTime

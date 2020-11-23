@@ -519,6 +519,7 @@ void client::ProtocolManager::send_PROB(Directory_entry &e){
     clientMessage.set_version(protocolVersion);
     clientMessage.set_type(messages::ClientMessage_Type_PROB);
     clientMessage.set_path(e.getRelativePath());
+    clientMessage.set_lastwritetime(e.getLastWriteTime());
     clientMessage.set_hash(e.getHash().get().first,
                            e.getHash().get().second);
 
