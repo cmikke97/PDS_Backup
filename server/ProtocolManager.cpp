@@ -1,639 +1,935 @@
 //
-// Created by michele on 21/10/2020.
+// Created by Michele Crepaldi s269551 on 21/10/2020
+// Finished on 22/11/2020
+// Last checked on 22/11/2020
 //
+
+#include "ProtocolManager.h"
 
 #include <fstream>
 #include <regex>
-#include "ProtocolManager.h"
+
 #include "../myLibraries/Message.h"
 #include "../myLibraries/RandomNumberGenerator.h"
+#include "Config.h"
 
-//TODO check
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * Config class methods
+ */
 
 /**
- * send an OK response to the client with a code
+ * ProtocolManager send serverMessage method.
+ *  It will send the serverMessage and then clear it
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_send_serverMessage(){
+    //string representation of the serverMessage protobuf
+    std::string tmp = _serverMessage.SerializeAsString();
+
+    //send response message
+    _s.sendString(tmp);
+
+    //it is more efficient to clear the serverMessage protobuf than creating a new one
+    _serverMessage.Clear();
+}
+
+/**
+ * ProtocolManager send OK message method.
+ *  It will set the serverMessage protobuf version, type and code and then send it
  *
  * @param code OK code
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::send_OK(okCode code){
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_OK);
-    serverMessage.set_code(static_cast<int>(code));
+void server::ProtocolManager::_send_OK(OkCode code){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_OK);
 
-    std::string tmp = serverMessage.SerializeAsString();    //crete string
-    s.sendString(tmp);      //send response message
-    serverMessage.Clear();
+    //set ok code
+    _serverMessage.set_code(static_cast<int>(code));
+
+    _send_serverMessage();
 }
 
 /**
- * send a SEND response to the client with the path and hash of the file to send
+ * ProtocolManager send SEND message method.
+ *  It will set the serverMessage protobuf version, type, path and hash and then send it
+ *  (path and hash are taken from last received clientMessage)
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::send_SEND(){
-    //the file was not there -> SEND message
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_SEND);
-    serverMessage.set_path(clientMessage.path());
+void server::ProtocolManager::_send_SEND(){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_SEND);
 
-    serverMessage.set_hash(clientMessage.hash());
+    //set path and hash to the value in the last clientMessage received
+    _serverMessage.set_path(_clientMessage.path());
+    _serverMessage.set_hash(_clientMessage.hash());
 
-    std::string tmp = serverMessage.SerializeAsString();    //crete string
-    s.sendString(tmp);      //send response message
-    serverMessage.Clear();
+    _send_serverMessage();
 }
 
 /**
- * send an ERR response to the client with an error code
+ * ProtocolManager send ERR message method.
+ *  It will set the serverMessage protobuf version, type and code and then send it
  *
  * @param code protocolManagerError code
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::send_ERR(errCode code){
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_ERR);
-    serverMessage.set_code(static_cast<int>(code));
+void server::ProtocolManager::_send_ERR(ErrCode code){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_ERR);
 
-    std::string tmp = serverMessage.SerializeAsString();    //crete string
-    s.sendString(tmp);      //send response message
-    serverMessage.Clear();
+    //set error code
+    _serverMessage.set_code(static_cast<int>(code));
+
+    _send_serverMessage();
 }
 
 /**
- * send a VER response to the client with the version of this protocol Manager
+ * ProtocolManager send VER message method.
+ *  It will set the serverMessage protobuf version, type and new version and then send it
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::send_VER(){
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_VER);
-    serverMessage.set_newversion(protocolVersion);
+void server::ProtocolManager::_send_VER(){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_VER);
 
-    std::string tmp = serverMessage.SerializeAsString(); //crete string
-    serverMessage.Clear();  //send response message
-    s.sendString(tmp);
+    //set new version as the one supported by the protocol manager
+    _serverMessage.set_newversion(_protocolVersion);
+
+    _send_serverMessage();
 }
 
 /**
- * send the STOR message to the server
- *
- * @param e Directory_entry to store
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::send_STOR(const std::string &path, Directory_entry &e){
-    //create message
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_STOR);
-    serverMessage.set_path(path);
-    serverMessage.set_filesize(e.getSize());
-    serverMessage.set_lastwritetime(e.getLastWriteTime());
-    serverMessage.set_hash(e.getHash().get().first, e.getHash().get().second);
-
-    //compute message
-    std::string client_temp = serverMessage.SerializeAsString();
-
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    serverMessage.Clear();
-}
-
-/**
- * send the STOR message to the server
- *
- * @param buff data to send
- * @param len length of the data to send
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::send_DATA(char *buff, uint64_t len){
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_DATA);
-    serverMessage.set_data(buff, len);    //insert file block in message
-
-    //send message
-    std::string client_message = serverMessage.SerializeAsString();
-    s.sendString(client_message);
-
-    //clear the message
-    serverMessage.Clear();
-}
-
-/**
- * send the MKD message to the server
+ * ProtocolManager send MKD message method.
+ *  It will set the serverMessage protobuf version, type, path and last write time and then send it
  *
  * @param e Directory_entry to create
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::send_MKD(const std::string &path, Directory_entry &e){
-    //create message
-    serverMessage.set_version(protocolVersion);
-    serverMessage.set_type(messages::ServerMessage_Type_MKD);
-    serverMessage.set_path(path);
-    serverMessage.set_lastwritetime(e.getLastWriteTime());
+void server::ProtocolManager::_send_MKD(const std::string &path, Directory_entry &e){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_MKD);
 
-    //compute message
-    std::string client_temp = serverMessage.SerializeAsString();
+    //set path and last write time
+    _serverMessage.set_path(path);
+    _serverMessage.set_lastwritetime(e.getLastWriteTime());
 
-    //send message to server
-    s.sendString(client_temp);
-
-    //clear the message Object for future use (it is more efficient to re-use the same object than to create a new one)
-    serverMessage.Clear();
+    _send_serverMessage();
 }
 
 /**
- * function to probe the server elements map for the file got in clientMessage
+ * ProtocolManager send STOR message method.
+ *  It will set the serverMessage protobuf version, type, path, file size, last write time and hash and then send it
  *
- * @throw ProtocolManagerException if the element is not a file
+ * @param path relative path of the file on client (with respect to the client base path)
+ * @param element Directory_entry element (file) to store on client
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::probe() {
-    std::string path = clientMessage.path();
-    Hash h = Hash(clientMessage.hash());
-    clientMessage.Clear();
+void server::ProtocolManager::_send_STOR(const std::string &path, Directory_entry &element){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_STOR);
 
-    Message::print(std::cout, "PROB", address + " (" + username + "@" + mac + ")", path);
+    //set the path, filesize, last write time and hash
+    _serverMessage.set_path(path);
+    _serverMessage.set_filesize(element.getSize());
+    _serverMessage.set_lastwritetime(element.getLastWriteTime());
+    _serverMessage.set_hash(element.getHash().get().first, element.getHash().get().second);
 
-    auto el = elements.find(path);
-    if(el == elements.end()) { //if i cannot find the element
-        send_SEND();
-        return;
-    }
-
-    if(!el->second.is_regular_file()) {  //if the element is not a file
-        //there is something with the same name which is not a file -> error
-        send_ERR(errCode::notAFile);    //send error message with cause
-        throw ProtocolManagerException("Probed something which is not a file.", protocolManagerError::client);
-    }
-
-    if(el->second.getHash() != h) {   //if the file hash does not correspond then it means there exists a file which is different
-        //we want to overwrite it so we say to the client to send the file
-        send_SEND();
-        return;
-    }
-
-    //the file has been found -> OK message
-    send_OK(okCode::found);
+    _send_serverMessage();
 }
 
 /**
- * function to interpret the STOR message and to get all the DATA messages for a file;
- * it stores the file in a temporary directory with a temporary random name, when the
- * file transfer is done then it checks the file was correctly saved and moves it to
- * the final destination (overwriting any old existing file); then it updates the server db and elements map
+ * ProtocolManager send DATA message method.
+ *  It will set the serverMessage protobuf version, type, data and then send it
  *
- * @throw ProtocolManagerException if the message version is not supported, if a non-DATA message is encountered
- * before the end of the file transmission, if an error occurred in opening the file and if the file after the end
- * of its transmission is not as expected
+ * @param buff buffer to the data to send
+ * @param len length of the data to send
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::storeFile(){
-    //create expected Directory entry element from the client message
-    Directory_entry expected{basePath, clientMessage.path(), clientMessage.filesize(), "file",
-                             clientMessage.lastwritetime(), Hash{clientMessage.hash()}};
-    clientMessage.Clear();  //clear the client message
+void server::ProtocolManager::_send_DATA(char *buff, uint64_t len){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_DATA);
 
-    Message::print(std::cout, "STOR", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
+    //set the data
+    _serverMessage.set_data(buff, len);
+
+    _send_serverMessage();
+}
+
+/**
+ * ProtocolManager file probe method.
+ *  Used to probe the server elements map for the file got in PROB clientMessage
+ *
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if the element is not a file
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_probe() {
+    //recover user data from database (if not already done previously)
+    if(!_recovered)
+        recoverFromDB();
+
+    std::string path = _clientMessage.path();                   //file relative path
+    std::string lastWriteTime = _clientMessage.lastwritetime(); //file last write time
+    Hash h = Hash(_clientMessage.hash());                       //file hash
+
+
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
+
+
+    Message::print(std::cout, "PROB", _address + " (" + _username + "@" + _mac + ")", path);
+
+    //(string, Directory_entry) pair corresponding to the relative path
+    auto el = _elements.find(path);
+
+    //if i cannot find the element
+    if(el == _elements.end()) {
+
+        //tell the client to send it
+        _send_SEND();
+        return;
+    }
+    //otherwise
+
+    //if the element is not a file
+    if(!el->second.is_regular_file()) {
+        //there is something with the same name which is not a file -> send error message with cause
+        _send_ERR(ErrCode::notAFile);
+        throw ProtocolManagerException("Probed something which is not a file.", ProtocolManagerError::client);
+    }
+
+    //if the file hash does not correspond -> a file with the same name exists but it is different
+    if(el->second.getHash() != h) {
+
+        //we want to overwrite it so tell the client to send it
+        _send_SEND();
+        return;
+    }
+
+    //if the file last write time does not correspond
+    //-> the file exists and it is the same, but it has a different last write time
+    //(maybe on client it was just 'touched')
+    if(el->second.getLastWriteTime() != lastWriteTime){
+
+        //update the last write time to be as the one found in clientMessage
+        el->second.set_time_to_file(lastWriteTime);
+    }
+
+    //the file has been found and is the same -> send OK message
+    _send_OK(OkCode::found);
+}
+
+/**
+ * ProfocolManager file store method.
+ *  Used to interpret the STOR message got from client and to get all the DATA messages for a file;
+ *  it stores the file in a temporary directory with a temporary random name, and when the file transfer is done
+ *  then it checks the file was correctly saved and moves it to the final destination
+ *  (overwriting any old existing file); then it updates the server db and elements map
+ *
+ * @throws ProtocolManagerException:
+ *  <b>version</b> if the DATA message version is not supported (should not happen, but it checks it anyway)
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if the DATA transfer was unexpectedly interrupted by another message type
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if the transferred file is different from its description found in STOR message (so if either its
+ *  size or hash is different)
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if an error occurred in creating the file
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_storeFile(){
+    //recover user data from database (if not already done previously)
+    if(!_recovered)
+        recoverFromDB();
+
+    //expected Directory entry element (got from the client message)
+    Directory_entry expected{_basePath, _clientMessage.path(), _clientMessage.filesize(), "file",
+                             _clientMessage.lastwritetime(), Hash{_clientMessage.hash()}};
+
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
+
+    Message::print(std::cout, "STOR", _address + " (" + _username + "@" + _mac + ")",
+                   expected.getRelativePath());
 
     //create a random temporary name for the file
-    RandomNumberGenerator rng;
-    std::string tmpFileName = "/" + rng.getHexString(tempNameSize) + ".tmp";
+
+    RandomNumberGenerator rng;  //random number generator
+    std::string tmpFileName = "/" + rng.getHexString(_tempNameSize) + ".tmp";   //temporary file name
 
     //check if the temporary folder already exists
-    bool create = !std::filesystem::directory_entry(temporaryPath).exists();
+    bool tmpPathExists = std::filesystem::exists(_temporaryPath);
 
-    if(create)  //if the directory does not already exist
-        std::filesystem::create_directories(temporaryPath);    //create all the directories (if they do not already exist) up to the temporary path
+    //if the temporary directory does not already exist
+    if(!tmpPathExists)
+        //create all the directories (that do not already exist) up to the temporary path
+        std::filesystem::create_directories(_temporaryPath);
 
-    std::ofstream out;
-    out.open( temporaryPath + tmpFileName, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    if(out.is_open()){
+    std::ofstream temporaryFile; //temporary file
+
+    //create the temporary file
+    temporaryFile.open(_temporaryPath + tmpFileName, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+    if(temporaryFile.is_open()){
         try {
-            bool loop;
-            do {
-                std::string message = s.recvString();
-                clientMessage.ParseFromString(message);
+            bool loop = true;
+            while(loop){
+                //receive message from client
 
-                if (clientMessage.version() != protocolVersion) {
+                std::string message = _s.recvString();      //message got from client
+
+                //convert message to clientMessage protobuf
+                _clientMessage.ParseFromString(message);
+
+                //check message version
+                if (_clientMessage.version() != _protocolVersion) { //if the version is different
                     //send the version message
-                    send_VER();
+                    _send_VER();
 
-                    //close the file
-                    out.close();
+                    //close the temporary file
+                    temporaryFile.close();
 
-                    //delete temporary file
-                    std::filesystem::remove(temporaryPath + tmpFileName);
+                    //delete the temporary file
+                    std::filesystem::remove(_temporaryPath + tmpFileName);
 
-                    //throw exception
                     throw ProtocolManagerException("Client is using a different version",
-                                                   protocolManagerError::version);
+                                                   ProtocolManagerError::version);
                 }
 
-                if (clientMessage.type() != messages::ClientMessage_Type_DATA) {
-                    //close the file
-                    out.close();
+                //check message type, it has to be DATA type
+                if (_clientMessage.type() != messages::ClientMessage_Type_DATA) {   //if it is not of type DATA
+                    //close the temporary file
+                    temporaryFile.close();
 
-                    //delete temporary file
-                    std::filesystem::remove(temporaryPath + tmpFileName);
+                    //delete the temporary file
+                    std::filesystem::remove(_temporaryPath + tmpFileName);
 
-                    //no data message with last bool set was encountered before this message, error!
-                    send_ERR(errCode::unexpected);    //send error message with cause
+                    //no DATA message with "last" boolean set was encountered before this message, error!
+
+                    //send error message with cause to client
+                    _send_ERR(ErrCode::unexpected);
 
                     throw ProtocolManagerException("Unexpected message, DATA transfer was not done.",
-                                                   protocolManagerError::client);
+                                                   ProtocolManagerError::client);
                 }
-                loop = !clientMessage.last();  //is this the last data packet? if yes stop the loop
 
-                std::string data = clientMessage.data();    //get the data from message
-                out.write(data.data(), data.size());    //write it to file
+                //is this the last data packet? if yes stop the loop
+                loop = !_clientMessage.last();
 
-                clientMessage.Clear();
-            } while (loop);
+                //data got from the clientMessage protobuf
+                std::string data = _clientMessage.data();
+
+                //write the data to temporary file
+                temporaryFile.write(data.data(), data.size());
+
+                //it is more efficient to clear the clientMessage protobuf than creating a new one
+                _clientMessage.Clear();
+            }
         }
         catch (SocketException &e) {    //in case of socket exceptions while transferring the file I need to delete the temporary file
-            //close the file
-            out.close();
+            //close the temporary file
+            temporaryFile.close();
 
-            //delete temporary file
-            std::filesystem::remove(temporaryPath + tmpFileName);
+            //delete the temporary file
+            std::filesystem::remove(_temporaryPath + tmpFileName);
 
-            //rethrow the exception
+            //re-throw the exception
             throw;
         }
 
-        //close the file
-        out.close();
+        //close the temporary file
+        temporaryFile.close();
 
-        //create a Directory entry which represents the newly created file
-        Directory_entry newFile{temporaryPath, std::filesystem::directory_entry(temporaryPath + tmpFileName)};
-        //change last write time for the file
+        //Directory entry which represents the newly created file
+        Directory_entry newFile{_temporaryPath, std::filesystem::directory_entry(_temporaryPath + tmpFileName)};
+
+        //change last write time for the temporary file to what was expected
         newFile.set_time_to_file(expected.getLastWriteTime());
+
+        //temporary file hash
         Hash hash = newFile.getHash();
 
-        //if the written file has a different size from what expected OR if the calculated hash is different from what expected OR if the lastWriteTime for the file was not successfully set
-        if(newFile.getSize() != expected.getSize() || hash != expected.getHash() || newFile.getLastWriteTime() != expected.getLastWriteTime()) {
-            std::filesystem::remove(temporaryPath + tmpFileName);    //delete temporary file
+        //check if the newly created (temporary) file properties match the expected ones
+        if(newFile.getSize() != expected.getSize() || hash != expected.getHash() ||
+                newFile.getLastWriteTime() != expected.getLastWriteTime()) {
 
-            //some error occurred
-            send_ERR(errCode::store);    //send error message with cause
-            throw ProtocolManagerException("Stored file is different than expected.", protocolManagerError::client);
+            //if the temporary file is not as we expected
+
+            //delete the temporary file
+            std::filesystem::remove(_temporaryPath + tmpFileName);
+
+            //send error message with cause to client
+            _send_ERR(ErrCode::store);
+
+            throw ProtocolManagerException("Stored file is different than expected.",
+                                           ProtocolManagerError::client);
         }
 
-        //get the parent path
+        //get the file parent path from the expected file name
+
+        //file parent path
         std::filesystem::path parentPath = std::filesystem::path(expected.getAbsolutePath()).parent_path();
 
         //check if the parent folder already exists
-        create = !std::filesystem::directory_entry(parentPath).exists();
+        bool parentExists = std::filesystem::exists(parentPath);
 
-        if(create)  //if the directory does not already exist
-            std::filesystem::create_directories(parentPath);    //create all the directories (if they do not already exist) up to the parent path
+        //if the parent directory does not exist
+        if(!parentExists)
+            //create all the directories (that do not already exist) up to the parent path
+            std::filesystem::create_directories(parentPath);
 
-        //take the lastWriteTime of the destination folder before moving the file,
-        //any lastWriteTime modification will be requested by the client so we want to keep the same time
-        Directory_entry parent{basePath, parentPath.string()};
+        //save the lastWriteTime of the destination folder (parent directory) before moving the file,
+        //any lastWriteTime modification to that directory will be requested explicitly by the client,
+        //so we want to keep the same time before and after the file move
+
+        //Directory entry representing the file parent directory
+        Directory_entry parent;
+
+        //only if the parent path is different from server base path get parent Directory entry (otherwise we
+        //have problems getting relative path
+        if(parentPath.string() != _basePath)
+            parent = {_basePath, parentPath.string()};
 
         //If we are here then the file was successfully transferred and its copy on the server is as expected
-        //so move then it can be moved to the final destination
-        std::filesystem::rename(temporaryPath + tmpFileName, expected.getAbsolutePath());
+        //it can be moved to the final destination
+        std::filesystem::rename(_temporaryPath + tmpFileName, expected.getAbsolutePath());
 
-        //reset the parent directory lastWriteTime
-        if(parent.getAbsolutePath() != basePath)
+        //if the parent directory is not the server base path
+        if(parentPath.string() != _basePath)
+            //reset the parent directory lastWriteTime
             parent.set_time_to_file(parent.getLastWriteTime());
 
-        auto el = elements.find(expected.getRelativePath());
-        if(el == elements.end()) {
-            //add to the elements map
-            elements.emplace(expected.getRelativePath(), expected);
+        Message::print(std::cout, "DATA", _address + " (" + _username + "@" + _mac + ")",
+                       expected.getRelativePath());
 
-            //add to db
-            db->insert(username, mac, expected);
+        //update the elements map and db
+
+        //(string,Directory_entry) pair corresponding to the expected relative path
+        auto el = _elements.find(expected.getRelativePath());
+
+        //if the element was not found
+        if(el == _elements.end()) {
+            //add the expected file to the db
+            _db->insert(_username, _mac, expected);
+
+            //add the expected file to the elements map
+            _elements.emplace(expected.getRelativePath(), std::move(expected));
         }
         else{
-            //update the element in elements map
-            el->second = expected;
-
             //update into db
-            db->update(username, mac, expected);
+            _db->update(_username, _mac, expected);
+
+            //update the expected file element in the elements map
+            el->second = std::move(expected);
         }
 
-        Message::print(std::cout, "DATA", address + " (" + username + "@" + mac + ")", expected.getRelativePath());
-
-        //TODO evaluate if to handle socket exception here
-        //the file has been created
-        send_OK(okCode::created);
+        //send ok message to client
+        _send_OK(OkCode::created);
         return;
     }
 
-    //some error occurred
-    send_ERR(errCode::exception);    //send error message with cause
-    throw ProtocolManagerException("Could not open file or something else happened.", protocolManagerError::internal);
+    //if I am here some error occurred
+
+    //send error message with cause to client
+    _send_ERR(ErrCode::exception);
+
+    throw ProtocolManagerException("Could not open file or something else happened.",
+                                   ProtocolManagerError::internal);
 }
 
 /**
- * function to remove a file from the server filesystem, database and elements map
+ * ProtocolManager remove file method.
+ *  It is used to remove a file from the server filesystem, database and elements map
  *
  * @throw ProtocolManagerException if the element is not a file or if there is a file with the same path but the hash is different
  *
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if the element to remove is not a file or the file hash does not correspond
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if it could not remove the file
+ *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::removeFile(){
-    const std::string path = clientMessage.path();
-    Hash h{clientMessage.hash()};
-    clientMessage.Clear();
+void server::ProtocolManager::_removeFile(){
+    //recover user data from database (if not already done previously)
+    if(!_recovered)
+        recoverFromDB();
 
-    Message::print(std::cout, "DELE", address + " (" + username + "@" + mac + ")", path);
+    const std::string path = _clientMessage.path();     //file relative path
+    Hash h{_clientMessage.hash()};                      //file Hash
 
-    auto el = elements.find(path);
-    if(el == elements.end() || !el->second.exists()) { //if i cannot find the element OR the element does not exist, i don't have to remove it
-        //the file did not exist, the result is the same
-        send_OK(okCode::notThere);
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
+
+    Message::print(std::cout, "DELE", _address + " (" + _username + "@" + _mac + ")", path);
+
+    //(string,Directory_entry) pair corresponding to the relative path got from clientMessage
+    auto el = _elements.find(path);
+
+    //if i cannot find the element, i don't have to remove it (the result is the same)
+    if(el == _elements.end()) {
+
+        //send ok message to client
+        _send_OK(OkCode::notThere);
         return;
     }
+    //otherwise
+
+    //if the file does not exist on filesystem, i don't have to remove it (the result is the same)
+    if(!el->second.exists()){
+        //remove the file from db
+        _db->remove(_username, _mac, el->second.getRelativePath());
+
+        //remove the file from the elements map
+        _elements.erase(el->second.getRelativePath());
+
+        //send ok message to client
+        _send_OK(OkCode::notThere);
+        return;
+    }
+    //otherwise
 
     //if it is not a file OR if the file hash does not correspond
     if(!el->second.is_regular_file() || el->second.getHash() != h){
-        send_ERR(errCode::remove);    //send error message with cause
-        throw ProtocolManagerException("Tried to remove something which is not a file or file hash does not correspond.", protocolManagerError::client);
+
+        //send error message with cause to client
+        _send_ERR(ErrCode::remove);
+
+        throw ProtocolManagerException("Tried to remove something which is not a file or file hash does"
+                                       "not correspond.", ProtocolManagerError::client);
     }
 
-    //get the parent path
+    //get the file parent path
+
+    //file parent path
     std::filesystem::path parentPath = std::filesystem::path(el->second.getAbsolutePath()).parent_path();
 
-    //take the lastWriteTime of the destination folder before removing the file,
-    //any lastWriteTime modification will be requested by the client so we want to keep the same time
-    Directory_entry parent{basePath, parentPath.string()};
+    //save the lastWriteTime of the destination folder (parent directory) before removing the file,
+    //any lastWriteTime modification to that directory will be requested explicitly by the client,
+    //so we want to keep the same time before and after the file remove
 
-    //remove the file
-    if(!std::filesystem::remove(el->second.getAbsolutePath()))   //true if the file was removed, false if it couldn't remove it
-        throw ProtocolManagerException("Could not remove a file", protocolManagerError::internal);
-
-    //reset the parent directory lastWriteTime
-    if(parent.getAbsolutePath() != basePath)
-        parent.set_time_to_file(parent.getLastWriteTime());
-
-    //remove element from db
-    db->remove(username, mac, el->second.getRelativePath());
-
-    //remove the element from the elements map
-    elements.erase(el->second.getRelativePath());
-
-    //the file has been removed
-    send_OK(okCode::removed);
-}
-
-/**
- * function to create/(modify its last write time) a directory on the server filesystem and update the server db and elements map
- *
- * @throw ProtocolManagerException if there exists already an element with the same name and it is not a directory
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::makeDir(){
-    const std::string path = clientMessage.path();
-    const std::string lastWriteTime = clientMessage.lastwritetime();
-    clientMessage.Clear();
-
-    Message::print(std::cout, "MKD", address + " (" + username + "@" + mac + ")", path);
-
-    auto el = elements.find(path);
-    if(el != elements.end() && el->second.exists() && el->second.getLastWriteTime() == lastWriteTime){
-        //if I already have the directory in the elements map AND the directory exists in the filesystem AND its lastWriteTime is as expected
-        send_OK(okCode::created);   //send OK message
-        return; //and return
-    }
-    //else
-
-    //get the parent path (to then get its lastWriteTime in order to keep it the same after the dir create
-    auto parentPath = std::filesystem::path(basePath + path).parent_path();
-    auto parExists = std::filesystem::directory_entry(parentPath.string()).exists();
+    //Directory entry representing the file parent directory
     Directory_entry parent;
 
-    if(parExists)   //if the parent directory exists
-        //take the lastWriteTime of the destination folder before creating the directory,
-        //any lastWriteTime modification will be requested by the client so we want to keep the same time
-        parent = Directory_entry{basePath, parentPath.string()};
+    //only if the parent path is different from server base path get parent Directory entry (otherwise we
+    //have problems getting relative path
+    if(parentPath.string() != _basePath)
+        parent = {_basePath, parentPath.string()};
 
-    if(!std::filesystem::directory_entry(basePath + path).exists())  //if the directory does not already exist
-        std::filesystem::create_directories(basePath + path);    //create all the directories (if they do not already exist) up to the temporary path
+    //remove the file
+    if(!std::filesystem::remove(el->second.getAbsolutePath()))
+        //if it could not remove the file throw an exception
+        throw ProtocolManagerException("Could not remove a file", ProtocolManagerError::internal);
 
-    if(!std::filesystem::is_directory(basePath + path)){
-        //the element is not a directory! (in case of a modify) -> error
-
-        send_ERR(errCode::notADir);    //send error message with cause
-        throw ProtocolManagerException("Tried to modify something which is not a directory.", protocolManagerError::client);
-    }
-
-    //create a Directory entry which represents the newly created folder (or to the already present one)
-    Directory_entry newDir{basePath, std::filesystem::directory_entry(basePath + path)};
-
-    //change last write time for the file
-    newDir.set_time_to_file(lastWriteTime);
-
-    if(parExists && parent.getAbsolutePath() != basePath)   //if the parent directory already existed before (and it is not the base path)
+    //if the parent directory is not the server base path
+    if(parentPath.string() != _basePath)
         //reset the parent directory lastWriteTime
         parent.set_time_to_file(parent.getLastWriteTime());
 
-    if(el == elements.end()) {
-        //add to the elements map
-        elements.emplace(newDir.getRelativePath(), newDir);
+    //remove the file from db
+    _db->remove(_username, _mac, el->second.getRelativePath());
 
-        //add to db
-        db->insert(username, mac, newDir);
-    }
-    else{
-        //update the element in elements map
-        el->second = newDir;
+    //remove the file from the elements map
+    _elements.erase(el->second.getRelativePath());
 
-        //update into db
-        db->update(username, mac, newDir);
-    }
-
-    //the directory has been created/modified
-    send_OK(okCode::created);
+    //send ok message to client
+    _send_OK(OkCode::removed);
 }
 
 /**
- * function to remove a directory from the server filesystem, the server db and elements map
+ * ProtocolManager make directory method.
+ *  It is used to create/(modify last write time of) a directory on the server filesystem and update the server db
+ *  and elements map
  *
- * @throw ProtocolManagerException if there exists an element with the same name but it is not a directory
- * @throw an exception in case the directory is not empty
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if there exists already an element with the same name and it is not a directory
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::removeDir(){
-    const std::string path = clientMessage.path();
-    clientMessage.Clear();
+void server::ProtocolManager::_makeDir(){
+    //recover user data from database (if not already done previously)
+    if(!_recovered)
+        recoverFromDB();
 
-    Message::print(std::cout, "RMD", address + " (" + username + "@" + mac + ")", path);
+    const std::string path = _clientMessage.path();                     //dir relative path
+    const std::string lastWriteTime = _clientMessage.lastwritetime();   //dir last write time
 
-    auto el = elements.find(path);
-    if(el == elements.end()) { //if i cannot find the element -> element does not exist, i don't have to remove it
-        //the file did not exist, the result is the same
-        send_OK(okCode::notThere);
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
+
+    Message::print(std::cout, "MKD", _address + " (" + _username + "@" + _mac + ")", path);
+
+    //(string,Directory_entry) pair corresponding to the relative path got from clientMessage
+    auto el = _elements.find(path);
+
+    //if I found the element AND the element exists AND the element has the same last write time as expected
+    if(el != _elements.end() && el->second.exists() && el->second.getLastWriteTime() == lastWriteTime){
+
+        //send ok message to client
+        _send_OK(OkCode::created);
         return;
     }
+    //otherwise
+
+    //get the dir parent path
+
+    //dir parent path
+    auto parentPath = std::filesystem::path(_basePath + path).parent_path();
+
+    //check if the parent folder already exists
+    auto parentExists = std::filesystem::exists(parentPath.string());
+
+    //Directory entry representing the dir parent folder
+    Directory_entry parent;
+
+    //if the parent directory exists and the parent path is different from server base path
+    if(parentExists && parentPath.string() != _basePath)
+        //save the lastWriteTime of the destination folder (parent directory) before creating the directory,
+        //any lastWriteTime modification to that directory will be requested explicitly by the client,
+        //so we want to keep the same time before and after the directory create
+        parent = Directory_entry{_basePath, parentPath.string()};
+
+    //if the directory does not already exist
+    if(!std::filesystem::exists(_basePath + path))
+        //create all the directories (that do not already exist) up to the path
+        std::filesystem::create_directories(_basePath + path);
+
+    //in case the it existed, if it is not a directory
+    if(!std::filesystem::is_directory(_basePath + path)){
+
+        //send error message with cause to client
+        _send_ERR(ErrCode::notADir);
+
+        throw ProtocolManagerException("Tried to modify something which is not a directory.",
+                                       ProtocolManagerError::client);
+    }
+
+    //Directory entry which represents the newly created folder (or the already present one)
+    Directory_entry newDir{_basePath, std::filesystem::directory_entry(_basePath + path)};
+
+    //change last write time for the directory
+    newDir.set_time_to_file(lastWriteTime);
+
+    //if the parent directory already existed before (and it is not the base path)
+    if(parentExists && parentPath.string() != _basePath)
+        //reset the parent directory lastWriteTime
+        parent.set_time_to_file(parent.getLastWriteTime());
+
+    //if I could not find the directory in the elements map
+    if(el == _elements.end()) {
+        //add the newly created directory to the db
+        _db->insert(_username, _mac, newDir);
+
+        //add the newly created directory to the elements map
+        _elements.emplace(newDir.getRelativePath(), std::move(newDir));
+    }
+    else{
+        //update the directory in the db
+        _db->update(_username, _mac, newDir);
+
+        //update the directory in the elements map
+        el->second = std::move(newDir);
+    }
+
+    //send ok message to client
+    _send_OK(OkCode::created);
+}
+
+/**
+ * ProtocolManager remove directory method.
+ *  It is used to remove a directory from the server filesystem, server db and elements map
+ *
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if the element to remove is not a directory
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if it could not remove the directory
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_removeDir(){
+    //recover user data from database (if not already done previously)
+    if(!_recovered)
+        recoverFromDB();
+
+    const std::string path = _clientMessage.path(); //dir relative path
+
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
+
+    Message::print(std::cout, "RMD", _address + " (" + _username + "@" + _mac + ")", path);
+
+    //(string,Directory_entry) pair corresponding to the relative path got from clientMessage
+    auto el = _elements.find(path);
+
+    //if i cannot find the element, I don't have to remove it (the result is the same)
+    if(el == _elements.end()) {
+
+        //send ok message to client
+        _send_OK(OkCode::notThere);
+        return;
+    }
+    //otherwise
+
+    //if the directory does not exist in filesystem, I don't have to remove it (the result is the same)
+    if(!el->second.exists()) {
+        //remove element from db
+        _db->remove(_username, _mac, el->second.getRelativePath());
+
+        //remove the element from the elements map
+        _elements.erase(el->second.getRelativePath());
+
+        //send ok message to client
+        _send_OK(OkCode::notThere);
+        return;
+    }
+    //otherwise
+
+    //if it is not a directory
+    if(!el->second.is_directory()){
+
+        //send error message with cause to client
+        _send_ERR(ErrCode::notADir);
+
+        throw ProtocolManagerException("Tried to remove something which is not a directory.",
+                                       ProtocolManagerError::client);
+    }
+    //otherwise
 
     auto dirToRemove = el->second;
 
-    if(!dirToRemove.is_directory()){
-        //the element is not a directory! -> error
-        send_ERR(errCode::notADir);    //send error message with cause
-        throw ProtocolManagerException("Tried to remove something which is not a directory.", protocolManagerError::client);
-    }
+    //get the dir parent path
 
-    auto parentPath = std::filesystem::path(basePath + path).parent_path();
-    //take the lastWriteTime of the destination folder before removing the directory,
-    //any lastWriteTime modification will be requested by the client so we want to keep the same time
-    Directory_entry parent{basePath, parentPath.string()};
+    //dir parent path
+    auto parentPath = std::filesystem::path(_basePath + path).parent_path();
 
+    //save the lastWriteTime of the destination folder (parent directory) before removing the directory,
+    //any lastWriteTime modification to that directory will be requested explicitly by the client,
+    //so we want to keep the same time before and after the directory remove
+
+    //Directory entry representing the dir parent directory
+    Directory_entry parent;
+
+    //only if the parent path is different from server base path get parent Directory entry (otherwise we
+    //have problems getting relative path)
+    if(parentPath.string() != _basePath)
+        parent = {_basePath, parentPath.string()};
+
+    //recursive directory iterator for the directory to remove
     std::filesystem::recursive_directory_iterator iter{dirToRemove.getAbsolutePath()};
+
+    //vector of all elements to remove
     std::vector<Directory_entry> elementsToRemove;
-    for(auto i: iter){
-        //I save the elements in a vector before removing them in order to be sure to save them all
-        elementsToRemove.emplace_back(basePath, i);
-    }
+
+    //save the elements in a vector before removing them in order to be sure to remove them all
+    for(auto i: iter)
+        elementsToRemove.emplace_back(_basePath, i);
 
     //remove the directory (and all its subdirectories and files) from filesystem
-    if(std::filesystem::exists(dirToRemove.getAbsolutePath()))
-        if(std::filesystem::remove_all(dirToRemove.getAbsolutePath()) == 0)
-            throw ProtocolManagerException("Could not remove an element.", protocolManagerError::internal);
+    if(std::filesystem::remove_all(dirToRemove.getAbsolutePath()) == 0)
+        throw ProtocolManagerException("Could not remove an element.", ProtocolManagerError::internal);
 
     //then remove each sub element from both the db and elements map
     for(auto i: elementsToRemove){
-        //remove element from db
-        db->remove(username, mac, i.getRelativePath());
+        //remove element from the db
+        _db->remove(_username, _mac, i.getRelativePath());
 
         //remove the element from the elements map
-        elements.erase(i.getRelativePath());
+        _elements.erase(i.getRelativePath());
     }
 
-    //remove element from db
-    db->remove(username, mac, dirToRemove.getRelativePath());
+    //remove the directory from the db
+    _db->remove(_username, _mac, dirToRemove.getRelativePath());
 
-    //remove the element from the elements map
-    elements.erase(dirToRemove.getRelativePath());
+    //remove the directory from the elements map
+    _elements.erase(dirToRemove.getRelativePath());
 
-    //reset the parent directory lastWriteTime
-    if(parent.getAbsolutePath() != basePath)
+    //if the parent directory is not the base path
+    if(parentPath.string() != _basePath)
+        //reset the parent directory lastWriteTime
         parent.set_time_to_file(parent.getLastWriteTime());
 
-    //the file has been removed
-    send_OK(okCode::removed);
+    //send ok message to client
+    _send_OK(OkCode::removed);
 }
 
-//TODO comment
-void server::ProtocolManager::retrieveUserData(){
-    std::string macAddr = clientMessage.macaddress(); //get the macAddress (if present, otherwise a default "" value is passed)
-    bool retrAll = clientMessage.all(); //get the all boolean
-    clientMessage.Clear();
+/**
+ * ProtocolManager retrieve user data method.
+ *  It is used to retrieve the user's requested data and send it to the client
+ *
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if there was an error in the client message
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_retrieveUserData(){
 
-    std::map<std::string, Directory_entry> toSend{};    //prepare a map with all the elements to send
+    //client macAddress (if present, otherwise a default "" value is passed)
+    std::string macAddr = _clientMessage.macaddress();
 
-    if(retrAll){    //if all is true, meaning that the user requested all its files (independently of the machine mac address they are related to)
+    bool retrAll = _clientMessage.all(); //retrieve all boolean
 
-        Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "All files");
+    //it is more efficient to clear the clientMessage protobuf than creating a new one
+    _clientMessage.Clear();
 
-        auto macs = db->getAllMacAddresses(username);   //get all the user's mac addresses
+    //map with all the elements to send
+    std::map<std::string, Directory_entry> toSend{};
 
-        for(std::string m: macs){   //for all the mac addresses
+    //if retrieve all boolean is true, the user requested all its files (independently from the machine mac address)
+    if(retrAll){
 
-            //compose the directory name (all the elements of a username-mac pair will be put in a specific folder in the client
-            //(this folder does not need to be sent since the client will create all missing dirs along the path to a file/directory;
-            //so I just need to add the directory name as the first folder in the relative path -> this will be inside the destination
-            //folder at the client))
+        Message::print(std::cout, "RETR", _address + " (" + _username + "@" + _mac + ")", "All files");
+
+        auto macs = _db->getAllMacAddresses(_username);   //all the user's mac addresses
+
+        //for all the mac addresses
+        for(std::string m: macs){
+
+            //compose the relative root directory name from username and mac; this will be the folder in which the
+            //files and directories associated to this username-mac pair will be saved on client
+
             std::stringstream tmp;
-            tmp << "/" << username << "_" << std::regex_replace(m, std::regex(":"), "-");
+            tmp << "/" << _username << "_" << std::regex_replace(m, std::regex(":"), "-");
 
-            std::string tempDirName = tmp.str();
+            //relative root directory name (from username-mac pair)
+            std::string relativeRoot = tmp.str();
 
-            //create the function to be used for each user's element in the db (for the mac m)
-            std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
-            f = [this, &toSend, &tempDirName](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-                auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
-                toSend.insert({tempDirName+current.getRelativePath(), current});    //pre-append the relative root (username_mac) to the element relative path
+            //function to be used for each user's element in the db (for mac address m)
+            std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
+                    const std::string &)> f;
+
+            f = [this, &toSend, &relativeRoot](const std::string &path, const std::string &type, uintmax_t size,
+                    const std::string &lastWriteTime, const std::string& hash){
+
+                //current element
+                auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+
+                //pre-append the relative root (username_mac) to the element relative path
+                //and insert the pair into the toSend map
+                toSend.emplace(relativeRoot + current.getRelativePath(), std::move(current));
             };
 
-            //perform the function f on all the user elements (and mac m)
-            db->forAll(username, m, f);
+            //perform the function f on all the user elements (with mac m)
+            _db->forAll(_username, m, f);
         }
     }
-    else{   //if all is false, macaddrees will contain the specific mac address to use
+    else{   //if retrieve all boolean is false, macAddress will contain the specific mac address to use
 
+        //if the macAddr got from clientMessage is empty
         if(macAddr.empty()){
-            //error
-            send_ERR(errCode::retrieve);
 
-            throw ProtocolManagerException("Error in client message", protocolManagerError::client);
+            //send the error message with cause to the client
+            _send_ERR(ErrCode::retrieve);
+
+            throw ProtocolManagerException("Error in client message", ProtocolManagerError::client);
         }
 
-        Message::print(std::cout, "RETR", address + " (" + username + "@" + mac + ")", "mac = " + macAddr);
+        Message::print(std::cout, "RETR", _address + " (" + _username + "@" + _mac + ")", "mac = "
+                        + macAddr);
 
-        //compose the directory name (all the elements of a username-mac pair will be put in a specific folder in the client
-        //(this folder does not need to be sent since the client will create all missing dirs along the path to a file/directory;
-        //so I just need to add the directory name as the first folder in the relative path -> this will be inside the destination
-        //folder at the client))
+        //compose the relative root directory name from username and mac; this will be the folder in which the
+        //files and directories associated to this username-mac pair will be saved on client
+
         std::stringstream tmp;
-        tmp << "/" << username << "_" << std::regex_replace(macAddr, std::regex(":"), "-");
+        tmp << "/" << _username << "_" << std::regex_replace(macAddr, std::regex(":"), "-");
 
-        std::string tempDirName = tmp.str();
+        //relative root directory name (from username-mac pair)
+        std::string relativeRoot = tmp.str();
 
-        //create the function to be used for each user's element in the db (for the mac m)
-        std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
-        f = [this, &toSend, &tempDirName](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-            auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
-            toSend.insert({tempDirName+current.getRelativePath(), current});    //pre-append the relative root (username_mac) to the element relative path
+        //function to be used for each user's element in the db (for mac address m)
+        std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
+                           const std::string &)> f;
+
+        f = [this, &toSend, &relativeRoot](const std::string &path, const std::string &type, uintmax_t size,
+                                           const std::string &lastWriteTime, const std::string& hash){
+
+            //current element
+            auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+
+            //pre-append the relative root (username_mac) to the element relative path
+            //and insert the pair into the toSend map
+            toSend.emplace(relativeRoot + current.getRelativePath(), std::move(current));
         };
 
-        //perform the function f on all the user elements (and mac m)
-        db->forAll(username, macAddr, f);
+        //perform the function f on all the user-macAddress elements
+        _db->forAll(_username, macAddr, f);
     }
 
-    //here in toSend I will have all the elements to send to the client
+    //now, in toSend map I will have all the elements to send to the client
+
+    //for all the pairs in the toSend map
     for(auto pair: toSend){
-        if(pair.second.is_directory()){ //if it is a directory then send MKD
-            Message::print(std::cout, "RETR-MKD", address + " (" + username + "@" + mac + ")", pair.first);
-            send_MKD(pair.first, pair.second);
+        //if it is a directory
+        if(pair.second.is_directory()){
+            Message::print(std::cout, "RETR-MKD", _address + " (" + _username + "@" + _mac + ")", pair.first);
+
+            //send MKD message to client
+            _send_MKD(pair.first, pair.second);
         }
-        else if(pair.second.is_regular_file()) {  //if it is a file then send STOR and 1 or more DATA
-            Message::print(std::cout, "RETR-STOR", address + " (" + username + "@" + mac + ")", pair.first);
-            send_STOR(pair.first, pair.second);
-            sendFile(pair.second, macAddr);
+        //if it is a file
+        else if(pair.second.is_regular_file()) {
+            Message::print(std::cout, "RETR-STOR", _address + " (" + _username + "@" + _mac + ")", pair.first);
+
+            //send STOR message to the client
+            _send_STOR(pair.first, pair.second);
+
+            //send the file to the client
+            _sendFile(pair.second, macAddr);
         }
-        //else the element is not supported so just skip it (there should never be any not supported element)
+        //else the element is not supported so just skip it
     }
 
-    send_OK(okCode::retrieved);
+    //send ok message to the client, this will signal the end of transmissions
+    _send_OK(OkCode::retrieved);
 }
 
-//TODO comment
-void server::ProtocolManager::sendFile(Directory_entry &element, std::string &macAddr) {
-    //initialize variables
-    std::ifstream file;
-    char buff[max_data_chunk_size];
+/**
+ * ProtocolManager send file method.
+ *  It is used to send a single file to the client
+ *
+ * @param element Directory_entry element to send
+ * @param macAddr macAddress related to this element (together with _username)
+ *
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if the file could not be opened
+ */
+void server::ProtocolManager::_sendFile(Directory_entry &element, std::string &macAddr) {
+    std::ifstream file;             //input file
+    char buff[_maxDataChunkSize];   //buffer used to read from file and send to socket
 
+    //if the file to transfer does not exist anymore in the filesystem
     if(!std::filesystem::exists(element.getAbsolutePath())) {
-        //if the file to transfer is not present anymore in the filesystem
-        //then it means that the file was deleted --> I can't send it anymore
-        //so remove it from the db and just go to the next element (so return)
-        db->remove(username, macAddr, element.getRelativePath());
+
+        //remove it from the db and just go to the next element (return)
+        _db->remove(_username, macAddr, element.getRelativePath());
         return;
     }
 
-    //if the file to transfer hash is different from the one of the file present in the filesystem
-    Directory_entry effective{basePath, element.getAbsolutePath()}; //I do this because the element I got as argument was retrieved from db, instead this one is retrieved from filesystem
-    if(effective.getHash() != element.getHash()){
-        //then it means that the file was modified --> Don't send it
-        //so remove it from the db and just go to the next element (so return)
-        db->remove(username, macAddr, element.getRelativePath());
+    //directory entry representing the effective file present on filesystem (with same name)
+    Directory_entry effective{_basePath, element.getAbsolutePath()};
+
+    //if the file hash got from db is different from the one of the file present in the filesystem
+    if(element.getHash() != effective.getHash()){
+        //the file was modified on server!
+
+        //remove it from the db, since the file saved does not exist anymore
+        _db->remove(_username, macAddr, element.getRelativePath());
+
+        //print a warning and skip it
+        Message::print(std::cerr, "WARNING",_address + " (" + _username + "@" + _mac + ")",
+                       element.getRelativePath() + " was modified offline. It will not be sent");
+
         return;
     }
 
@@ -641,277 +937,351 @@ void server::ProtocolManager::sendFile(Directory_entry &element, std::string &ma
     file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);
 
     if(file.is_open()){
-        //TS_Message::print(std::cout, "SENDING", address + " (" + username + "@" + mac + ")", "Sending: " + element.getRelativePath());
 
-        while(file.read(buff, max_data_chunk_size)) { //read file in max_data_chunk_size-wide blocks
-            send_DATA(buff, file.gcount()); //send the block
-        }
+        //read file in maxDataChunkSize-wide blocks
+        while(file.read(buff, _maxDataChunkSize))
+            _send_DATA(buff, file.gcount());    //send the block
 
-        serverMessage.set_last(true);   //mark the last data block
+        _serverMessage.set_last(true);  //mark the last data block
 
-        send_DATA(buff, file.gcount()); //send the block
+        _send_DATA(buff, file.gcount()); //send the last block
 
-        //close the input file
-        file.close();
+        file.close();   //close the input file
     }
-    else
-        throw ProtocolManagerException("Could not open file", protocolManagerError::internal);
+    else    //if file could not be opened
+        throw ProtocolManagerException("Could not open file", ProtocolManagerError::internal);
 }
 
 /**
- * protocol manager constructor
+ * ProtocolManager constructor
  *
- * @param s socket associated to this thread
+ * @param socket socket associated to this thread
+ * @param address address of the connected client
  * @param ver version of the protocol tu use
- * @param basePath base path for this client
- * @param tempPath temp path were to put temporary files
- * @param tempSize size of the temporary file name
- *
- * @throw may throw PWT_DatabaseException from PWD_Database
- * @throw may throw DatabaseException from Database
  *
  * @author Michele Crepaldi s269551
  */
-server::ProtocolManager::ProtocolManager(Socket &s, std::string address, int ver) :
-    s(s),
-    address(std::move(address)),
-    protocolVersion(ver),
-    recovered(false){
+server::ProtocolManager::ProtocolManager(Socket &socket, std::string address, int ver) :
+        _s(socket), //set socket
+        _address(std::move(address)),   //set client address
+        _protocolVersion(ver),  //set protocol version
+        _recovered(false){  //set recovered member variable to false
 
-    auto config = Config::getInstance();
-    basePath = config->getServerBasePath();
-    temporaryPath = config->getTempPath();
-    tempNameSize = config->getTmpFileNameSize();
-    max_data_chunk_size = config->getMaxDataChunkSize();
+    auto config = Config::getInstance();    //config object instance
+    _basePath = config->getServerBasePath();    //get server base path
+    _temporaryPath = config->getTempPath();     //get server temporary path
+    _tempNameSize = config->getTmpFileNameSize();       //get temporary file name size
+    _maxDataChunkSize = config->getMaxDataChunkSize();  //get max data chunk size
 
-    password_db = Database_pwd::getInstance();
-    db = Database::getInstance();
+    _password_db = Database_pwd::getInstance(); //get database_pwd instance
+    _db = Database::getInstance();              //get database instance
 };
 
 /**
- * function to authenticate a user, mac to this protocol manager
+ * ProtocolManager authenticate method.
+ *  It is used to authenticate a client (username-mac)
  *
- * @throw ProtocolManagerException if the version in the message is not supported, if the authentication was not successful
- * or if there was a not expected message
+ * @throws ProtocolManagerException:
+ *  <b>version</b> if the client message uses a different version
+ * @throws ProtocolManagerException:
+ *  <b>auth</b> if the authentication failed
+ * @throws ProtocolManagerException:
+ *  <b>unknown</b> if it gets an unexpected client message
  *
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::authenticate() {
-    std::string message = s.recvString();
-    clientMessage.ParseFromString(message);
+    //receive a message from client
 
-    //check version
-    if(protocolVersion != clientMessage.version()) {
-        send_VER(); //send version message
+    std::string message = _s.recvString();      //client message
+    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the message
 
-        //throw exception
-        throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
+    //check clientMessage version
+    if(_protocolVersion != _clientMessage.version()) {
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
+
+        //send version message to the client
+        _send_VER();
+
+        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
     }
 
-    if(clientMessage.type() == messages::ClientMessage_Type_AUTH) {
+    //if the clientMessage type is AUTH
+    if(_clientMessage.type() == messages::ClientMessage_Type_AUTH) {
 
         //get the information from the client message
-        username = clientMessage.username();
-        mac = clientMessage.macaddress();
-        std::string password = clientMessage.password();
+
+        _username = _clientMessage.username();  //get username from clientMessage
+        _mac = _clientMessage.macaddress();     //get mac address from clientMessage
+        std::string password = _clientMessage.password();   //get password from clientMessage
+
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
 
         //initialize hash maker with the password
         HashMaker hm{password};
 
-        //get the salt and hash for the current user
-        auto pair = password_db->getHash(username);
+        //get the salt and password hash for the current user
+
+        //(salt,hash) pair for the current user
+        auto pair = _password_db->getHash(_username);
+
+        //user's salt
         std::string salt = pair.first;
 
-        //append the salt to the password
+        //update the hash maker with the user's salt (effectively appending the salt to the password)
         hm.update(salt);
-        auto pwdHash = hm.get();    //get the computed hash
 
-        if(pwdHash != pair.second){ //compare the computed hash with the user hash
+        //computed password hash
+        auto pwdHash = hm.get();
+
+        //compare the computed password hash with the user hash
+        if(pwdHash != pair.second){
             //if they are different then the password is not correct (authentication error)
-            send_ERR(errCode::auth);    //send error message with cause
-            throw ProtocolManagerException( "Authentication Error",protocolManagerError::auth);
+
+            //send error message with cause to the client
+            _send_ERR(ErrCode::auth);
+
+            throw ProtocolManagerException("Authentication Error", ProtocolManagerError::auth);
         }
 
         //the authentication was successful
-        send_OK(okCode::authenticated);
+
+        //send ok message to the client
+        _send_OK(OkCode::authenticated);
     }
-    else{
+    else{   //if the clientMessage type is not AUTH
+
         //error, message not expected
-        send_ERR(errCode::unexpected);    //send error message with cause
-        throw ProtocolManagerException("Message Error, not expected.",protocolManagerError::unknown);
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::unexpected);
+
+        //throw exception
+        throw ProtocolManagerException("Message Error, not expected.", ProtocolManagerError::unknown);
     }
 
-    //set the base path
-    std::stringstream tmp;
-    tmp << basePath << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
-    basePath = tmp.str();
+    //set the server base path (where to put the backed-up files)
 
-    Message::print(std::cout, "EVENT", address, "authenticated as " + username + "@" + mac);
+    std::stringstream tmp;
+    tmp << _basePath << "/" << _username << "_" << std::regex_replace(_mac, std::regex(":"), "-");
+    _basePath = tmp.str();
+
+    Message::print(std::cout, "EVENT", _address, "authenticated as " + _username + "@" + _mac);
 };
 
 /**
- * function to recover all the elements in the server db and populate the elements map (used at protocol manager startup)
- *
- * @throw DatabaseException from the db->forall function
+ * ProtocolManager recover from database method.
+ *  It is used to recover all the elements (for the current user-mac pair) in the server db and populate
+ *  the elements map
  *
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::recoverFromDB() {
-    if(recovered)   //if I already did the recovery just return
-        return;
+    std::vector<Directory_entry> toUpdate;  //list of all Directory_entry elements to update
+    std::vector<Directory_entry> toDelete;  //list of all Directory_entry elements to delete
 
-    std::vector<Directory_entry> toUpdate, toDelete;
+    //function to be used for each element of the db
+    std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &,
+            const std::string &)> f;
 
-    std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &, const std::string &)> f;
-    f = [this, &toUpdate, &toDelete](const std::string &path, const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string& hash){
-        auto current = Directory_entry(basePath, path, size, type, lastWriteTime, Hash(hash));
+    f = [this, &toUpdate, &toDelete](const std::string &path, const std::string &type, uintmax_t size,
+            const std::string &lastWriteTime, const std::string& hash){
+
+        //current Directory_entry element
+        auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
 
         //check if the file exists in the server filesystem (if the server has a copy of it)
         if(!std::filesystem::exists(current.getAbsolutePath())){
-            //if the element does not exist then add it to the elements to delete from db
-            toDelete.push_back(current);
+            //if the element does not exist add it to the elements to delete from db
+            toDelete.push_back(std::move(current));
 
-            //then return (we don't want to add it to the elements map)
             return;
         }
+        //otherwise
 
-        //the file exists, check if it corresponds to the one described by the database
-        auto el = Directory_entry(basePath, current.getAbsolutePath());
+        //if the file exists, check if it corresponds to the one described by the database
 
-        if(el.getType() != current.getType() || el.getSize() != current.getSize() ||
-            el.getLastWriteTime() != current.getLastWriteTime() || el.getHash() != current.getHash()){
+        //effective Directory_entry element on filesystem
+        auto effective = Directory_entry(_basePath, current.getAbsolutePath());
+
+        //if the effective element found on filesystem is different from the current one
+        if(effective.getType() != current.getType() || effective.getSize() != current.getSize() ||
+                effective.getLastWriteTime() != current.getLastWriteTime() || effective.getHash() != current.getHash()){
 
             //if there exists an element with the same name in the db but it is different from expected
-            toUpdate.push_back(el);
 
-            //then return (we don't want to add it to the elements map)
+            //add it to the elements to update into the db
+            toUpdate.push_back(std::move(effective));
+
             return;
         }
+        //otherwise
 
-        //if the file exists and it is the same as described in the db add it to the elements map
-        elements.insert({path, current});
+        //if the file exists and it is the same as described in the db
+
+        //add it to the elements map
+        _elements.emplace(path, std::move(current));
     };
+
     //apply the function for all the user's (and mac) elements in the db
-    db->forAll(username, mac, f);
+    _db->forAll(_username, _mac, f);
 
-    //now update all the updated elements to db
+    //for all the elements to update
     for(auto el: toUpdate){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was modified offline!");
-        db->update(username, mac, el);
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+                       "was modified offline!");
+
+        //update the element on database
+        _db->update(_username, _mac, el);
+
+        //insert the element into the elements map
+        _elements.emplace(el.getRelativePath(), std::move(el));
     }
 
-    //delete all the deleted elements from db
+    //for all the elements to delete
     for(auto el: toDelete){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + basePath, "was removed offline!");
-        db->remove(username, mac, el.getRelativePath());
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+                       "was removed offline!");
+
+        //delete the element from database
+        _db->remove(_username, _mac, el.getRelativePath());
     }
 
-    recovered = true;   //set this bool meaning the recovery has been completed
+    //set _recovered boolean member variable to inform that the recovery has been completed
+    _recovered = true;
 }
 
 /**
- * function to receive a message from the client
+ * ProtocolManager receive method.
+ *  It is used to receive a message from the client
+ *
+ * @throws ProtocolManagerException:
+ *  <b>version</b> if the client message uses a different version
+ * @throws ProtocolManagerException:
+ *  <b>unknown</b> if the client message is of an unknown type
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if there is some un-handled exception
  *
  * @author Michele Crepaldi s269551
  */
 void server::ProtocolManager::receive(){
-    //get client request
-    std::string message = s.recvString();
+    //receive a message from client
 
-    //parse client request
-    clientMessage.ParseFromString(message);
+    std::string message = _s.recvString();  //client message
+    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the message
 
-    //check version
-    if(protocolVersion != clientMessage.version()) {
-        clientMessage.Clear();
+    //check clientMessage version
+    if(_protocolVersion != _clientMessage.version()) {
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
 
-        send_VER(); //send version message
+        //send version message to the client
+        _send_VER();
 
-        //throw exception
-        throw ProtocolManagerException("Client is using a different version", protocolManagerError::version);
+        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
     }
 
     try {
-        std::string tmp;
-        switch (clientMessage.type()) {
+        //switch on client message type
+        switch (_clientMessage.type()) {
             case messages::ClientMessage_Type_PROB:
-
-                //TODO evaluate how to move this in another place in order not to repeat it all the time
-                recoverFromDB();    //will be done only the first time
-
-                probe();    //probe the elements list for the element in client message
-
+                _probe();   //probe elements map for the file in client message
                 break;
-            case messages::ClientMessage_Type_STOR: {
 
-                recoverFromDB();    //will be done only the first time
-                storeFile();    //store the file in the server filesystem
-
+            case messages::ClientMessage_Type_STOR:
+                _storeFile();   //store file in the server filesystem, db and elements map
                 break;
-            }
+
             case messages::ClientMessage_Type_DELE:
-
-                recoverFromDB();    //will be done only the first time
-                removeFile();
-
+                _removeFile();  //remove file from server filesystem, db and elements map
                 break;
+
             case messages::ClientMessage_Type_MKD:
-
-                recoverFromDB();    //will be done only the first time
-                makeDir();
-
+                _makeDir(); //create directory on server filesystem, db and elements map
                 break;
+
             case messages::ClientMessage_Type_RMD:
-
-                recoverFromDB();    //will be done only the first time
-                removeDir();
-
+                _removeDir();   //remove directory from server filesystem, db and elements map
                 break;
 
             case messages::ClientMessage_Type_RETR:
-
-                retrieveUserData();
-
+                _retrieveUserData();    //retrieve the user's backed-up files and send it to client
                 break;
 
+            case messages::ClientMessage_Type_NOOP:
+            case messages::ClientMessage_Type_DATA:
+            case messages::ClientMessage_Type_AUTH:
+                //unexpected message types
+
+                //send error message with cause to the client
+                _send_ERR(ErrCode::unexpected);
+
+                throw ProtocolManagerException("Unexpected message type", ProtocolManagerError::client);
+
             default:
-                throw ProtocolManagerException("Unknown message type", protocolManagerError::unknown);
+                //unknown message type
+
+                //send error message with cause to the client
+                _send_ERR(ErrCode::unexpected);
+                throw ProtocolManagerException("Unknown message type", ProtocolManagerError::unsupported);
         }
     }
     catch (ProtocolManagerException &e) {
+        //switch on error code
         switch (e.getCode()) {
             //in these 2 cases the errors may be temporary or just related to this particular message
             //so keep connection and skip the faulty message
-            case server::protocolManagerError::unsupported: //a message from the client was of an unsupported type
-            case server::protocolManagerError::client:  //there was an error in a message from the client
+            case server::ProtocolManagerError::unsupported:
+            case server::ProtocolManagerError::client:
                 //keep connection, skip this message
                 return;
 
             //these next cases will be handled from main
-            case server::protocolManagerError::auth:    //the current user failed authentication
-            case server::protocolManagerError::version: //the current client uses a different version
-            case server::protocolManagerError::internal: //there was an internal server error -> Fatal error
-            case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
+            case server::ProtocolManagerError::auth:
+            case server::ProtocolManagerError::version:
+            case server::ProtocolManagerError::internal:
+            case server::ProtocolManagerError::unknown:
             default:
-                throw ProtocolManagerException(e.what(),e.getCode());
+                //re-throw exception
+                throw;
         }
     }
     catch (SocketException &e){
-        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+        throw;
     }
     catch (server::DatabaseException_pwd &e){
-        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
     }
     catch (server::DatabaseException &e){
-        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
     }
     catch (server::ConfigException &e){
-        throw;  //rethrow exception (I don't want the general std::exception catch to catch it)
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
     }
     catch (std::exception &e) {
-        //internal error
-        send_ERR(errCode::exception);    //send error message with cause
+        //internal server error
 
-        throw ProtocolManagerException(e.what(),server::protocolManagerError::internal);
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw ProtocolManagerException(e.what(),server::ProtocolManagerError::internal);
     }
 }

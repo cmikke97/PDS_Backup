@@ -166,6 +166,34 @@ public:
     }
 
     /**
+     * method used to try to pop the element in the head of the circular vector and return it (with move);
+     *  It will return an optional containing the moved element or nothing in case the method stopped
+     *  because the stop atomic boolean became true
+     *
+     * @return an optional containing the first object (the head) in the circular vector (by movement) or nothing
+     *
+     * @author Michele Crepaldi s269551
+     */
+    std::optional<T> tryGetUntil(std::atomic<bool> &stop){
+        std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
+
+        //wait on _cvPop condition variable until there is at least one element in the circular vector
+        _cvPop.wait(l, [this, &stop](){return _start != _end || stop.load();});
+
+        //if I woke up thanks to the stop atomic boolean
+        if(stop.load()) {
+            notifyAll();    //notify all threads
+            return std::nullopt;    //return nullopt
+        }
+
+        T tmp = std::move(_v[_start]);  //current element
+        _start = (_start + 1) % _size;  //update _start (effectively popping one element)
+
+        _cvPush.notify_all();   //notify _cvPush
+        return std::move(tmp);  //return element by movement
+    }
+
+    /**
      * method used to know if the queue has at least one element or not
      *
      * @return true if there is at least one element in the vector, false otherwise
@@ -175,6 +203,16 @@ public:
     bool canGet(){
         std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
         return _start != _end;  //true if there is at least one element, false otherwise
+    }
+
+    /**
+     * method used to notify all thread in passive waiting on the condition variables
+     *
+     * @author Michele Crepaldi s269551
+     */
+    void notifyAll(){
+        _cvPop.notify_all();
+        _cvPush.notify_all();
     }
 
 private:

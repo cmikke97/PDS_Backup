@@ -24,6 +24,7 @@
 
 #define PORT 8081
 #define SOCKET_TYPE SocketType::TLS
+#define CONFIG_FILE_PATH "../config.txt"
 
 void single_server(Circular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
@@ -297,7 +298,7 @@ int main(int argc, char** argv) {
             for (int i = 0; i < config->getNThreads(); i++)  //create N_THREADS threads and start them
                 threads.emplace_back(single_server, std::ref(sockets), std::ref(server_thread_stop), std::ref(main_stop));
 
-            server::Thread_guard td{threads, server_thread_stop};
+            server::Thread_guard td{threads, sockets, server_thread_stop};
 
             struct sockaddr_in addr{};
             unsigned long addr_len = sizeof(addr);
@@ -389,7 +390,13 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
     while(!thread_stop.load()){ //loop until we are told to stop
         //Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
 
-        auto pair = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
+        //TODO check
+        auto optional = sockets.tryGetUntil(thread_stop);   //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
+
+        if(!optional.has_value())   //TODO check
+            return;
+
+        auto pair = std::move(optional.value());
 
         std::string address = pair.first;
         Socket sock = std::move(pair.second);
@@ -456,25 +463,28 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
             switch(e.getCode()){
                 //these 2 cases are handled directly by the protocol manager -> keep connection and skip message;
                 //anyway if they appear here close connection and continue with the next socket
-                case server::protocolManagerError::unsupported: //a message from the client was of an unsupported type
-                case server::protocolManagerError::client:  //there was an error in a message from the client
+                case server::ProtocolManagerError::unsupported:
+                case server::ProtocolManagerError::client:
 
                 //in these 2 cases connection with the client is not valid and needs to be closed
-                case server::protocolManagerError::auth:    //the current user failed authentication
-                case server::protocolManagerError::version: //the current client uses a different version
+                case server::ProtocolManagerError::auth:
+                case server::ProtocolManagerError::version:
                     Message::print(std::cerr, "WARNING", "ProtocolManager Exception", e.what());
                     sock.closeConnection(); //close the connection with the client
                     Message::print(std::cout, "INFO", "Closing connection with client", "I will proceed with next connections");
                     continue;   //the error is in the current socket, continue with the next one
 
                 //in these 2 cases (and default) the errors are so important that they require the closing of the whole program
-                case server::protocolManagerError::internal: //there was an internal server error -> Fatal error
-                case server::protocolManagerError::unknown: //there was an unknown error -> Fatal error
+                case server::ProtocolManagerError::internal:
+                case server::ProtocolManagerError::unknown:
                 default:
+
+                    //TODO check if this is needed, maybe changing client main or ProtocolManager it is not needed
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));   //wait just a little bit in order to be sure to have sent the message to the client
+                    sock.closeConnection();     //close connection
+
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
-
-                    sock.closeConnection(); //close the connection with the client
 
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
@@ -482,24 +492,24 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
                     tmp.closeConnection();
-
                     return; //then return
             }
         }
         catch (SocketException &e) {
             switch(e.getCode()){
-                case SocketError::read: //error in reading from socket
-                case SocketError::write:    //error in writing to socket
-                case SocketError::closed:    //socket was closed by client
+                case SocketError::read:
+                case SocketError::write:
+                case SocketError::closed:
                     Message::print(std::cout, "EVENT", address, "disconnected.");
                     continue; //error in the current socket, continue with the next one
 
                 //added for completeness, will never be triggered in the server threads
-                case SocketError::create:   //error in creating socket -> Fatal error
-                case SocketError::accept:   //error in accepting on serverSocket -> Fatal error
-                case SocketError::bind:     //error in binding serverSocket -> Fatal error
-                case SocketError::connect:  //error in connecting to serverSocket (on socket) -> Fatal error
-                case SocketError::getMac:   //error in getting the machine MAC address -> Fatal error
+                case SocketError::create:
+                case SocketError::accept:
+                case SocketError::bind:
+                case SocketError::connect:
+                case SocketError::getMac:
+                case SocketError::getIP:
                 default:
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "Socket Exception", e.what());

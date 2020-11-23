@@ -72,7 +72,8 @@ Directory_entry::Directory_entry(const std::string& basePath, std::string  absol
     //get relative path from absolutePath and baseDir
 
     std::smatch m;  //regex match
-    std::regex e ("(" + basePath + ")(.*)");    //regex to be used to extract the relative path from the absolute path
+    //regex to be used to extract the relative path from the absolute path
+    std::regex e ("(" + basePath + R"()(\/.*))");
 
     //match the absolute path against the regex (does the absolute path contain the base path?)
     if(std::regex_match (_absolutePath,m,e))
@@ -98,13 +99,14 @@ Directory_entry::Directory_entry(const std::string& basePath, std::string  absol
 
         char buff[MAXBUFFSIZE]; //buffer
 
-        if(file.is_open()){
-            while(file.read(buff, MAXBUFFSIZE)) {  //get bytes from file
-                hm.update(buff, file.gcount());    //update the HashMaker hash with the
-            }
-        }
+        if(file.is_open()) {
+            while (file.read(buff, MAXBUFFSIZE))    //get bytes from file
+                hm.update(buff, file.gcount());     //update the HashMaker hash with the
 
-        file.close();   //close the file
+            hm.update(buff, file.gcount()); //update the HashMaker hash with the
+
+            file.close();   //close the file
+        }
 
         _hash = hm.get();   //get the computed Hash
     }

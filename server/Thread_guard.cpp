@@ -22,7 +22,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-server::Thread_guard::Thread_guard(std::vector<std::thread> &t, std::atomic<bool> &stop) : _tVector(t), _stop(stop) {
+server::Thread_guard::Thread_guard(std::vector<std::thread> &t, Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &stop) : _tVector(t), _stop(stop), _sockets(sockets) {
 }
 
 /**
@@ -34,6 +34,8 @@ server::Thread_guard::Thread_guard(std::vector<std::thread> &t, std::atomic<bool
 server::Thread_guard::~Thread_guard() {
     //tell the single server threads to stop
     _stop.store(true);
+    //notify all threads
+    _sockets.notifyAll();
 
     //then join on all threads
     for(auto &t : _tVector)
