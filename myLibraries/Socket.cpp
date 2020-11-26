@@ -387,8 +387,33 @@ std::string TCP_Socket::getIP() const{
  * @author Michele Crepaldi s269551
  */
 void TCP_Socket::closeConnection() {
-    if(_sockfd != 0)        //if the socket is not already closed
-        close(_sockfd);     //close it
+    //if the socket is not already closed
+    if(_sockfd != 0) {
+        char buffer[1024];
+
+        //to ensure that the other peer receives all the previous messages before closing the connection
+        //first send a FIN to the socket (then the other peer will close the connection) and then
+        //receive all the next messages (ignoring them) until a FIN from the other peer is received;
+        //then close the connection
+
+        //send FIN
+        shutdown(_sockfd, SHUT_WR);
+
+        //receive all messages until FIN
+        while (true) {
+
+            //number of bytes received
+            int res = recv(_sockfd, buffer, 1024, 0);
+
+            //we got FIN or some connection error
+            if (res <= 0)
+                break;
+        }
+
+        //close socket
+        close(_sockfd);
+        _sockfd = 0;
+    }
 }
 
 /**
@@ -397,8 +422,33 @@ void TCP_Socket::closeConnection() {
  * @author Michele Crepaldi s269551
  */
 TCP_Socket::~TCP_Socket() {
-    if(_sockfd != 0)        //if the socket is not already closed
-        close(_sockfd);     //close it
+    //if the socket is not already closed
+    if(_sockfd != 0) {
+        char buffer[1024];
+
+        //to ensure that the other peer receives all the previous messages before closing the connection
+        //first send a FIN to the socket (then the other peer will close the connection) and then
+        //receive all the next messages (ignoring them) until a FIN from the other peer is received;
+        //then close the connection
+
+        //send FIN
+        shutdown(_sockfd, SHUT_WR);
+
+        //receive all messages until FIN
+        while (true) {
+
+            //number of bytes received
+            int res = recv(_sockfd, buffer, 1024, 0);\
+
+            //we got FIN or some connection error
+            if (res <= 0)
+                break;
+        }
+
+        //close socket
+        close(_sockfd);
+        _sockfd = 0;
+    }
 }
 
 /**
@@ -697,7 +747,7 @@ ssize_t TLS_Socket::sendString(std::string &stringBuffer) const {
         throw SocketException("Write to socket error, sent bytes are less than expected", SocketError::write);
 
     //send the string data
-    return write(stringBuffer.c_str() ,stringBuffer.size());
+    return write(stringBuffer.c_str(), stringBuffer.size());
 }
 
 /**

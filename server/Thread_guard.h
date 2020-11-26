@@ -33,7 +33,7 @@ namespace server {
         Thread_guard(Thread_guard &&) = delete; //move constructor deleted
         Thread_guard& operator=(Thread_guard &&) = delete;  //move assignment deleted
 
-        Thread_guard(std::vector<std::thread> &t, Circular_vector<std::pair<std::string, Socket>> &sockets,
+        Thread_guard(std::vector<std::thread> &t, TS_Circular_vector<std::pair<std::string, Socket>> &sockets,
                      std::atomic<bool> &stop);   //constructor
 
         ~Thread_guard();    //destructor
@@ -41,7 +41,7 @@ namespace server {
     private:
         std::vector<std::thread> &_tVector;    //reference to the vector of threads
         std::atomic<bool> &_stop;   //reference to the atomic boolean used to stop the threads
-        Circular_vector<std::pair<std::string, Socket>> &_sockets;  //sockets circular vector
+        TS_Circular_vector<std::pair<std::string, Socket>> &_sockets;  //sockets circular vector
     };
 }
 

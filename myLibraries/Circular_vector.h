@@ -20,7 +20,7 @@
  */
 
 /**
- * Circular_vector clas. Generic and thread safe circular vector.
+ * Circular_vector class. Generic circular vector.
  *
  * @tparam T type of the elements inside the vector
  *
@@ -36,13 +36,169 @@ public:
     ~Circular_vector() = default;
 
     /**
+     * Circular_vector operator [] override.
+     *
+     * @param i index of the element to retrieve
+     * @return reference to the element requested
+     *
+     * @author Michele Crepaldi s269551
+     */
+    T& operator[](int i){
+        return _v[i];
+    }
+
+    /**
      * simple constructor
      *
      * @param size of the circular vector (how many elements can be put in the vector)
      *
      * @author Michele Crepaldi s269551
      */
-    explicit Circular_vector(unsigned int size): _start(0), _end(0), _size(size + 1){
+    explicit Circular_vector(unsigned int size): _start(0), _end(0), _capacity(size + 1){
+        _v.resize(_capacity + 1);
+    }
+
+    /**
+     * method used to push an object in the circular vector.
+     *
+     * @param t object to push in the circular vector
+     *
+     * @author Michele Crepaldi s269551
+     */
+    void push(T t){
+        _v[_end] = std::move(t);    //move the object into the circular vector
+        _end = (_end + 1) % _capacity;  //update _end
+    }
+
+    /**
+     * method used to return a reference to the element in the head of the circular vector (it doesn't pop it)
+     *
+     * @return a reference to the first object of the circular vector (the head of the circular vector)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    T& front(){
+        return _v[_start];  //return the reference to the first element (head of the queue)
+    }
+
+    /**
+     * method used to pop the element in the head of the circular vector (it doesn't return it)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    void pop(){
+        //remove the element from the circular vector but do not return it (it will be destroyed in this way)
+
+        T tmp = std::move(_v[_start]);  //current element
+
+        _start = (_start + 1) % _capacity;  //update _start (effectively popping one element)
+    }
+
+    /**
+     * method used to pop the element in the head of the circular vector and return it (with move)
+     *
+     * @return the first object (the head) in the circular vector (by movement)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    T get(){
+        T tmp = std::move(_v[_start]);  //current element
+        _start = (_start + 1) % _capacity;  //update _start (effectively popping one element)
+
+        return std::move(tmp);  //return element by movement
+    }
+
+    /**
+     * method used to get the index of the head element in the circular vector
+     *
+     * @return index of the first element
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] int start() const{
+        return _start;
+    }
+
+    /**
+     * method used to get the index of the tail element in the circular vector
+     *
+     * @return index of the last element
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] int end() const {
+        return _end;
+    }
+
+    /**
+     * method used to know if the circular vector is empty or not
+     *
+     * @return true if the circular vector is empty, false otherwise
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] bool empty() const{
+        return _start == _end;
+    }
+
+    /**
+     * method used to know if the circular vector is full or not
+     *
+     * @return true if the circular vector is full, false otherwise
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] bool full() const{
+        return (_end+1) % _capacity == _start;
+    }
+
+    /**
+     * method used to know the current number of elements inside the circular vector
+     *
+     * @return number of elements stored in the circular vector
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] int size() const{
+        return (_capacity + _end - _start) % _capacity;
+    }
+
+private:
+    std::vector<T> _v;   //circular vector
+    int _start; //head of the circular vector
+    int _end; //tail of the circular vector
+    unsigned int _capacity; //max size of the circular vector
+};
+
+/*
+ * +-------------------------------------------------------------------------------------------------------------------+
+ * TS_Circular_vector class
+ */
+
+/**
+ * TS_Circular_vector class. Thread safe version of the generic circular vector.
+ *
+ * @tparam T type of the elements inside the vector
+ *
+ * @author Michele Crepaldi s269551
+ */
+template <typename T>
+class TS_Circular_vector {
+public:
+    TS_Circular_vector(const TS_Circular_vector &) = delete;    //copy constructor deleted
+    TS_Circular_vector& operator=(const TS_Circular_vector &) = delete; //assignment deleted
+    TS_Circular_vector(TS_Circular_vector &&) = delete; //move constructor deleted
+    TS_Circular_vector& operator=(TS_Circular_vector &&) = delete;  //move assignment deleted
+    ~TS_Circular_vector() = default;
+
+    /**
+     * simple constructor
+     *
+     * @param size of the circular vector (how many elements can be put in the vector)
+     *
+     * @author Michele Crepaldi s269551
+     */
+    explicit TS_Circular_vector(unsigned int size): _start(0), _end(0), _size(size + 1){
         _v.resize(size + 1);
     }
 
@@ -139,8 +295,11 @@ public:
         //wait on _cvPop condition variable until there is at least one element in the circular vector
         _cvPop.wait(l, [this](){return _start != _end;});
 
+        //remove the element from the circular vector but do not return it (it will be destroyed in this way)
+
+        T tmp = std::move(_v[_start]);  //current element
+
         _start = (_start + 1) % _size;  //update _start (effectively popping one element)
-        //the element is not deleted now, but it will be overwritten by a new element
 
         _cvPush.notify_all();   //notify _cvPush
     }

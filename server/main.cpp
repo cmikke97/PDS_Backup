@@ -26,7 +26,7 @@
 #define SOCKET_TYPE SocketType::TLS
 #define CONFIG_FILE_PATH "../config.txt"
 
-void single_server(Circular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
+void single_server(TS_Circular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
 void displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
@@ -99,8 +99,11 @@ int main(int argc, char** argv) {
         //  if the command was followed by another command the second command will be interpreted as the first command's argument
 
         //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
-        if(optarg != nullptr && !Validator::validateOptArg(optarg))
+        if(optarg != nullptr && !Validator::validateOptArg(optarg)) {
+            Message::print(std::cerr, "ERROR", "Error with an option argument inserted",
+                           "Maybe you forgot one argument");
             return 1;
+        }
 
         switch (c) {
             case 'a':   //add user option
@@ -108,8 +111,11 @@ int main(int argc, char** argv) {
                 username = optarg;
 
                 //validate username
-                if(!Validator::validateUsername(username))
+                if(!Validator::validateUsername(username)) {
+                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
+                                   "Insert a valid username string");
                     return 1;
+                }
 
                 break;
 
@@ -118,8 +124,11 @@ int main(int argc, char** argv) {
                 username = optarg;
 
                 //validate username
-                if(!Validator::validateUsername(username))
+                if(!Validator::validateUsername(username)) {
+                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
+                                   "Insert a valid username string");
                     return 1;
+                }
 
                 break;
 
@@ -128,8 +137,11 @@ int main(int argc, char** argv) {
                 username = optarg;
 
                 //validate username
-                if(!Validator::validateUsername(username))
+                if(!Validator::validateUsername(username)) {
+                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
+                                   "Insert a valid username string");
                     return 1;
+                }
 
                 break;
 
@@ -142,8 +154,11 @@ int main(int argc, char** argv) {
                 password = optarg;
 
                 //validate password
-                if(!Validator::validatePassword(password))
+                if(!Validator::validatePassword(password)) {
+                    Message::print(std::cerr, "ERROR", "Error with the password inserted",
+                                   "Insert a valid password string");
                     return 1;
+                }
 
                 break;
 
@@ -152,8 +167,11 @@ int main(int argc, char** argv) {
                 delUsername = optarg;
 
                 //validate username
-                if(!Validator::validateUsername(delUsername))
+                if(!Validator::validateUsername(delUsername)) {
+                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
+                                   "Insert a valid username string");
                     return 1;
+                }
 
                 break;
 
@@ -162,8 +180,11 @@ int main(int argc, char** argv) {
                 delMac = optarg;
 
                 //validate mac
-                if(!Validator::validateMacAddress(delMac))
+                if(!Validator::validateMacAddress(delMac)){
+                    Message::print(std::cerr, "ERROR", "Error with the mac inserted",
+                                   "Insert a valid mac");
                     return 1;
+                }
 
                 break;
 
@@ -290,7 +311,7 @@ int main(int argc, char** argv) {
 
             Message::print(std::cout, "INFO", "Server opened: available at", "[" + std::string(server.getIP()) + ":" + std::to_string(PORT) + "]");
 
-            Circular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
+            TS_Circular_vector<std::pair<std::string, Socket>> sockets{config->getSocketQueueSize()};
 
             std::atomic<bool> server_thread_stop = false, main_stop = false;   //atomic boolean to force the server threads to stop
             std::vector<std::thread> threads;
@@ -386,7 +407,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
+void single_server(TS_Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &thread_stop, std::atomic<bool> &server_stop){
     while(!thread_stop.load()){ //loop until we are told to stop
         //Socket sock = sockets.get();    //get the first socket in the socket queue (removing it from the queue); if no element is present then passively wait
 
@@ -416,7 +437,6 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
 
             //authenticate the connected client
             pm.authenticate();
-            //pm.recoverFromDB();
 
             while(loop && !thread_stop.load()) { //loop until we are told to stop
                 //build fd sets
@@ -463,26 +483,22 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
             switch(e.getCode()){
                 //these 2 cases are handled directly by the protocol manager -> keep connection and skip message;
                 //anyway if they appear here close connection and continue with the next socket
-                case server::ProtocolManagerError::unsupported:
+                case server::ProtocolManagerError::unexpected:
                 case server::ProtocolManagerError::client:
 
                 //in these 2 cases connection with the client is not valid and needs to be closed
                 case server::ProtocolManagerError::auth:
                 case server::ProtocolManagerError::version:
                     Message::print(std::cerr, "WARNING", "ProtocolManager Exception", e.what());
+
                     sock.closeConnection(); //close the connection with the client
+
                     Message::print(std::cout, "INFO", "Closing connection with client", "I will proceed with next connections");
                     continue;   //the error is in the current socket, continue with the next one
 
-                //in these 2 cases (and default) the errors are so important that they require the closing of the whole program
+                //in this case (and default) the errors are so important that they require the closing of the whole program
                 case server::ProtocolManagerError::internal:
-                case server::ProtocolManagerError::unknown:
                 default:
-
-                    //TODO check if this is needed, maybe changing client main or ProtocolManager it is not needed
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));   //wait just a little bit in order to be sure to have sent the message to the client
-                    sock.closeConnection();     //close connection
-
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
@@ -491,7 +507,6 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                     Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
-                    tmp.closeConnection();
                     return; //then return
             }
         }
@@ -519,8 +534,6 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                     Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
 
-                    tmp.closeConnection();
-
                     return; //then return
             }
         }
@@ -541,14 +554,10 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "PWD_Database Exception", e.what());
 
-                    sock.closeConnection(); //close the connection with the client
-
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
                     Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
-
-                    tmp.closeConnection();
 
                     return; //then return
             }
@@ -567,14 +576,10 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                     //Fatal error -> close the server
                     Message::print(std::cerr, "ERROR", "Database Exception", e.what());
 
-                    sock.closeConnection(); //close the connection with the client
-
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
                     Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
-
-                    tmp.closeConnection();
 
                     return; //then return
             }
@@ -590,14 +595,10 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
                 default:
                     Message::print(std::cerr, "ERROR", "Config Exception", e.what());
 
-                    sock.closeConnection(); //close the connection with the client
-
                     server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
                     Socket tmp{SocketType::TCP};
                     tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
-
-                    tmp.closeConnection();
 
                     return; //then return
             }
@@ -606,14 +607,10 @@ void single_server(Circular_vector<std::pair<std::string, Socket>> &sockets, std
             //Fatal error -> close the server
             Message::print(std::cerr, "ERROR", "exception", e.what());
 
-            sock.closeConnection(); //close the connection with the client
-
             server_stop.store(true);    //set the stop atomic boolean for the main (the main will stop all the other threads)
 
             Socket tmp{SocketType::TCP};
             tmp.connect("localhost",PORT); //connect to the local serverSocket in order to make it exit the accept
-
-            tmp.closeConnection();
 
             return; //then return
         }

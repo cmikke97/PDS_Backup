@@ -37,10 +37,7 @@ enum class FileSystemStatus {
     modified,
 
     //element STOR message was sent
-    storeSent,
-
-    //element STOR (for a modification) message was sent
-    modifySent
+    storeSent
 };
 
 /**
