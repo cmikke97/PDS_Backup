@@ -17,14 +17,16 @@
 #include "ProtocolManager.h"
 #include "../myLibraries/Message.h"
 #include "../myLibraries/Validator.h"
+#include "Config.h"
 
 //TODO check
 
 #define VERSION 1
 
 #define SOCKET_TYPE SocketType::TLS
+#define CONFIG_FILE_PATH "../config.txt"
 
-void communicate(std::atomic<bool> &, std::atomic<bool> &, Circular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
+void communicate(std::atomic<bool> &, std::atomic<bool> &, TS_Circular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
 
 void displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
@@ -114,8 +116,11 @@ int main(int argc, char **argv) {
         //  if the command was followed by another command the second command will be interpreted as the first command's argument
 
         //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
-        if(optarg != nullptr && !Validator::validateOptArg(optarg))
+        if(optarg != nullptr && !Validator::validateOptArg(optarg)) {
+            Message::print(std::cerr, "ERROR", "Error with an option argument inserted",
+                           "Maybe you forgot one argument");
             return 1;
+        }
 
         switch (c) {
             case 'r':   //retrieve option
@@ -127,8 +132,11 @@ int main(int argc, char **argv) {
                 destFolder = optarg;
 
                 //validate folder
-                if(!Validator::validateFolder(destFolder))
+                if(!Validator::validatePath(destFolder)) {
+                    Message::print(std::cerr, "ERROR", "Error with the destination folder inserted",
+                                   "Insert a valid folder");
                     return 1;
+                }
 
                 break;
 
@@ -137,8 +145,11 @@ int main(int argc, char **argv) {
                 mac = optarg;
 
                 //validate mac
-                if(!Validator::validateMacAddress(mac))
+                if(!Validator::validateMacAddress(mac)) {
+                    Message::print(std::cerr, "ERROR", "Error with the mac inserted",
+                                   "Insert a valid mac");
                     return 1;
+                }
 
                 break;
 
@@ -155,8 +166,11 @@ int main(int argc, char **argv) {
                 serverIP = optarg;
 
                 //validate ip address
-                if(!Validator::validateIPAddress(serverIP))
+                if(!Validator::validateIPAddress(serverIP)) {
+                    Message::print(std::cerr, "ERROR", "Error with the IP address inserted",
+                                   "Insert a valid IP address");
                     return 1;
+                }
 
                 break;
 
@@ -165,8 +179,11 @@ int main(int argc, char **argv) {
                 serverPort = optarg;
 
                 //validate port
-                if(!Validator::validatePort(serverPort))
+                if(!Validator::validatePort(serverPort)) {
+                    Message::print(std::cerr, "ERROR", "Error with the server port inserted",
+                                   "Insert a valid port");
                     return 1;
+                }
 
                 break;
 
@@ -175,8 +192,11 @@ int main(int argc, char **argv) {
                 username = optarg;
 
                 //validate username
-                if(!Validator::validateUsername(username))
+                if(!Validator::validateUsername(username)) {
+                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
+                                   "Insert a valid username string");
                     return 1;
+                }
 
                 break;
 
@@ -185,8 +205,11 @@ int main(int argc, char **argv) {
                 password = optarg;
 
                 //validate password
-                if(!Validator::validatePassword(password))
+                if(!Validator::validatePassword(password)) {
+                    Message::print(std::cerr, "ERROR", "Error with the password inserted",
+                                   "Insert a valid password string");
                     return 1;
+                }
 
                 break;
 
@@ -253,7 +276,7 @@ int main(int argc, char **argv) {
             client_socket.connect(serverIP, stoi(serverPort));
 
             //create the protocol manager instance
-            client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
+            client::ProtocolManager pm(client_socket, VERSION);
 
             //authenticate the client to the server
             pm.authenticate(username, password, client_socket.getMAC());
@@ -287,7 +310,7 @@ int main(int argc, char **argv) {
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
 
         // create a circular vector instance that will contain all the events happened
-        Circular_vector<Event> eventQueue(config->getEventQueueSize());
+        TS_Circular_vector<Event> eventQueue(config->getEventQueueSize());
 
         //initialize some atomic boolean to make the different threads stop
         std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
@@ -368,7 +391,7 @@ int main(int argc, char **argv) {
  *
  * @author Michele Crepaldi
  */
-void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, Circular_vector<Event> &eventQueue, const std::string &server_ip,
+void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_stop, TS_Circular_vector<Event> &eventQueue, const std::string &server_ip,
                  int server_port, const std::string &username, const std::string &password) {
 
     try {
@@ -392,7 +415,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             Socket client_socket(SOCKET_TYPE);
 
             //initialize protocol manager
-            client::ProtocolManager pm(client_socket, config->getMaxResponseWaiting(), VERSION, config->getMaxServerErrorRetries(), config->getPathToWatch());
+            client::ProtocolManager pm(client_socket, VERSION);
 
             try {
 
@@ -542,11 +565,10 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
             }
             catch (client::ProtocolManagerException &e) {
                 switch (e.getErrorCode()) {
-                    case client::protocolManagerError::unknown: //unknown server error
-                    case client::protocolManagerError::auth: //authentication error
-                    case client::protocolManagerError::internal: //internal server error (exception)
-                    case client::protocolManagerError::version: //version not supported error
-                    case client::protocolManagerError::unsupported: //unsupported message type error
+                    case client::ProtocolManagerError::auth:
+                    case client::ProtocolManagerError::internal:
+                    case client::ProtocolManagerError::serverMessage:
+                    case client::ProtocolManagerError::version:
                         Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
                         //connection will be closed automatically by the socket destructor
@@ -555,7 +577,8 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         fileWatcher_stop.store(true);
                         return;
 
-                    case client::protocolManagerError::unexpected: //unexpected message error
+                    case client::ProtocolManagerError::unexpected:
+                    case client::ProtocolManagerError::unexpectedCode:
                         if(!authenticated){  //if I am not authenticated any unexpected message means error
                             Message::print(std::cerr, "ERROR", "ProtocolManager Exception", e.what());
 
@@ -567,7 +590,7 @@ void communicate(std::atomic<bool> &thread_stop, std::atomic<bool> &fileWatcher_
                         }
 
                         //otherwise
-                    case client::protocolManagerError::client: //client message error
+                    case client::ProtocolManagerError::client: //client message error
                         //TODO go on -> skip the current message (Should be done.. check..)
                         Message::print(std::cerr, "WARNING", "Message error", "Message will be skipped");
                         break;

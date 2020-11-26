@@ -27,9 +27,6 @@ namespace server {
      * @author Michele Crepaldi s269551
      */
     enum class ProtocolManagerError {
-        //unknown error (Fatal error)
-        unknown,
-
         //current user authentication failed
         auth,
 
@@ -42,8 +39,8 @@ namespace server {
         //current client uses a different version
         version,
 
-        //client message of an unsupported type
-        unsupported
+        //client message of an unexpected type
+        unexpected
     };
 
     /**
@@ -143,16 +140,17 @@ namespace server {
         std::string _basePath;      //base server path (where to put backed-up data)
         std::string _temporaryPath; //temporary server path where to put temporary files
 
-        int _tempNameSize;          //size of the temporary files name
         int _protocolVersion;       //server's protocol version
-        int _maxDataChunkSize;      //maximum size of sent data chunk
+
+        unsigned int _tempNameSize;          //size of the temporary files name
+        unsigned int _maxDataChunkSize;      //maximum size of sent data chunk
 
         bool _recovered;    //whether the protocol manager already recovered data from database or not
 
         //map of saved directory entries for this username-mac
         std::unordered_map<std::string, Directory_entry> _elements;
 
-        void _send_serverMessage(); //send _serverMessage method
+        void _send_serverMessage(); //send serverMessage method
 
         /*
          * +-----------------------------------------------------------------------------------------------------------+
@@ -161,7 +159,7 @@ namespace server {
 
         //send message methods for the normal usage
         void _send_OK(OkCode code);     //send OK message method
-        void _send_SEND();              //send SEND message method
+        void _send_SEND(const std::string &path, const std::string &hash);  //send SEND message method
         void _send_ERR(ErrCode code);   //send ERR message method
         void _send_VER();               //send VER message method
 
@@ -182,7 +180,7 @@ namespace server {
         void _send_STOR(const std::string &path, Directory_entry &element); //send STOR message method
         void _send_DATA(char *buff, uint64_t len);                      //send DATA message method
 
-        //special actions perfoming methods for the special case of client retrieving data from server
+        //special action performing methods for the special case of client retrieving data from server
         void _retrieveUserData();   //user data retrieve method
         void _sendFile(Directory_entry &element, std::string &macAddr); //send file to client method
     };

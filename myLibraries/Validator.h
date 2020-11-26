@@ -24,8 +24,10 @@ public:
     static bool validatePassword(std::string &password);
     static bool validateMacAddress(std::string &mac);
     static bool validateIPAddress(std::string &ipAddress);
-    static bool validateFolder(std::string &folder);
+    static bool validatePath(std::string &folder);
+    static bool validateUint(std::string &intgerString);
     static bool validatePort(std::string &port);
+    static bool validateLastWriteTime(std::string &lastWriteTime);
 };
 
 

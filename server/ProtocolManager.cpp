@@ -11,13 +11,358 @@
 
 #include "../myLibraries/Message.h"
 #include "../myLibraries/RandomNumberGenerator.h"
+#include "../myLibraries/Validator.h"
 #include "Config.h"
 
 
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
- * Config class methods
+ * ProtocolManager class methods
  */
+
+/**
+ * ProtocolManager constructor
+ *
+ * @param socket socket associated to this thread
+ * @param address address of the connected client
+ * @param ver version of the protocol tu use
+ *
+ * @author Michele Crepaldi s269551
+ */
+server::ProtocolManager::ProtocolManager(Socket &socket, std::string address, int ver) :
+        _s(socket), //set socket
+        _address(std::move(address)),   //set client address
+        _protocolVersion(ver),  //set protocol version
+        _recovered(false){  //set recovered member variable to false
+
+    auto config = Config::getInstance();    //config object instance
+    _basePath = config->getServerBasePath();    //get server base path
+    _temporaryPath = config->getTempPath();     //get server temporary path
+    _tempNameSize = config->getTmpFileNameSize();       //get temporary file name size
+    _maxDataChunkSize = config->getMaxDataChunkSize();  //get max data chunk size
+
+    _password_db = Database_pwd::getInstance(); //get database_pwd instance
+    _db = Database::getInstance();              //get database instance
+}
+
+/**
+ * ProtocolManager recover from database method.
+ *  It is used to recover all the elements (for the current user-mac pair) in the server db and populate
+ *  the elements map
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::recoverFromDB() {
+    std::vector<Directory_entry> toUpdate;  //list of all Directory_entry elements to update
+    std::vector<Directory_entry> toDelete;  //list of all Directory_entry elements to delete
+
+    //function to be used for each element of the db
+    std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &,
+                        const std::string &)> f;
+
+    f = [this, &toUpdate, &toDelete](const std::string &path, const std::string &type, uintmax_t size,
+                                     const std::string &lastWriteTime, const std::string& hash){
+
+        //current Directory_entry element
+        auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+
+        //check if the file exists in the server filesystem (if the server has a copy of it)
+        if(!std::filesystem::exists(current.getAbsolutePath())){
+            //if the element does not exist add it to the elements to delete from db
+            toDelete.push_back(std::move(current));
+
+            return;
+        }
+        //otherwise
+
+        //if the file exists, check if it corresponds to the one described by the database
+
+        //effective Directory_entry element on filesystem
+        auto effective = Directory_entry(_basePath, current.getAbsolutePath());
+
+        //if the effective element found on filesystem is different from the current one
+        if(effective.getType() != current.getType() || effective.getSize() != current.getSize() ||
+           effective.getLastWriteTime() != current.getLastWriteTime() || effective.getHash() != current.getHash()){
+
+            //if there exists an element with the same name in the db but it is different from expected
+
+            //add it to the elements to update into the db
+            toUpdate.push_back(std::move(effective));
+
+            return;
+        }
+        //otherwise
+
+        //if the file exists and it is the same as described in the db
+
+        //add it to the elements map
+        _elements.emplace(path, std::move(current));
+    };
+
+    //apply the function for all the user's (and mac) elements in the db
+    _db->forAll(_username, _mac, f);
+
+    //for all the elements to update
+    for(auto el: toUpdate){
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+                       "was modified offline!");
+
+        //update the element on database
+        _db->update(_username, _mac, el);
+
+        //insert the element into the elements map
+        _elements.emplace(el.getRelativePath(), std::move(el));
+    }
+
+    //for all the elements to delete
+    for(auto el: toDelete){
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+                       "was removed offline!");
+
+        //delete the element from database
+        _db->remove(_username, _mac, el.getRelativePath());
+    }
+
+    //set _recovered boolean member variable to inform that the recovery has been completed
+    _recovered = true;
+}
+
+/**
+ * ProtocolManager authenticate method.
+ *  It is used to authenticate a client (username-mac)
+ *
+ * @throws ProtocolManagerException:
+ *  <b>version</b> if the client message uses a different version
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if there are error in the client message (validation failed)
+ * @throws ProtocolManagerException:
+ *  <b>auth</b> if the authentication failed
+ * @throws ProtocolManagerException:
+ *  <b>unexpected</b> if an unexpected client message was received
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::authenticate() {
+    //receive a message from client
+
+    std::string message = _s.recvString();      //client message
+    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the clinet message
+
+    //check clientMessage version
+    if(_protocolVersion != _clientMessage.version()) {
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
+
+        //send version message to the client
+        _send_VER();
+
+        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
+    }
+
+    //if the clientMessage type is AUTH
+    if(_clientMessage.type() == messages::ClientMessage_Type_AUTH) {
+
+        //get the information from the client message
+
+        _username = _clientMessage.username();  //get username from clientMessage
+        _mac = _clientMessage.macaddress();     //get mac address from clientMessage
+        std::string password = _clientMessage.password();   //get password from clientMessage
+
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
+
+
+        //validate path got from clientMessage
+        if(!Validator::validateUsername(_username))
+            throw ProtocolManagerException("Username validation failed", ProtocolManagerError::client);
+
+        //validate last write time got from clientMessage
+        if(!Validator::validateMacAddress(_mac))
+            throw ProtocolManagerException("Mac address validation failed", ProtocolManagerError::client);
+
+        //validate last write time got from clientMessage
+        if(!Validator::validatePassword(password))
+            throw ProtocolManagerException("Password validation failed", ProtocolManagerError::client);
+
+
+        //initialize hash maker with the password
+        HashMaker hm{password};
+
+        //get the salt and password hash for the current user
+
+        //(salt,hash) pair for the current user
+        auto pair = _password_db->getHash(_username);
+
+        //user's salt
+        std::string salt = pair.first;
+
+        //update the hash maker with the user's salt (effectively appending the salt to the password)
+        hm.update(salt);
+
+        //computed password hash
+        auto pwdHash = hm.get();
+
+        //compare the computed password hash with the user hash
+        if(pwdHash != pair.second){
+            //if they are different then the password is not correct (authentication error)
+
+            //send error message with cause to the client
+            _send_ERR(ErrCode::auth);
+
+            throw ProtocolManagerException("Authentication Error", ProtocolManagerError::auth);
+        }
+
+        //the authentication was successful
+
+        //send ok message to the client
+        _send_OK(OkCode::authenticated);
+    }
+    else{   //if the clientMessage type is not AUTH
+
+        //error, message not expected
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::unexpected);
+
+        //throw exception
+        throw ProtocolManagerException("Message Error, not expected.", ProtocolManagerError::unexpected);
+    }
+
+    //set the server base path (where to put the backed-up files)
+
+    std::stringstream tmp;
+    tmp << _basePath << "/" << _username << "_" << std::regex_replace(_mac, std::regex(":"), "-");
+    _basePath = tmp.str();
+
+    Message::print(std::cout, "EVENT", _address, "authenticated as " + _username + "@" + _mac);
+}
+
+/**
+ * ProtocolManager receive method.
+ *  It is used to receive a message from the client
+ *
+ * @throws ProtocolManagerException:
+ *  <b>version</b> if the client message uses a different version
+ * @throws ProtocolManagerException:
+ *  <b>unexpected</b> if an unexpected client message was received
+ * @throws ProtocolManagerException:
+ *  <b>internal</b> if there is some un-handled exception
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::receive(){
+    //receive a message from client
+
+    std::string message = _s.recvString();      //client message
+    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the message
+
+    //check clientMessage version
+    if(_protocolVersion != _clientMessage.version()) {
+        //it is more efficient to clear the clientMessage protobuf than creating a new one
+        _clientMessage.Clear();
+
+        //send version message to the client
+        _send_VER();
+
+        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
+    }
+
+    try {
+        //switch on client message type
+        switch (_clientMessage.type()) {
+            case messages::ClientMessage_Type_PROB:
+                _probe();   //probe elements map for the file in client message
+                break;
+
+            case messages::ClientMessage_Type_STOR:
+                _storeFile();   //store file in the server filesystem, db and elements map
+                break;
+
+            case messages::ClientMessage_Type_DELE:
+                _removeFile();  //remove file from server filesystem, db and elements map
+                break;
+
+            case messages::ClientMessage_Type_MKD:
+                _makeDir(); //create directory on server filesystem, db and elements map
+                break;
+
+            case messages::ClientMessage_Type_RMD:
+                _removeDir();   //remove directory from server filesystem, db and elements map
+                break;
+
+            case messages::ClientMessage_Type_RETR:
+                _retrieveUserData();    //retrieve the user's backed-up files and send it to client
+                break;
+
+            case messages::ClientMessage_Type_NOOP:
+            case messages::ClientMessage_Type_DATA:
+            case messages::ClientMessage_Type_AUTH:
+            default:
+                //unexpected message types
+
+                //send error message with cause to the client
+                _send_ERR(ErrCode::unexpected);
+
+                throw ProtocolManagerException("Unexpected message type", ProtocolManagerError::unexpected);
+        }
+    }
+    catch (ProtocolManagerException &e) {
+        //switch on error code
+        switch (e.getCode()) {
+            //in these 2 cases the errors may be temporary or just related to this particular message
+            //so keep connection and skip the faulty message
+            case server::ProtocolManagerError::unexpected:
+            case server::ProtocolManagerError::client:
+                //keep connection, skip this message
+                return;
+
+                //these next cases will be handled from main
+            case server::ProtocolManagerError::auth:
+            case server::ProtocolManagerError::version:
+            case server::ProtocolManagerError::internal:
+            default:
+                //re-throw exception
+                throw;
+        }
+    }
+    catch (SocketException &e){
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+        throw;
+    }
+    catch (server::DatabaseException_pwd &e){
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
+    }
+    catch (server::DatabaseException &e){
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
+    }
+    catch (server::ConfigException &e){
+        //re-throw exception (I don't want the general std::exception catch to catch it)
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw;
+    }
+    catch (std::exception &e) {
+        //internal server error
+
+        //send error message with cause to the client
+        _send_ERR(ErrCode::exception);
+
+        throw ProtocolManagerException(e.what(),server::ProtocolManagerError::internal);
+    }
+}
+
 
 /**
  * ProtocolManager send serverMessage method.
@@ -61,13 +406,13 @@ void server::ProtocolManager::_send_OK(OkCode code){
  *
  * @author Michele Crepaldi s269551
  */
-void server::ProtocolManager::_send_SEND(){
+void server::ProtocolManager::_send_SEND(const std::string &path, const std::string &hash){
     _serverMessage.set_version(_protocolVersion);
     _serverMessage.set_type(messages::ServerMessage_Type_SEND);
 
     //set path and hash to the value in the last clientMessage received
-    _serverMessage.set_path(_clientMessage.path());
-    _serverMessage.set_hash(_clientMessage.hash());
+    _serverMessage.set_path(path);
+    _serverMessage.set_hash(hash);
 
     _send_serverMessage();
 }
@@ -107,69 +452,11 @@ void server::ProtocolManager::_send_VER(){
 }
 
 /**
- * ProtocolManager send MKD message method.
- *  It will set the serverMessage protobuf version, type, path and last write time and then send it
- *
- * @param e Directory_entry to create
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::_send_MKD(const std::string &path, Directory_entry &e){
-    _serverMessage.set_version(_protocolVersion);
-    _serverMessage.set_type(messages::ServerMessage_Type_MKD);
-
-    //set path and last write time
-    _serverMessage.set_path(path);
-    _serverMessage.set_lastwritetime(e.getLastWriteTime());
-
-    _send_serverMessage();
-}
-
-/**
- * ProtocolManager send STOR message method.
- *  It will set the serverMessage protobuf version, type, path, file size, last write time and hash and then send it
- *
- * @param path relative path of the file on client (with respect to the client base path)
- * @param element Directory_entry element (file) to store on client
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::_send_STOR(const std::string &path, Directory_entry &element){
-    _serverMessage.set_version(_protocolVersion);
-    _serverMessage.set_type(messages::ServerMessage_Type_STOR);
-
-    //set the path, filesize, last write time and hash
-    _serverMessage.set_path(path);
-    _serverMessage.set_filesize(element.getSize());
-    _serverMessage.set_lastwritetime(element.getLastWriteTime());
-    _serverMessage.set_hash(element.getHash().get().first, element.getHash().get().second);
-
-    _send_serverMessage();
-}
-
-/**
- * ProtocolManager send DATA message method.
- *  It will set the serverMessage protobuf version, type, data and then send it
- *
- * @param buff buffer to the data to send
- * @param len length of the data to send
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::_send_DATA(char *buff, uint64_t len){
-    _serverMessage.set_version(_protocolVersion);
-    _serverMessage.set_type(messages::ServerMessage_Type_DATA);
-
-    //set the data
-    _serverMessage.set_data(buff, len);
-
-    _send_serverMessage();
-}
-
-/**
  * ProtocolManager file probe method.
  *  Used to probe the server elements map for the file got in PROB clientMessage
  *
+ * @throws ProtocolManagerException:
+ *  <b>client</b> if there were errors in the client message (validation failed)
  * @throws ProtocolManagerException:
  *  <b>client</b> if the element is not a file
  *
@@ -184,9 +471,17 @@ void server::ProtocolManager::_probe() {
     std::string lastWriteTime = _clientMessage.lastwritetime(); //file last write time
     Hash h = Hash(_clientMessage.hash());                       //file hash
 
-
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate path got from clientMessage
+    if(!Validator::validatePath(path))
+        throw ProtocolManagerException("Path validation failed", ProtocolManagerError::client);
+
+    //validate last write time got from clientMessage
+    if(!Validator::validateLastWriteTime(lastWriteTime))
+        throw ProtocolManagerException("Last write time validation failed", ProtocolManagerError::client);
 
 
     Message::print(std::cout, "PROB", _address + " (" + _username + "@" + _mac + ")", path);
@@ -198,7 +493,7 @@ void server::ProtocolManager::_probe() {
     if(el == _elements.end()) {
 
         //tell the client to send it
-        _send_SEND();
+        _send_SEND(path, h.str());
         return;
     }
     //otherwise
@@ -214,7 +509,7 @@ void server::ProtocolManager::_probe() {
     if(el->second.getHash() != h) {
 
         //we want to overwrite it so tell the client to send it
-        _send_SEND();
+        _send_SEND(path, h.str());
         return;
     }
 
@@ -241,7 +536,9 @@ void server::ProtocolManager::_probe() {
  * @throws ProtocolManagerException:
  *  <b>version</b> if the DATA message version is not supported (should not happen, but it checks it anyway)
  * @throws ProtocolManagerException:
- *  <b>client</b> if the DATA transfer was unexpectedly interrupted by another message type
+ *  <b>client</b> if there were errors in the client message (validation failed)
+ * @throws ProtocolManagerException:
+ *  <b>unexpected</b> if the DATA transfer was unexpectedly interrupted by another message type
  * @throws ProtocolManagerException:
  *  <b>client</b> if the transferred file is different from its description found in STOR message (so if either its
  *  size or hash is different)
@@ -255,12 +552,26 @@ void server::ProtocolManager::_storeFile(){
     if(!_recovered)
         recoverFromDB();
 
-    //expected Directory entry element (got from the client message)
-    Directory_entry expected{_basePath, _clientMessage.path(), _clientMessage.filesize(), "file",
-                             _clientMessage.lastwritetime(), Hash{_clientMessage.hash()}};
+    std::string path = _clientMessage.path();                   //file relative path
+    uintmax_t size = _clientMessage.filesize();                 //file size
+    std::string lastWriteTime = _clientMessage.lastwritetime(); //file last write time
+    Hash h = Hash(_clientMessage.hash());                       //file hash
 
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate path got from clientMessage
+    if(!Validator::validatePath(path))
+        throw ProtocolManagerException("Path validation failed", ProtocolManagerError::client);
+
+    //validate last write time got from clientMessage
+    if(!Validator::validateLastWriteTime(lastWriteTime))
+        throw ProtocolManagerException("Last write time validation failed", ProtocolManagerError::client);
+
+
+    //expected Directory entry element (got from the client message)
+    Directory_entry expected{_basePath, path, size, "file", lastWriteTime, h};
 
     Message::print(std::cout, "STOR", _address + " (" + _username + "@" + _mac + ")",
                    expected.getRelativePath());
@@ -295,6 +606,9 @@ void server::ProtocolManager::_storeFile(){
 
                 //check message version
                 if (_clientMessage.version() != _protocolVersion) { //if the version is different
+                    //it is more efficient to clear the clientMessage protobuf than creating a new one
+                    _clientMessage.Clear();
+
                     //send the version message
                     _send_VER();
 
@@ -310,6 +624,9 @@ void server::ProtocolManager::_storeFile(){
 
                 //check message type, it has to be DATA type
                 if (_clientMessage.type() != messages::ClientMessage_Type_DATA) {   //if it is not of type DATA
+                    //it is more efficient to clear the clientMessage protobuf than creating a new one
+                    _clientMessage.Clear();
+
                     //close the temporary file
                     temporaryFile.close();
 
@@ -322,7 +639,7 @@ void server::ProtocolManager::_storeFile(){
                     _send_ERR(ErrCode::unexpected);
 
                     throw ProtocolManagerException("Unexpected message, DATA transfer was not done.",
-                                                   ProtocolManagerError::client);
+                                                   ProtocolManagerError::unexpected);
                 }
 
                 //is this the last data packet? if yes stop the loop
@@ -338,7 +655,8 @@ void server::ProtocolManager::_storeFile(){
                 _clientMessage.Clear();
             }
         }
-        catch (SocketException &e) {    //in case of socket exceptions while transferring the file I need to delete the temporary file
+        //in case of socket exceptions while transferring the file I need to delete the temporary file
+        catch (SocketException &e) {
             //close the temporary file
             temporaryFile.close();
 
@@ -456,6 +774,8 @@ void server::ProtocolManager::_storeFile(){
  * @throw ProtocolManagerException if the element is not a file or if there is a file with the same path but the hash is different
  *
  * @throws ProtocolManagerException:
+ *  <b>client</b> if there were errors in the client message (validation failed)
+ * @throws ProtocolManagerException:
  *  <b>client</b> if the element to remove is not a file or the file hash does not correspond
  * @throws ProtocolManagerException:
  *  <b>internal</b> if it could not remove the file
@@ -467,11 +787,17 @@ void server::ProtocolManager::_removeFile(){
     if(!_recovered)
         recoverFromDB();
 
-    const std::string path = _clientMessage.path();     //file relative path
+    std::string path = _clientMessage.path();     //file relative path
     Hash h{_clientMessage.hash()};                      //file Hash
 
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate path got from clientMessage
+    if(!Validator::validatePath(path))
+        throw ProtocolManagerException("Path validation failed", ProtocolManagerError::client);
+
 
     Message::print(std::cout, "DELE", _address + " (" + _username + "@" + _mac + ")", path);
 
@@ -554,6 +880,8 @@ void server::ProtocolManager::_removeFile(){
  *  and elements map
  *
  * @throws ProtocolManagerException:
+ *  <b>client</b> if there were errors in the client message (validation failed)
+ * @throws ProtocolManagerException:
  *  <b>client</b> if there exists already an element with the same name and it is not a directory
  *
  * @author Michele Crepaldi s269551
@@ -563,11 +891,21 @@ void server::ProtocolManager::_makeDir(){
     if(!_recovered)
         recoverFromDB();
 
-    const std::string path = _clientMessage.path();                     //dir relative path
-    const std::string lastWriteTime = _clientMessage.lastwritetime();   //dir last write time
+    std::string path = _clientMessage.path();                     //dir relative path
+    std::string lastWriteTime = _clientMessage.lastwritetime();   //dir last write time
 
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate path got from clientMessage
+    if(!Validator::validatePath(path))
+        throw ProtocolManagerException("Path validation failed", ProtocolManagerError::client);
+
+    //validate last write time got from clientMessage
+    if(!Validator::validateLastWriteTime(lastWriteTime))
+        throw ProtocolManagerException("Last write time validation failed", ProtocolManagerError::client);
+
 
     Message::print(std::cout, "MKD", _address + " (" + _username + "@" + _mac + ")", path);
 
@@ -589,7 +927,7 @@ void server::ProtocolManager::_makeDir(){
     auto parentPath = std::filesystem::path(_basePath + path).parent_path();
 
     //check if the parent folder already exists
-    auto parentExists = std::filesystem::exists(parentPath.string());
+    bool parentExists = std::filesystem::exists(parentPath.string());
 
     //Directory entry representing the dir parent folder
     Directory_entry parent;
@@ -652,6 +990,8 @@ void server::ProtocolManager::_makeDir(){
  *  It is used to remove a directory from the server filesystem, server db and elements map
  *
  * @throws ProtocolManagerException:
+ *  <b>client</b> if there were errors in the client message (validation failed)
+ * @throws ProtocolManagerException:
  *  <b>client</b> if the element to remove is not a directory
  * @throws ProtocolManagerException:
  *  <b>internal</b> if it could not remove the directory
@@ -663,10 +1003,16 @@ void server::ProtocolManager::_removeDir(){
     if(!_recovered)
         recoverFromDB();
 
-    const std::string path = _clientMessage.path(); //dir relative path
+    std::string path = _clientMessage.path();   //dir relative path
 
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate path got from clientMessage
+    if(!Validator::validatePath(path))
+        throw ProtocolManagerException("Path validation failed", ProtocolManagerError::client);
+
 
     Message::print(std::cout, "RMD", _address + " (" + _username + "@" + _mac + ")", path);
 
@@ -765,11 +1111,71 @@ void server::ProtocolManager::_removeDir(){
 }
 
 /**
+ * ProtocolManager send MKD message method.
+ *  It will set the serverMessage protobuf version, type, path and last write time and then send it
+ *
+ * @param e Directory_entry to create
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_send_MKD(const std::string &path, Directory_entry &e){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_MKD);
+
+    //set path and last write time
+    _serverMessage.set_path(path);
+    _serverMessage.set_lastwritetime(e.getLastWriteTime());
+
+    _send_serverMessage();
+}
+
+/**
+ * ProtocolManager send STOR message method.
+ *  It will set the serverMessage protobuf version, type, path, file size, last write time and hash and then send it
+ *
+ * @param path relative path of the file on client (with respect to the client base path)
+ * @param element Directory_entry element (file) to store on client
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_send_STOR(const std::string &path, Directory_entry &element){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_STOR);
+
+    //set the path, filesize, last write time and hash
+    _serverMessage.set_path(path);
+    _serverMessage.set_filesize(element.getSize());
+    _serverMessage.set_lastwritetime(element.getLastWriteTime());
+    _serverMessage.set_hash(element.getHash().get().first, element.getHash().get().second);
+
+    _send_serverMessage();
+}
+
+/**
+ * ProtocolManager send DATA message method.
+ *  It will set the serverMessage protobuf version, type, data and then send it
+ *
+ * @param buff buffer to the data to send
+ * @param len length of the data to send
+ *
+ * @author Michele Crepaldi s269551
+ */
+void server::ProtocolManager::_send_DATA(char *buff, uint64_t len){
+    _serverMessage.set_version(_protocolVersion);
+    _serverMessage.set_type(messages::ServerMessage_Type_DATA);
+
+    //set the data
+    _serverMessage.set_data(buff, len);
+
+    _send_serverMessage();
+}
+
+/**
  * ProtocolManager retrieve user data method.
  *  It is used to retrieve the user's requested data and send it to the client
  *
  * @throws ProtocolManagerException:
- *  <b>client</b> if there was an error in the client message
+ *  <b>client</b> if there were errors in the client message (validation failed)
  *
  * @author Michele Crepaldi s269551
  */
@@ -782,6 +1188,12 @@ void server::ProtocolManager::_retrieveUserData(){
 
     //it is more efficient to clear the clientMessage protobuf than creating a new one
     _clientMessage.Clear();
+
+
+    //validate mac address got from clientMessage
+    if(!Validator::validateMacAddress(macAddr))
+        throw ProtocolManagerException("Mac address validation failed", ProtocolManagerError::client);
+
 
     //map with all the elements to send
     std::map<std::string, Directory_entry> toSend{};
@@ -950,338 +1362,4 @@ void server::ProtocolManager::_sendFile(Directory_entry &element, std::string &m
     }
     else    //if file could not be opened
         throw ProtocolManagerException("Could not open file", ProtocolManagerError::internal);
-}
-
-/**
- * ProtocolManager constructor
- *
- * @param socket socket associated to this thread
- * @param address address of the connected client
- * @param ver version of the protocol tu use
- *
- * @author Michele Crepaldi s269551
- */
-server::ProtocolManager::ProtocolManager(Socket &socket, std::string address, int ver) :
-        _s(socket), //set socket
-        _address(std::move(address)),   //set client address
-        _protocolVersion(ver),  //set protocol version
-        _recovered(false){  //set recovered member variable to false
-
-    auto config = Config::getInstance();    //config object instance
-    _basePath = config->getServerBasePath();    //get server base path
-    _temporaryPath = config->getTempPath();     //get server temporary path
-    _tempNameSize = config->getTmpFileNameSize();       //get temporary file name size
-    _maxDataChunkSize = config->getMaxDataChunkSize();  //get max data chunk size
-
-    _password_db = Database_pwd::getInstance(); //get database_pwd instance
-    _db = Database::getInstance();              //get database instance
-};
-
-/**
- * ProtocolManager authenticate method.
- *  It is used to authenticate a client (username-mac)
- *
- * @throws ProtocolManagerException:
- *  <b>version</b> if the client message uses a different version
- * @throws ProtocolManagerException:
- *  <b>auth</b> if the authentication failed
- * @throws ProtocolManagerException:
- *  <b>unknown</b> if it gets an unexpected client message
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::authenticate() {
-    //receive a message from client
-
-    std::string message = _s.recvString();      //client message
-    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the message
-
-    //check clientMessage version
-    if(_protocolVersion != _clientMessage.version()) {
-        //it is more efficient to clear the clientMessage protobuf than creating a new one
-        _clientMessage.Clear();
-
-        //send version message to the client
-        _send_VER();
-
-        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
-    }
-
-    //if the clientMessage type is AUTH
-    if(_clientMessage.type() == messages::ClientMessage_Type_AUTH) {
-
-        //get the information from the client message
-
-        _username = _clientMessage.username();  //get username from clientMessage
-        _mac = _clientMessage.macaddress();     //get mac address from clientMessage
-        std::string password = _clientMessage.password();   //get password from clientMessage
-
-        //it is more efficient to clear the clientMessage protobuf than creating a new one
-        _clientMessage.Clear();
-
-        //initialize hash maker with the password
-        HashMaker hm{password};
-
-        //get the salt and password hash for the current user
-
-        //(salt,hash) pair for the current user
-        auto pair = _password_db->getHash(_username);
-
-        //user's salt
-        std::string salt = pair.first;
-
-        //update the hash maker with the user's salt (effectively appending the salt to the password)
-        hm.update(salt);
-
-        //computed password hash
-        auto pwdHash = hm.get();
-
-        //compare the computed password hash with the user hash
-        if(pwdHash != pair.second){
-            //if they are different then the password is not correct (authentication error)
-
-            //send error message with cause to the client
-            _send_ERR(ErrCode::auth);
-
-            throw ProtocolManagerException("Authentication Error", ProtocolManagerError::auth);
-        }
-
-        //the authentication was successful
-
-        //send ok message to the client
-        _send_OK(OkCode::authenticated);
-    }
-    else{   //if the clientMessage type is not AUTH
-
-        //error, message not expected
-
-        //send error message with cause to the client
-        _send_ERR(ErrCode::unexpected);
-
-        //throw exception
-        throw ProtocolManagerException("Message Error, not expected.", ProtocolManagerError::unknown);
-    }
-
-    //set the server base path (where to put the backed-up files)
-
-    std::stringstream tmp;
-    tmp << _basePath << "/" << _username << "_" << std::regex_replace(_mac, std::regex(":"), "-");
-    _basePath = tmp.str();
-
-    Message::print(std::cout, "EVENT", _address, "authenticated as " + _username + "@" + _mac);
-};
-
-/**
- * ProtocolManager recover from database method.
- *  It is used to recover all the elements (for the current user-mac pair) in the server db and populate
- *  the elements map
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::recoverFromDB() {
-    std::vector<Directory_entry> toUpdate;  //list of all Directory_entry elements to update
-    std::vector<Directory_entry> toDelete;  //list of all Directory_entry elements to delete
-
-    //function to be used for each element of the db
-    std::function<void (const std::string &, const std::string &, uintmax_t, const std::string &,
-            const std::string &)> f;
-
-    f = [this, &toUpdate, &toDelete](const std::string &path, const std::string &type, uintmax_t size,
-            const std::string &lastWriteTime, const std::string& hash){
-
-        //current Directory_entry element
-        auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
-
-        //check if the file exists in the server filesystem (if the server has a copy of it)
-        if(!std::filesystem::exists(current.getAbsolutePath())){
-            //if the element does not exist add it to the elements to delete from db
-            toDelete.push_back(std::move(current));
-
-            return;
-        }
-        //otherwise
-
-        //if the file exists, check if it corresponds to the one described by the database
-
-        //effective Directory_entry element on filesystem
-        auto effective = Directory_entry(_basePath, current.getAbsolutePath());
-
-        //if the effective element found on filesystem is different from the current one
-        if(effective.getType() != current.getType() || effective.getSize() != current.getSize() ||
-                effective.getLastWriteTime() != current.getLastWriteTime() || effective.getHash() != current.getHash()){
-
-            //if there exists an element with the same name in the db but it is different from expected
-
-            //add it to the elements to update into the db
-            toUpdate.push_back(std::move(effective));
-
-            return;
-        }
-        //otherwise
-
-        //if the file exists and it is the same as described in the db
-
-        //add it to the elements map
-        _elements.emplace(path, std::move(current));
-    };
-
-    //apply the function for all the user's (and mac) elements in the db
-    _db->forAll(_username, _mac, f);
-
-    //for all the elements to update
-    for(auto el: toUpdate){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
-                       "was modified offline!");
-
-        //update the element on database
-        _db->update(_username, _mac, el);
-
-        //insert the element into the elements map
-        _elements.emplace(el.getRelativePath(), std::move(el));
-    }
-
-    //for all the elements to delete
-    for(auto el: toDelete){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
-                       "was removed offline!");
-
-        //delete the element from database
-        _db->remove(_username, _mac, el.getRelativePath());
-    }
-
-    //set _recovered boolean member variable to inform that the recovery has been completed
-    _recovered = true;
-}
-
-/**
- * ProtocolManager receive method.
- *  It is used to receive a message from the client
- *
- * @throws ProtocolManagerException:
- *  <b>version</b> if the client message uses a different version
- * @throws ProtocolManagerException:
- *  <b>unknown</b> if the client message is of an unknown type
- * @throws ProtocolManagerException:
- *  <b>internal</b> if there is some un-handled exception
- *
- * @author Michele Crepaldi s269551
- */
-void server::ProtocolManager::receive(){
-    //receive a message from client
-
-    std::string message = _s.recvString();  //client message
-    _clientMessage.ParseFromString(message);    //get clientMessage protobuf parsing the message
-
-    //check clientMessage version
-    if(_protocolVersion != _clientMessage.version()) {
-        //it is more efficient to clear the clientMessage protobuf than creating a new one
-        _clientMessage.Clear();
-
-        //send version message to the client
-        _send_VER();
-
-        throw ProtocolManagerException("Client is using a different version", ProtocolManagerError::version);
-    }
-
-    try {
-        //switch on client message type
-        switch (_clientMessage.type()) {
-            case messages::ClientMessage_Type_PROB:
-                _probe();   //probe elements map for the file in client message
-                break;
-
-            case messages::ClientMessage_Type_STOR:
-                _storeFile();   //store file in the server filesystem, db and elements map
-                break;
-
-            case messages::ClientMessage_Type_DELE:
-                _removeFile();  //remove file from server filesystem, db and elements map
-                break;
-
-            case messages::ClientMessage_Type_MKD:
-                _makeDir(); //create directory on server filesystem, db and elements map
-                break;
-
-            case messages::ClientMessage_Type_RMD:
-                _removeDir();   //remove directory from server filesystem, db and elements map
-                break;
-
-            case messages::ClientMessage_Type_RETR:
-                _retrieveUserData();    //retrieve the user's backed-up files and send it to client
-                break;
-
-            case messages::ClientMessage_Type_NOOP:
-            case messages::ClientMessage_Type_DATA:
-            case messages::ClientMessage_Type_AUTH:
-                //unexpected message types
-
-                //send error message with cause to the client
-                _send_ERR(ErrCode::unexpected);
-
-                throw ProtocolManagerException("Unexpected message type", ProtocolManagerError::client);
-
-            default:
-                //unknown message type
-
-                //send error message with cause to the client
-                _send_ERR(ErrCode::unexpected);
-                throw ProtocolManagerException("Unknown message type", ProtocolManagerError::unsupported);
-        }
-    }
-    catch (ProtocolManagerException &e) {
-        //switch on error code
-        switch (e.getCode()) {
-            //in these 2 cases the errors may be temporary or just related to this particular message
-            //so keep connection and skip the faulty message
-            case server::ProtocolManagerError::unsupported:
-            case server::ProtocolManagerError::client:
-                //keep connection, skip this message
-                return;
-
-            //these next cases will be handled from main
-            case server::ProtocolManagerError::auth:
-            case server::ProtocolManagerError::version:
-            case server::ProtocolManagerError::internal:
-            case server::ProtocolManagerError::unknown:
-            default:
-                //re-throw exception
-                throw;
-        }
-    }
-    catch (SocketException &e){
-        //re-throw exception (I don't want the general std::exception catch to catch it)
-        throw;
-    }
-    catch (server::DatabaseException_pwd &e){
-        //re-throw exception (I don't want the general std::exception catch to catch it)
-
-        //send error message with cause to the client
-        _send_ERR(ErrCode::exception);
-
-        throw;
-    }
-    catch (server::DatabaseException &e){
-        //re-throw exception (I don't want the general std::exception catch to catch it)
-
-        //send error message with cause to the client
-        _send_ERR(ErrCode::exception);
-
-        throw;
-    }
-    catch (server::ConfigException &e){
-        //re-throw exception (I don't want the general std::exception catch to catch it)
-
-        //send error message with cause to the client
-        _send_ERR(ErrCode::exception);
-
-        throw;
-    }
-    catch (std::exception &e) {
-        //internal server error
-
-        //send error message with cause to the client
-        _send_ERR(ErrCode::exception);
-
-        throw ProtocolManagerException(e.what(),server::ProtocolManagerError::internal);
-    }
 }

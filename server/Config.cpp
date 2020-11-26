@@ -11,6 +11,7 @@
 #include <fstream>
 
 #include "../myLibraries/Message.h"
+#include "../myLibraries/Validator.h"
 
 
 /*
@@ -31,10 +32,10 @@
 #define PRIVATEKEY_PATH "../../TLScerts/server_pkey.pem"                //Server private key path
 #define CA_FILE_PATH "../../TLScerts/cacert.pem"                        //CA to use for server certificate verification
 
-//Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
-//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that
-//(keeping in mind that there are also other fields in the message)
-#define MAX_DATA_CHUNK_SIZE 20480   //now set to 20KB
+//Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages).
+//The maximum size for a protocol buffer message is 64MB, for a TCP socket it is 1GB, and for a TLS socket it is 16KB.
+//So, keeping in mind that there are also other fields in the message, KEEP IT BELOW (or equal) 15KB.
+#define MAX_DATA_CHUNK_SIZE 15360   //now set to 15KB
 
 
 /*
@@ -234,10 +235,11 @@ void server::Config::_load() {
                                         {"max_data_chunk_size",     std::to_string(MAX_DATA_CHUNK_SIZE),
                                             "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA"
                                             "messages)\n"
-                                            "# the maximum size for a protocol buffer message is 64MB"
-                                            "(for a TCP socket it is 1GB) \n"
-                                            "# so keep it less than that"
-                                            "(keeping in mind that there are also other fields in the message)"}};
+                                            "# the maximum size for a protocol buffer message is 64MB, for a TCP socket"
+                                            " it is 1GB,\n"
+                                            "# and for a TLS socket it is 16KB.\n"
+                                            "# So, keeping in mind that there are also other fields in the message,\n"
+                                            "# KEEP IT BELOW (or equal) 15KB."}};
 
         //comments on top of the file
         std::string initial_comments[] = {          "###########################################################################",
@@ -249,7 +251,7 @@ void server::Config::_load() {
 
         //comments before the host dependant variables
         std::string host_variables_comments[] = {   "###########################################################################",
-                                                    "#         Host specific variables: no default values are provided         #",
+                                                    "#        -Host specific variables: no default values are provided-        #",
                                                     "###########################################################################"};
 
         //comments before the default-able variables
@@ -295,21 +297,13 @@ void server::Config::_load() {
                  * +---------------------------------------------------------------------------------------------------+
                  * folder variables
                  */
-                if(key == "server_base_path"){
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    value = std::regex_replace(value, std::regex(R"(\\)"), "/");
-
-                    //delete the tailing "/" that may be there at the end of the path (since this is a folder path)
-                    _server_base_path = std::regex_replace(value, std::regex(R"(\/$)"), "");
+                if(key == "server_base_path") {
+                    if (Validator::validatePath(value))
+                        _server_base_path = value;
                 }
-                else if(key == "temp_path"){
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    value = std::regex_replace(value, std::regex(R"(\\)"), "/");
-
-                    //delete the tailing "/" that may be there at the end of the path (since this is a folder path)
-                    _temp_path = std::regex_replace(value, std::regex(R"(\/$)"), "");
+                else if(key == "temp_path") {
+                    if (Validator::validatePath(value))
+                        _temp_path = value;
                 }
 
 
@@ -318,29 +312,24 @@ void server::Config::_load() {
                  * file variables
                  */
                 else if(key == "password_database_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _password_database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if (Validator::validatePath(value))
+                        _password_database_path = value;
                 }
                 else if(key == "server_database_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _server_database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if (Validator::validatePath(value))
+                        _server_database_path = value;
                 }
                 else if(key == "certificate_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _certificate_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if (Validator::validatePath(value))
+                        _certificate_path = value;
                 }
                 else if(key == "private_key_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _private_key_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if (Validator::validatePath(value))
+                        _private_key_path = value;
                 }
                 else if(key == "ca_file_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if (Validator::validatePath(value))
+                        _ca_file_path = value;
                 }
 
                 /*
@@ -348,32 +337,26 @@ void server::Config::_load() {
                  * other variables (all positive integers)
                  */
                 else {
-                    //if the value is not a positive integer number just skip it
-                    if (!std::regex_match(str, m, eUint))
+                    //check if the value is a positive unsigned integer
+                    if(!Validator::validateUint(value))
+                        //if it is not just skip it
                         continue;
-
-                    //convert the string representation of the integer to an unsigned long
-                    //(there is no stoui for unsigned integers)
-
-                    unsigned long l = stoul(value);
-                    if (l > UINT32_MAX)  //check if the value provided fits in an unsigned integer
-                        continue;   //if not just continue with the next key-value pair
 
                     //assign it to the corresponding unsigned integer member variable
                     if (key == "listen_queue")
-                        _listen_queue = static_cast<unsigned int>(l);
+                        _listen_queue = static_cast<unsigned int>(stoul(value));
                     else if (key == "n_threads")
-                        _n_threads = static_cast<unsigned int>(l);
+                        _n_threads = static_cast<unsigned int>(stoul(value));
                     else if (key == "socket_queue_size")
-                        _socket_queue_size = static_cast<unsigned int>(l);
+                        _socket_queue_size = static_cast<unsigned int>(stoul(value));
                     else if (key == "select_timeout_seconds")
-                        _select_timeout_seconds = static_cast<unsigned int>(l);
+                        _select_timeout_seconds = static_cast<unsigned int>(stoul(value));
                     else if (key == "timeout_seconds")
-                        _timeout_seconds = static_cast<unsigned int>(l);
+                        _timeout_seconds = static_cast<unsigned int>(stoul(value));
                     else if (key == "tmp_file_name_size")
-                        _tmp_file_name_size = static_cast<unsigned int>(l);
+                        _tmp_file_name_size = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_data_chunk_size")
-                        _max_data_chunk_size = static_cast<unsigned int>(l);
+                        _max_data_chunk_size = static_cast<unsigned int>(stoul(value));
                 }
             }
         }

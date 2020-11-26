@@ -22,7 +22,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-server::Thread_guard::Thread_guard(std::vector<std::thread> &t, Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &stop) : _tVector(t), _stop(stop), _sockets(sockets) {
+server::Thread_guard::Thread_guard(std::vector<std::thread> &t, TS_Circular_vector<std::pair<std::string, Socket>> &sockets, std::atomic<bool> &stop) : _tVector(t), _stop(stop), _sockets(sockets) {
 }
 
 /**

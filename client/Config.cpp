@@ -11,6 +11,7 @@
 #include <fstream>
 
 #include "../myLibraries/Message.h"
+#include "../myLibraries/Validator.h"
 
 
 /*
@@ -38,10 +39,10 @@
 #define DATABASE_PATH "../clientFiles/clientDB.sqlite"  //path of the client database
 #define CA_FILE_PATH "../../TLScerts/cacert.pem"        //path of the CA to use to check the server certificate
 
-//Maximum size of the data part of DATA messages (it corresponds to the size of the buffer used to read from the file)
-//the maximum size for a protocol buffer message is 64MB (for a TCP socket it is 1GB), so keep it less than that
-//(keeping in mind that there are also other fields in the message)
-#define MAX_DATA_CHUNK_SIZE 20480   //now set to 20KB
+//Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages).
+//The maximum size for a protocol buffer message is 64MB, for a TCP socket it is 1GB, and for a TLS socket it is 16KB.
+//So, keeping in mind that there are also other fields in the message, KEEP IT BELOW (or equal) 15KB.
+#define MAX_DATA_CHUNK_SIZE 15360   //now set to 15KB
 
 
 /*
@@ -239,22 +240,24 @@ void client::Config::_load() {
                                         {"max_data_chunk_size",             std::to_string(MAX_DATA_CHUNK_SIZE),
                                             "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA"
                                             "messages)\n"
-                                            "# the maximum size for a protocol buffer message is 64MB (for a TCP socket"
-                                            "it is 1GB)\n"
-                                            "# so keep it less than that (keeping in mind that there are also other"
-                                            "fields in the message)"}};
+                                            "# the maximum size for a protocol buffer message is 64MB, for a TCP socket"
+                                            " it is 1GB,\n"
+                                            "# and for a TLS socket it is 16KB.\n"
+                                            "# So, keeping in mind that there are also other fields in the message,\n"
+                                            "# KEEP IT BELOW (or equal) 15KB."}};
+
 
         //comments on top of the file
         std::string initial_comments[] = {          "###########################################################################",
                                                     "#                                                                         #",
-                                                    "#         Configuration file for the CLIENT of PDS_Backup project         #",
+                                                    "#        -Configuration file for the CLIENT of PDS_Backup project-        #",
                                                     "#                   (rows preceded by '#' are comments)                   #",
                                                     "#                                                                         #",
                                                     "###########################################################################"};
 
         //comments before the host dependant variables
         std::string host_variables_comments[] = {   "###########################################################################",
-                                                    "#         Host specific variables: no default values are provided         #",
+                                                    "#        -Host specific variables: no default values are provided-        #",
                                                     "###########################################################################"};
 
         //comments before the default-able variables
@@ -301,12 +304,8 @@ void client::Config::_load() {
                  * folder variables
                  */
                 if(key == "path_to_watch"){
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    value = std::regex_replace(value, std::regex(R"(\\)"), "/");
-
-                    //delete the tailing "/" that may be there at the end of the path (since this is a folder path)
-                    _path_to_watch = std::regex_replace(value, std::regex(R"(\/$)"), "");
+                    if(Validator::validatePath(value))
+                        _path_to_watch = value;
                 }
 
                 /*
@@ -314,14 +313,12 @@ void client::Config::_load() {
                  * file variables
                  */
                 else if(key == "database_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _database_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if(Validator::validatePath(value))
+                        _database_path = value;
                 }
                 else if(key == "ca_file_path") {
-                    //replace all "\" (backward slashes) with "/" (slashes) in case of a different path representation
-                    //(windows vs. unix)
-                    _ca_file_path = std::regex_replace(value, std::regex(R"(\\)"), "/");
+                    if(Validator::validatePath(value))
+                        _ca_file_path = value;
                 }
 
                 /*
@@ -329,36 +326,32 @@ void client::Config::_load() {
                  * other variables (all positive integers)
                  */
                 else {
-                    if (!std::regex_match(str, m, eUint))  //if the value is not a positive integer number just skip it
+                    //check if the value is a positive unsigned integer
+                    if(!Validator::validateUint(value))
+                        //if it is not just skip it
                         continue;
-
-                    //convert the string representation of the integer to an unsigned long (there is no stoui for unsigned integers)
-
-                    unsigned long l = stoul(value);
-                    if (l > UINT32_MAX)  //check if the value provided fits in an unsigned integer
-                        continue;   //if not just continue with the next key-value pair
 
                     //assign it to the corresponding unsigned integer member variable
                     if (key == "millis_filesystem_watcher")
-                        _millis_filesystem_watcher = static_cast<unsigned int>(l);
+                        _millis_filesystem_watcher = static_cast<unsigned int>(stoul(value));
                     else if (key == "event_queue_size")
-                        _event_queue_size = static_cast<unsigned int>(l);
+                        _event_queue_size = static_cast<unsigned int>(stoul(value));
                     else if (key == "seconds_between_reconnections")
-                        _seconds_between_reconnections = static_cast<unsigned int>(l);
+                        _seconds_between_reconnections = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_connection_retries")
-                        _max_connection_retries = static_cast<unsigned int>(l);
+                        _max_connection_retries = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_server_error_retries")
-                        _max_server_error_retries = static_cast<unsigned int>(l);
+                        _max_server_error_retries = static_cast<unsigned int>(stoul(value));
                     else if (key == "timeout_seconds")
-                        _timeout_seconds = static_cast<unsigned int>(l);
+                        _timeout_seconds = static_cast<unsigned int>(stoul(value));
                     else if (key == "select_timeout_seconds")
-                        _select_timeout_seconds = static_cast<unsigned int>(l);
+                        _select_timeout_seconds = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_response_waiting")
-                        _max_response_waiting = static_cast<unsigned int>(l);
+                        _max_response_waiting = static_cast<unsigned int>(stoul(value));
                     else if (key == "tmp_file_name_size")
-                        _tmp_file_name_size = static_cast<unsigned int>(l);
+                        _tmp_file_name_size = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_data_chunk_size")
-                        _max_data_chunk_size = static_cast<unsigned int>(l);
+                        _max_data_chunk_size = static_cast<unsigned int>(stoul(value));
                 }
             }
         }
