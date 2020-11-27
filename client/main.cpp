@@ -6,7 +6,6 @@
 #include <string>
 #include <iostream>
 #include <atomic>
-#include <getopt.h>
 #include <regex>
 #include "FileSystemWatcher.h"
 #include "Event.h"
@@ -16,7 +15,7 @@
 #include "messages.pb.h"
 #include "ProtocolManager.h"
 #include "../myLibraries/Message.h"
-#include "../myLibraries/Validator.h"
+#include "ArgumentsManager.h"
 #include "Config.h"
 
 //TODO check
@@ -27,45 +26,6 @@
 #define CONFIG_FILE_PATH "../config.txt"
 
 void communicate(std::atomic<bool> &, std::atomic<bool> &, TS_Circular_vector<Event> &, const std::string &, int, const std::string &, const std::string &);
-
-void displayHelp(const std::string &programName){
-    std::cout << "\nNAME" << std::endl << "\t";
-    std::cout << "PDS_BACKUP client\n" << std::endl;
-    std::cout << "SYNOPSIS" << std::endl << "\t";
-    std::cout  << programName << " [--help] [--retrieve destFolder] [--mac macAddress] [--all] [--start] [--ip server_ipaddress] [--port server_port] [--user username] [--pass password]\n" << std::endl;
-    std::cout << "OPTIONS" << std::endl << "\t";
-    std::cout << "--help (abbr -h)" << std::endl << "\t\t";
-    std::cout << "Print out a usage message\n" << std::endl << "\t";
-    std::cout << "--retrieve (abbr -r)" << std::endl << "\t\t";
-    std::cout << "Requests the server (after authentication) to send to the client the copy of the folders and files of\n\t\t"
-                 "the specified user. The data will be put in the specified [destDir]. If no other commands are specified\n\t\t"
-                 "(no --mac, no --all) then only the files and directories for the current mac address will be retrieved.\n\t\t"
-                 "This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass] [--dir]\n" << std::endl << "\t";
-    std::cout << "--dir (abbr -m) destDir" << std::endl << "\t\t";
-    std::cout << "Sets the [destDir] of the user's data to retrieve.\n\t\t"
-                 "Needed by --retrieve.\n" << std::endl << "\t";
-    std::cout << "--mac (abbr -m) macAddress" << std::endl << "\t\t";
-    std::cout << "Sets the [macAddress] of the user's data to retrieve.\n\t\t"
-                 "To be used with --retrieve.\n" << std::endl << "\t";
-    std::cout << "--all (abbr -a)" << std::endl << "\t\t";
-    std::cout << "Specifies to retrieve all user's data,\n\t\t"
-                 "To be used with --retrieve.\n" << std::endl << "\t";
-    std::cout << "--start (abbr -s)" << std::endl << "\t\t";
-    std::cout << "Start the server (if not present the server will stop after having created/loaded the Config file).\n\t\t"
-                 "This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass]\n" << std::endl << "\t";
-    std::cout << "--ip (abbr -i) server_ipaddress" << std::endl << "\t\t";
-    std::cout << "Sets the [ip] address of the server to contact.\n\t\t"
-                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
-    std::cout << "--port (abbr -p) server_port" << std::endl << "\t\t";
-    std::cout << "Sets the [port] of the server to contact.\n\t\t"
-                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
-    std::cout << "--user (abbr -u) username" << std::endl << "\t\t";
-    std::cout << "Sets the [username] to use to authenticate to the server.\n\t\t"
-                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
-    std::cout << "--pass (abbr -w) password" << std::endl << "\t\t";
-    std::cout << "Sets the [password] to use to authenticate to the server.\n\t\t"
-                 "Needed by --start and --retrieve.\n" << std::endl;
-}
 
 /**
  * the client main function
@@ -81,184 +41,9 @@ int main(int argc, char **argv) {
     // compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    //--options management--
-    std::string destFolder, mac, serverIP, serverPort, username, password;
-    bool retrieveSet = false, dirSet = false, macSet = false, allSet = false, startSet = false, ipSet = false, portSet = false, userSet = false, passSet = false;
-
-    if(argc == 1){
-        std::cout << "Options expected. Use -h (or --help) for help." << std::endl;
-        return 1;
-    }
-
-    int c;
-    while (true) {
-        int option_index = 0;
-        static struct option long_options[] = { //long options definition
-                {"retrieve",    no_argument,        nullptr,  'r' },
-                {"dir",         required_argument,  nullptr,  'd' },
-                {"mac",         required_argument,  nullptr,  'm' },
-                {"all",         no_argument,        nullptr,  'a' },
-                {"start",       no_argument,        nullptr,  's' },
-                {"ip",          required_argument,  nullptr,  'i' },
-                {"port",        required_argument,  nullptr,  'p' },
-                {"username",    required_argument,  nullptr,  'u' },
-                {"password",    required_argument,  nullptr,  'w' },
-                {"help",        no_argument,        nullptr,  'h'},
-                {nullptr,0,                 nullptr,  0 }
-        };
-
-        c = getopt_long(argc, argv, "rd:m:asi:p:u:w:h", long_options, &option_index);     //short options definition and the getting of an option
-        if (c == -1)
-            break;
-
-        //if you insert a command which requires an argument, but then forget to actually insert the argument:
-        //  if the command was at the end of the whole command string then the getopt function will realize it and signal an error
-        //  if the command was followed by another command the second command will be interpreted as the first command's argument
-
-        //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
-        if(optarg != nullptr && !Validator::validateOptArg(optarg)) {
-            Message::print(std::cerr, "ERROR", "Error with an option argument inserted",
-                           "Maybe you forgot one argument");
-            return 1;
-        }
-
-        switch (c) {
-            case 'r':   //retrieve option
-                retrieveSet = true;
-                break;
-
-            case 'd':   //dir option
-                dirSet = true;
-                destFolder = optarg;
-
-                //validate folder
-                if(!Validator::validatePath(destFolder)) {
-                    Message::print(std::cerr, "ERROR", "Error with the destination folder inserted",
-                                   "Insert a valid folder");
-                    return 1;
-                }
-
-                break;
-
-            case 'm':   //mac option
-                macSet = true;
-                mac = optarg;
-
-                //validate mac
-                if(!Validator::validateMacAddress(mac)) {
-                    Message::print(std::cerr, "ERROR", "Error with the mac inserted",
-                                   "Insert a valid mac");
-                    return 1;
-                }
-
-                break;
-
-            case 'a':   //all option
-                allSet = true;
-                break;
-
-            case 's':   //start client option
-                startSet = true;
-                break;
-
-            case 'i':   //ip option
-                ipSet = true;
-                serverIP = optarg;
-
-                //validate ip address
-                if(!Validator::validateIPAddress(serverIP)) {
-                    Message::print(std::cerr, "ERROR", "Error with the IP address inserted",
-                                   "Insert a valid IP address");
-                    return 1;
-                }
-
-                break;
-
-            case 'p':   //port option
-                portSet = true;
-                serverPort = optarg;
-
-                //validate port
-                if(!Validator::validatePort(serverPort)) {
-                    Message::print(std::cerr, "ERROR", "Error with the server port inserted",
-                                   "Insert a valid port");
-                    return 1;
-                }
-
-                break;
-
-            case 'u':   //username option
-                userSet = true;
-                username = optarg;
-
-                //validate username
-                if(!Validator::validateUsername(username)) {
-                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
-                                   "Insert a valid username string");
-                    return 1;
-                }
-
-                break;
-
-            case 'w':   //password option
-                passSet = true;
-                password = optarg;
-
-                //validate password
-                if(!Validator::validatePassword(password)) {
-                    Message::print(std::cerr, "ERROR", "Error with the password inserted",
-                                   "Insert a valid password string");
-                    return 1;
-                }
-
-                break;
-
-            case 'h':   //help option
-                displayHelp(argv[0]);
-                return 0;
-
-            case '?':   //unknown option
-                break;
-
-            default:    //error from getopt
-                std::cerr << "?? getopt returned character code 0" << c << " ??" << std::endl;
-        }
-    }
-
-    if (optind >= argc) {   //if last option requires an argument but none was provided
-        std::regex e(R"(^(?:(?:-[dmipuw])|(?:--(?:(?:dir)|(?:mac)|(?:ip)|(?:port)|(?:username)|(?:password))))$)");   //matches all the options which require an extra argument
-        std::smatch m;
-
-        std::string lastArgument = argv[optind-1];  //get last argument
-
-        if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
-            Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
-            return 1;
-        }
-    }
-
-    //perform some checks on the options
-    if(!retrieveSet && (macSet || allSet || dirSet)){
-        Message::print(std::cerr, "ERROR", "--mac, --all and --dir options require --retrieve.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
-    if(retrieveSet && (!ipSet || !portSet || !userSet || !passSet || !dirSet)){
-        Message::print(std::cerr, "ERROR", "--retrieve command requires --ip --port --user --pass --dir options to be set.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
-    if(startSet && (!ipSet || !portSet || !userSet || !passSet)){
-        Message::print(std::cerr, "ERROR", "--start command requires --ip --port --user --pass options to be set.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
-    if(!startSet && !retrieveSet){
-        Message::print(std::cerr, "ERROR", "--start AND/OR --retrieve options need to be specified", "Use -h (or --help) for help.");
-        return 1;
-    }
-
     try {
+        client::ArgumentsManager inputArgs = client::ArgumentsManager(argc, argv);  //main input arguments
+
         //get the configuration
         client::Config::setPath(CONFIG_FILE_PATH);
         auto config = client::Config::getInstance();
@@ -266,44 +51,44 @@ int main(int argc, char **argv) {
         client::Database::setPath(config->getDatabasePath());
         auto db = client::Database::getInstance();
 
-        if(retrieveSet){
+        if(inputArgs.isRetrSet()){
             //specfy the TLS certificates for the socket
             Socket::specifyCertificates(config->getCAFilePath());
             //create the socket
             Socket client_socket{SOCKET_TYPE};
 
             //connect to the server through the socket
-            client_socket.connect(serverIP, stoi(serverPort));
+            client_socket.connect(inputArgs.getServerIp(), stoi(inputArgs.getSeverPort()));
 
             //create the protocol manager instance
             client::ProtocolManager pm(client_socket, VERSION);
 
             //authenticate the client to the server
-            pm.authenticate(username, password, client_socket.getMAC());
+            pm.authenticate(inputArgs.getUsername(), inputArgs.getPassword(), client_socket.getMAC());
 
             //send the RETR message and get all the data from server
-            if(macSet){
-                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + mac, "destination folder: " + destFolder);
+            if(inputArgs.isMacSet()){
+                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + inputArgs.getMac(), "destination folder: " + inputArgs.getDestFolder());
 
                 //send RETR message with the set mac and get all data from server and save it in destFolder
-                pm.retrieveFiles(mac, false, destFolder);
+                pm.retrieveFiles(inputArgs.getMac(), false, inputArgs.getDestFolder());
             }
-            else if(allSet){
-                Message::print(std::cout, "INFO", "Will retrieve all your files", "destination folder: " + destFolder);
+            else if(inputArgs.isAllSet()){
+                Message::print(std::cout, "INFO", "Will retrieve all your files", "destination folder: " + inputArgs.getDestFolder());
 
                 //send RETR message with all set and get all data from server and save it in destFolder
-                pm.retrieveFiles("", true, destFolder);
+                pm.retrieveFiles("", true, inputArgs.getDestFolder());
             }
             else{
                 std::string thisSocketMac = client_socket.getMAC();
-                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + thisSocketMac, "destination folder: " + destFolder);
+                Message::print(std::cout, "INFO", "Will retrieve all your files corresponding to mac: " + thisSocketMac, "destination folder: " + inputArgs.getDestFolder());
 
                 //send RETR message with this machine's mac address and get all data from server and save it in destFolder
-                pm.retrieveFiles(thisSocketMac, false, destFolder);
+                pm.retrieveFiles(thisSocketMac, false, inputArgs.getDestFolder());
             }
         }
 
-        if(!startSet)   //if the --start option was not there just close the program
+        if(!inputArgs.isStartSet())   //if the --start option was not there just close the program
             return 0;
 
         // Create a FileWatcher instance that will check the current folder for changes every 5 seconds
@@ -316,7 +101,7 @@ int main(int argc, char **argv) {
         std::atomic<bool> communicationThread_stop = false, fileWatcher_stop = false;
 
         // initialize the communication thread (thread that will communicate with the server)
-        std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), serverIP, stoi(serverPort), username, password);
+        std::thread communication_thread(communicate, std::ref(communicationThread_stop), std::ref(fileWatcher_stop), std::ref(eventQueue), inputArgs.getServerIp(), stoi(inputArgs.getSeverPort()), inputArgs.getUsername(), inputArgs.getPassword());
 
         // use thread guard to signal to the communication thread to stop and wait for it in case we exit the main
         client::Thread_guard tg_communication(communication_thread, communicationThread_stop);
@@ -335,6 +120,19 @@ int main(int argc, char **argv) {
             return eventQueue.tryPush(std::move(Event(element, status)));
         }, fileWatcher_stop);
 
+    }
+    catch (client::ArgumentsManagerException &e) {
+        switch(e.getCode()){
+            case client::ArgumentsManagerError::help:
+                return 0;
+            case client::ArgumentsManagerError::numberOfArguments:
+            case client::ArgumentsManagerError::option:
+            case client::ArgumentsManagerError::optArgument:
+            default:
+                Message::print(std::cerr, "ERROR", "Input Exception", e.what());
+
+                return 1;
+        }
     }
     catch (SocketException &e) {
         //TODO handle socket exceptions

@@ -6,7 +6,6 @@
 #include <messages.pb.h>
 #include <sstream>
 #include <thread>
-#include <getopt.h>
 #include <regex>
 #include "../myLibraries/Socket.h"
 #include "../myLibraries/Circular_vector.h"
@@ -17,6 +16,7 @@
 #include "ProtocolManager.h"
 #include "../myLibraries/Message.h"
 #include "../myLibraries/Validator.h"
+#include "ArgumentsManager.h"
 
 //TODO check
 
@@ -28,211 +28,14 @@
 
 void single_server(TS_Circular_vector<std::pair<std::string, Socket>> &, std::atomic<bool> &, std::atomic<bool> &);
 
-void displayHelp(const std::string &programName){
-    std::cout << "\nNAME" << std::endl << "\t";
-    std::cout << "PDS_BACKUP server\n" << std::endl;
-    std::cout << "SYNOPSIS" << std::endl << "\t";
-    std::cout  << programName << " [--help] [--addU username] [--updateU username] [--removeU username] [--viewU] [--pass password] [--delete username] [--mac macAddress] [--start]\n" << std::endl;
-    std::cout << "OPTIONS" << std::endl << "\t";
-    std::cout << "--help (abbr -h)" << std::endl << "\t\t";
-    std::cout << "Print out a usage message\n" << std::endl << "\t";
-    std::cout << "--addU (abbr -a) username" << std::endl << "\t\t";
-    std::cout << "Add the user with [username] to the server, the option --pass (-p) is needed to set the user password.\n\t\t"
-                 "This option is mutually exclusive with --updateU and --removeU.\n" << std::endl << "\t";
-    std::cout << "--updateU (abbr -u) username" << std::endl << "\t\t";
-    std::cout << "Update the user with [username] to the server, the option --pass (-p) is needed to set the new user password.\n\t\t"
-                 "This option is mutually exclusive with --addU and --removeU.\n" << std::endl << "\t";
-    std::cout << "--removeU (abbr -r) username" << std::endl << "\t\t";
-    std::cout << "Remove the user with [username] from the server.\n\t\t"
-                 "This option is mutually exclusive with --addU and --removeU.\n" << std::endl << "\t";
-    std::cout << "--viewU (abbr -v)" << std::endl << "\t\t";
-    std::cout << "Print all the username of all registered users.\n" << std::endl << "\t";
-    std::cout << "--pass (abbr -p) password" << std::endl << "\t\t";
-    std::cout << "Set the [password] to use.\n\t\t"
-                 "This option is needed by the options --addU and --updateU.\n" << std::endl << "\t";
-    std::cout << "--delete (abbr -d) username" << std::endl << "\t\t";
-    std::cout << "Makes the server delete all or some of the specified [username] backups before (optionally) starting the service.\n\t\t"
-                 "If no other options (no --mac) are specified then it will remove all the user's backups from server.\n" << std::endl << "\t";
-    std::cout << "--mac (abbr -m) macAddress" << std::endl << "\t\t";
-    std::cout << "Specifies the [macAddress] for the --delete option.\n\t\t"
-                 "If this option is set the --delete option will only delete the user's backup related to this [macAddress].\n" << std::endl << "\t";
-    std::cout << "--start (abbr -s)" << std::endl << "\t\t";
-    std::cout << "Start the server" << std::endl;
-}
-
 int main(int argc, char** argv) {
     //verify that the version of the library that we linked against is
     //compatible with the version of the headers we compiled against.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    //--options management--
-    std::string username, password, delUsername, delMac;
-    bool addU = false, updateU = false, removeU = false, viewU = false, passSet = false, deleteSet = false, macSet = false, startSet = false;
-
-    if(argc == 1){
-        std::cout << "Options expected. Use -h (or --help) for help." << std::endl;
-        return 1;
-    }
-
-    int c;
-    while (true) {
-        int option_index = 0;
-        static struct option long_options[] = { //long options definition
-                {"addU",     required_argument, nullptr,  'a' },
-                {"updateU",  required_argument, nullptr,  'u' },
-                {"removeU",  required_argument, nullptr,  'r' },
-                {"viewU",    no_argument,       nullptr,  'v' },
-                {"pass",     required_argument, nullptr,  'p' },
-                {"delete",   required_argument, nullptr,  'd' },
-                {"mac",      required_argument, nullptr,  'm' },
-                {"start",    no_argument,       nullptr,  's' },
-                {"help",     no_argument,       nullptr,  'h'},
-                {nullptr,    0,         nullptr,  0 }
-        };
-
-        c = getopt_long(argc, argv, "a:u:r:vp:d:m:sh", long_options, &option_index);     //short options definition and the getting of an option
-        if (c == -1)
-            break;
-
-        //if you insert a command which requires an argument, but then forget to actually insert the argument:
-        //  if the command was at the end of the whole command string then the getopt function will realize it and signal an error
-        //  if the command was followed by another command the second command will be interpreted as the first command's argument
-
-        //so to mitigate that check if the optional argument is actually valid (it must not be a command, so it must have no heading '-')
-        if(optarg != nullptr && !Validator::validateOptArg(optarg)) {
-            Message::print(std::cerr, "ERROR", "Error with an option argument inserted",
-                           "Maybe you forgot one argument");
-            return 1;
-        }
-
-        switch (c) {
-            case 'a':   //add user option
-                addU = true;
-                username = optarg;
-
-                //validate username
-                if(!Validator::validateUsername(username)) {
-                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
-                                   "Insert a valid username string");
-                    return 1;
-                }
-
-                break;
-
-            case 'u':   //update user option
-                updateU = true;
-                username = optarg;
-
-                //validate username
-                if(!Validator::validateUsername(username)) {
-                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
-                                   "Insert a valid username string");
-                    return 1;
-                }
-
-                break;
-
-            case 'r':   //remove user option
-                removeU = true;
-                username = optarg;
-
-                //validate username
-                if(!Validator::validateUsername(username)) {
-                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
-                                   "Insert a valid username string");
-                    return 1;
-                }
-
-                break;
-
-            case 'v':   //view all users option
-                viewU = true;
-                break;
-
-            case 'p':   //password option
-                passSet = true;
-                password = optarg;
-
-                //validate password
-                if(!Validator::validatePassword(password)) {
-                    Message::print(std::cerr, "ERROR", "Error with the password inserted",
-                                   "Insert a valid password string");
-                    return 1;
-                }
-
-                break;
-
-            case 'd':   //delete option
-                deleteSet = true;
-                delUsername = optarg;
-
-                //validate username
-                if(!Validator::validateUsername(delUsername)) {
-                    Message::print(std::cerr, "ERROR", "Error with the username inserted",
-                                   "Insert a valid username string");
-                    return 1;
-                }
-
-                break;
-
-            case 'm':   //mac option
-                macSet = true;
-                delMac = optarg;
-
-                //validate mac
-                if(!Validator::validateMacAddress(delMac)){
-                    Message::print(std::cerr, "ERROR", "Error with the mac inserted",
-                                   "Insert a valid mac");
-                    return 1;
-                }
-
-                break;
-
-            case 's':   //start server option
-                startSet = true;
-                break;
-
-            case 'h':   //help option
-                displayHelp(argv[0]);
-                return 0;
-
-            case '?':   //unknown option
-                break;
-
-            default:    //error from getopt
-                std::cerr << "?? getopt returned character code 0" << c << " ??" << std::endl;
-        }
-    }
-
-    if (optind >= argc) {   //if last option requires an argument but none was provided
-        std::regex e(R"(^(?:(?:-[aurpdm])|(?:--(?:(?:addU)|(?:updateU)|(?:removeU)|(?:pass)|(?:delete)|(?:mac))))$)");   //matches all the options which require an extra argument
-        std::smatch m;
-
-        std::string lastArgument = argv[optind-1];  //get last argument
-
-        if(std::regex_match(lastArgument, m, e)) {  //check if the last argument is actually an argument requesting option
-            Message::print(std::cerr, "ERROR", "Error with the arguments", "Expected argument after options");
-            return 1;
-        }
-    }
-
-    //perform some checks on the options
-    if((addU && updateU) || (addU && removeU) || (updateU && removeU)){ //only one of these should be true (they are mutually exclusive)
-        Message::print(std::cerr, "ERROR", "Mutual exclusive options.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
-    if((addU && !passSet) || (updateU && !passSet)){    //if addU/updateU is active then I need the password
-        Message::print(std::cerr, "ERROR", "Password option needed.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
-    if(macSet && !deleteSet){
-        Message::print(std::cerr, "ERROR", "--mac option requires --delete option.", "Use -h (or --help) for help.");
-        return 1;
-    }
-
     try{
+        server::ArgumentsManager inputArgs = server::ArgumentsManager(argc, argv);  //main input arguments
+
         server::Config::setPath(CONFIG_FILE_PATH);
         auto config = server::Config::getInstance();
         server::Database::setPath(config->getServerDatabasePath()); //set the database path
@@ -240,35 +43,35 @@ int main(int argc, char** argv) {
         auto pass_db = server::Database_pwd::getInstance();
         auto db = server::Database::getInstance();
 
-        if(addU){   //add user to the server
-            pass_db->addUser(username, password);
-            Message::print(std::cout, "SUCCESS", "User " + username + " added to server.");
+        if(inputArgs.isAddSet()){   //add user (and password) to the server
+            pass_db->addUser(inputArgs.getUsername(), inputArgs.getPassword());
+            Message::print(std::cout, "SUCCESS", "User " + inputArgs.getUsername() + " added to server.");
         }
 
-        if(updateU){    //update user in the server
-            pass_db->updateUser(username, password);
-            Message::print(std::cout, "SUCCESS", "User " + username + " updated on server.");
+        if(inputArgs.isUpdateSet()){    //update user password in the server
+            pass_db->updateUser(inputArgs.getUsername(), inputArgs.getPassword());
+            Message::print(std::cout, "SUCCESS", "User " + inputArgs.getUsername() + " updated on server.");
         }
 
-        if(removeU){    //remove user from the server
-            pass_db->removeUser(username);
-            Message::print(std::cout, "SUCCESS", "User " + username + " removed from server.");
+        if(inputArgs.isRemoveSet()){    //remove user from the server
+            pass_db->removeUser(inputArgs.getUsername());
+            Message::print(std::cout, "SUCCESS", "User " + inputArgs.getUsername() + " removed from server.");
 
-            std::vector<std::string> macAddrs = db->getAllMacAddresses(username);    //get all the mac addresses associated to the user
+            std::vector<std::string> macAddrs = db->getAllMacAddresses(inputArgs.getUsername());    //get all the mac addresses associated to the user
 
-            db->removeAll(username);    //remove all backup elements related to that user
+            db->removeAll(inputArgs.getUsername());    //remove all backup elements related to that user
 
             for(auto mac: macAddrs){
                 //compute the backup folder name
                 std::stringstream tmp;
-                tmp << config->getServerBasePath() << "/" << username << "_" << std::regex_replace(mac, std::regex(":"), "-");
+                tmp << config->getServerBasePath() << "/" << inputArgs.getUsername() << "_" << std::regex_replace(mac, std::regex(":"), "-");
                 std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
             }
 
-            Message::print(std::cout, "SUCCESS", "All " + username + " backups deleted.");
+            Message::print(std::cout, "SUCCESS", "All " + inputArgs.getUsername() + " backups deleted.");
         }
 
-        if(viewU){  //view all users registered in the server
+        if(inputArgs.isViewSet()){  //view all users registered in the server
             Message::print(std::cout, "INFO", "Registered Users:");
             std::function<void (const std::string &)> f = [](const std::string &username){
                 std::cout << "\t" << username << std::endl;
@@ -276,34 +79,34 @@ int main(int argc, char** argv) {
             pass_db->forAll(f);
         }
 
-        if(deleteSet){
-            if(macSet){ //if a mac address is set delete all backup elements for the specified user and mac
-                db->removeAll(delUsername, delMac);
+        if(inputArgs.isDeleteSet()){
+            if(inputArgs.isMacSet()){ //if a mac address is set delete all backup elements for the specified user and mac
+                db->removeAll(inputArgs.getDelUsername(), inputArgs.getDelMac());
 
                 //compute the backup folder name
                 std::stringstream tmp;
-                tmp << config->getServerBasePath() << "/" << delUsername << "_" << std::regex_replace(delMac, std::regex(":"), "-");
+                tmp << config->getServerBasePath() << "/" << inputArgs.getDelUsername() << "_" << std::regex_replace(inputArgs.getDelMac(), std::regex(":"), "-");
                 std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
 
-                Message::print(std::cout, "SUCCESS", "All elements in " + delUsername + "@" + delMac + " backup deleted.");
+                Message::print(std::cout, "SUCCESS", "All elements in " + inputArgs.getDelUsername() + "@" + inputArgs.getDelMac() + " backup deleted.");
             }
             else{   //else delete all backups elements for the specified user (ALL OF THEM!)
-                std::vector<std::string> macAddrs = db->getAllMacAddresses(delUsername);    //get all the mac addresses associated to the user
+                std::vector<std::string> macAddrs = db->getAllMacAddresses(inputArgs.getDelUsername());    //get all the mac addresses associated to the user
 
-                db->removeAll(delUsername); //delete all elements for the specified user
+                db->removeAll(inputArgs.getDelUsername()); //delete all elements for the specified user
 
                 for(auto mac: macAddrs){
                     //compute the backup folder name
                     std::stringstream tmp;
-                    tmp << config->getServerBasePath() << "/" << delUsername << "_" << std::regex_replace(mac, std::regex(":"), "-");
+                    tmp << config->getServerBasePath() << "/" << inputArgs.getDelUsername() << "_" << std::regex_replace(mac, std::regex(":"), "-");
                     std::filesystem::remove_all(tmp.str()); //remove all the elements in the user's backup folder corresponding to that mac
                 }
 
-                Message::print(std::cout, "SUCCESS", "All " + delUsername + " backups deleted.");
+                Message::print(std::cout, "SUCCESS", "All " + inputArgs.getDelUsername() + " backups deleted.");
             }
         }
 
-        if(startSet) { //start the server
+        if(inputArgs.isStartSet()) { //start the server
             Message::print(std::cout, "SERVICE", "Starting service..");
             Message::print(std::cout, "INFO", "Server base path:", config->getServerBasePath());
             ServerSocket::specifyCertificates(config->getCertificatePath(), config->getPrivateKeyPath(), config->getCaFilePath());
@@ -338,6 +141,19 @@ int main(int argc, char** argv) {
                 std::string clientAddress = tmp.str();
                 sockets.push(std::make_pair(std::move(clientAddress),std::move(s))); //push the socket into the socket queue
             }
+        }
+    }
+    catch (server::ArgumentsManagerException &e) {
+        switch(e.getCode()){
+            case server::ArgumentsManagerError::help:
+                return 0;
+            case server::ArgumentsManagerError::numberOfArguments:
+            case server::ArgumentsManagerError::option:
+            case server::ArgumentsManagerError::optArgument:
+            default:
+                Message::print(std::cerr, "ERROR", "Input Exception", e.what());
+
+                return 1;
         }
     }
     catch (SocketException &e) {

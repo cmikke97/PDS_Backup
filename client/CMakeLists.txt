@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 #set some variables
 set(SOURCE_FILES main.cpp FileSystemWatcher.cpp FileSystemWatcher.h Event.cpp Database.cpp Database.h
-        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Config.cpp Config.h)
+        Event.h Thread_guard.cpp Thread_guard.h ProtocolManager.cpp ProtocolManager.h Config.cpp Config.h ArgumentsManager.cpp ArgumentsManager.h)
 set(MYLIBRARY ../myLibraries/Socket.cpp ../myLibraries/Socket.h ../myLibraries/Hash.cpp ../myLibraries/Hash.h
         ../myLibraries/Circular_vector.cpp ../myLibraries/Circular_vector.h ../myLibraries/Directory_entry.cpp
         ../myLibraries/Directory_entry.h ../myLibraries/RandomNumberGenerator.h ../myLibraries/RandomNumberGenerator.cpp
