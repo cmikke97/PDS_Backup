@@ -9,7 +9,7 @@
 #include <vector>
 #include <filesystem>
 #include <iostream>
-#include <net/if.h>
+#include <net/if.h> //needed by linux
 #include <fstream>
 #include <cstdio>
 #include <cstring>
@@ -325,7 +325,6 @@ std::string TCP_Socket::getMAC() const {
 
     std::stringstream mac;  //compose mac address string
     mac <<
-        std::setw(2) <<
         std::hex << (int) hwaddr[0] << ":" <<
         std::hex << (int) hwaddr[1] << ":" <<
         std::hex << (int) hwaddr[2] << ":" <<
