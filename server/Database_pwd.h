@@ -118,7 +118,7 @@ namespace server {
         void addUser(const std::string &username, const std::string &password);
         void updateUser(const std::string &username, const std::string &password);
         void removeUser(const std::string &username);
-        void forAll(std::function<void(const std::string &)> &f);
+        void forAll(const std::function<void(const std::string &)> &f);
 
     protected:
         //protected constructor

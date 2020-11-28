@@ -113,7 +113,7 @@ namespace client {
 
         //database methods
 
-        void forAll(std::function<void(const std::string &, const std::string &, uintmax_t,
+        void forAll(const std::function<void(const std::string &, const std::string &, uintmax_t,
                     const std::string &, const std::string &)> &f);
         void insert(const std::string &path, const std::string &type, uintmax_t size,
                     const std::string &lastWriteTime, const std::string &hash);

@@ -18,12 +18,12 @@
  */
 class Event {
 public:
-    Event() = default;  //default empty constructor
     Event(const Event &) = default; //default copy constructor
     Event& operator=(const Event &) = default;  //default copy assignment
     Event(Event &&) = default;  //default move constructor
     Event& operator=(Event &&) = default;   //default move assignment
 
+    Event();  //empty constructor
     Event(Directory_entry&  element, FileSystemStatus type);  //Event constructor
 
 

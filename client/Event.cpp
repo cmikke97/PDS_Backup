@@ -13,6 +13,14 @@
  */
 
 /**
+ * Event class empty constructor
+ *
+ * @author Michele Crepaldi s269551
+ */
+Event::Event() : _element(), _type(FileSystemStatus::notAStatus) {
+}
+
+/**
  * Event class constructor
  *
  * @param element directory entry associated to this event

@@ -13,6 +13,8 @@
 #include "../myLibraries/Validator.h"
 
 
+using namespace client;
+
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
  * ArgumentsManager class methods
@@ -37,7 +39,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-client::ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initialize all the booleans to false
+ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initialize all the booleans to false
         _userSet(false),
         _passSet(false),
         _retrSet(false),
@@ -46,7 +48,8 @@ client::ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initia
         _allSet(false),
         _startSet(false),
         _ipSet(false),
-        _portSet(false){
+        _portSet(false),
+        _persistSet(false){
 
     //if the number of arguments is wrong throw exception
     if(argc == 1)
@@ -67,12 +70,13 @@ client::ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initia
                 {"port",        required_argument,  nullptr,  'p' },
                 {"username",    required_argument,  nullptr,  'u' },
                 {"password",    required_argument,  nullptr,  'w' },
+                {"persist",     no_argument,        nullptr,  't' },
                 {"help",        no_argument,        nullptr,  'h'},
                 {nullptr,0,                 nullptr,  0 }
         };
 
         //define short (+long) options and get next option from the arguments from main
-        c = getopt_long(argc, argv, "rd:m:asi:p:u:w:h", long_options, &option_index);
+        c = getopt_long(argc, argv, "rd:m:asi:p:u:w:th", long_options, &option_index);
 
         //if no more options were found then exit loop
         if (c == -1)
@@ -172,6 +176,10 @@ client::ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initia
 
                 break;
 
+            case 't':   //persist option
+                _persistSet = true;
+                break;
+
             case 'h':   //display help option
                 _displayHelp(argv[0]);
                 throw ArgumentsManagerException("", ArgumentsManagerError::help);
@@ -232,11 +240,12 @@ client::ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initia
  *
  * @author Michele Crepaldi s269551
  */
-void client::ArgumentsManager::_displayHelp(const std::string &programName){
+void ArgumentsManager::_displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
     std::cout << "PDS_BACKUP client\n" << std::endl;
     std::cout << "SYNOPSIS" << std::endl << "\t";
-    std::cout  << programName << " [--help] [--retrieve destFolder] [--mac macAddress] [--all] [--start] [--ip server_ipaddress] [--port server_port] [--user username] [--pass password]\n" << std::endl;
+    std::cout  << programName << " [--help]\n\t\t[--retrieve destFolder] [--mac macAddress] [--all] [--start]"
+                                 "\n\t\t[--ip server_ipaddress] [--port server_port] [--user username] [--pass password]\n" << std::endl;
     std::cout << "OPTIONS" << std::endl << "\t";
     std::cout << "--help (abbr -h)" << std::endl << "\t\t";
     std::cout << "Print out a usage message\n" << std::endl << "\t";
@@ -268,7 +277,9 @@ void client::ArgumentsManager::_displayHelp(const std::string &programName){
                  "Needed by --start and --retrieve.\n" << std::endl << "\t";
     std::cout << "--pass (abbr -w) password" << std::endl << "\t\t";
     std::cout << "Sets the [password] to use to authenticate to the server.\n\t\t"
-                 "Needed by --start and --retrieve.\n" << std::endl;
+                 "Needed by --start and --retrieve.\n" << std::endl << "\t";
+    std::cout << "--persist (abbr -t)" << std::endl << "\t\t";
+    std::cout << "If connection is lost, keep trying indefinitely." << std::endl;
 }
 
 /**
@@ -278,7 +289,7 @@ void client::ArgumentsManager::_displayHelp(const std::string &programName){
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getUsername() const {
+const std::string &ArgumentsManager::getUsername() const {
     return _username;
 }
 
@@ -289,7 +300,7 @@ const std::string &client::ArgumentsManager::getUsername() const {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getPassword() const {
+const std::string &ArgumentsManager::getPassword() const {
     return _password;
 }
 
@@ -300,7 +311,7 @@ const std::string &client::ArgumentsManager::getPassword() const {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getMac() const {
+const std::string &ArgumentsManager::getMac() const {
     return _mac;
 }
 
@@ -311,7 +322,7 @@ const std::string &client::ArgumentsManager::getMac() const {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getDestFolder() const {
+const std::string &ArgumentsManager::getDestFolder() const {
     return _destFolder;
 }
 
@@ -322,7 +333,7 @@ const std::string &client::ArgumentsManager::getDestFolder() const {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getServerIp() const {
+const std::string &ArgumentsManager::getServerIp() const {
     return _serverIp;
 }
 
@@ -333,7 +344,7 @@ const std::string &client::ArgumentsManager::getServerIp() const {
  *
  * @author Michele Crepaldi s269551
  */
-const std::string &client::ArgumentsManager::getSeverPort() const {
+const std::string &ArgumentsManager::getSeverPort() const {
     return _serverPort;
 }
 
@@ -344,7 +355,7 @@ const std::string &client::ArgumentsManager::getSeverPort() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isUserSet() const {
+bool ArgumentsManager::isUserSet() const {
     return _userSet;
 }
 
@@ -355,7 +366,7 @@ bool client::ArgumentsManager::isUserSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isPassSet() const {
+bool ArgumentsManager::isPassSet() const {
     return _passSet;
 }
 
@@ -366,7 +377,7 @@ bool client::ArgumentsManager::isPassSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isRetrSet() const {
+bool ArgumentsManager::isRetrSet() const {
     return _retrSet;
 }
 
@@ -377,7 +388,7 @@ bool client::ArgumentsManager::isRetrSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isDirSet() const {
+bool ArgumentsManager::isDirSet() const {
     return _dirSet;
 }
 
@@ -388,7 +399,7 @@ bool client::ArgumentsManager::isDirSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isMacSet() const {
+bool ArgumentsManager::isMacSet() const {
     return _macSet;
 }
 
@@ -399,7 +410,7 @@ bool client::ArgumentsManager::isMacSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isAllSet() const {
+bool ArgumentsManager::isAllSet() const {
     return _allSet;
 }
 
@@ -410,7 +421,7 @@ bool client::ArgumentsManager::isAllSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isStartSet() const {
+bool ArgumentsManager::isStartSet() const {
     return _startSet;
 }
 
@@ -421,7 +432,7 @@ bool client::ArgumentsManager::isStartSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isIpSet() const {
+bool ArgumentsManager::isIpSet() const {
     return _ipSet;
 }
 
@@ -432,6 +443,17 @@ bool client::ArgumentsManager::isIpSet() const {
  *
  * @author Michele Crepaldi s269551
  */
-bool client::ArgumentsManager::isPortSet() const {
+bool ArgumentsManager::isPortSet() const {
     return _portSet;
+}
+
+/**
+ * ArgumentsManager isPersistSet option getter.
+ *
+ * @return whether the persist option was set
+ *
+ * @author Michele Crepaldi s269551
+ */
+bool ArgumentsManager::isPersistSet() const {
+    return _persistSet;
 }

@@ -9,6 +9,8 @@
 #include <google/protobuf/stubs/common.h>
 
 
+using namespace client;
+
 /*
  * +-------------------------------------------------------------------------------------------------------------------+
  * Thread_guard class methods
@@ -22,7 +24,7 @@
  *
  * @author Michele Crepaldi s269551
  */
-client::Thread_guard::Thread_guard(std::thread &t, std::atomic<bool>& stop) : _t(t), _stop(stop) {
+Thread_guard::Thread_guard(std::thread &t, std::atomic<bool>& stop) : _t(t), _stop(stop) {
 }
 
 /**
@@ -31,7 +33,7 @@ client::Thread_guard::Thread_guard(std::thread &t, std::atomic<bool>& stop) : _t
  *
  * @author Michele Crepaldi s269551
  */
-client::Thread_guard::~Thread_guard() {
+Thread_guard::~Thread_guard() {
     //tell the communication thread to stop
     _stop.store(true);
 

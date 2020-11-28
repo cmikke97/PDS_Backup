@@ -113,6 +113,9 @@ std::string Hash::str() {
 /**
  * utility function to handle Crypto errors (wolfSSL)
  *
+ * @throws HashException:
+ *  <b>[type]</b> Error provided as input
+ *
  * @author Michele Crepaldi s269551
  */
 void handleErrors(int err, const std::string& msg, HashError type)
@@ -129,7 +132,7 @@ void handleErrors(int err, const std::string& msg, HashError type)
  */
 HashMaker::HashMaker() {
     _init();    //initialize the wolfSSL SHA256 object
-};
+}
 
 /**
  * HashMaker constructor with a string as input, it can be used to initialize the hash with an initial value;

@@ -162,7 +162,7 @@ void server::Database::_open() {
  * @author Michele Crepaldi s269551
  */
 void server::Database::forAll(const std::string &username, const std::string &mac,
-        std::function<void (const std::string &, const std::string &,
+                const std::function<void (const std::string &, const std::string &,
                 uintmax_t, const std::string &, const std::string &)> &f) {
 
     std::lock_guard<std::mutex> lock(_access_mutex);    //lock guard on _access_mutex to ensure thread safeness

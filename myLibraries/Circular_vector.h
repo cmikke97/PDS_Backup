@@ -326,10 +326,11 @@ public:
 
     /**
      * method used to try to pop the element in the head of the circular vector and return it (with move);
-     *  It will return an optional containing the moved element or nothing in case the method stopped
+     *  It will return an optional containing the moved element or std::nullopt in case the method stopped
      *  because the stop atomic boolean became true
      *
-     * @return an optional containing the first object (the head) in the circular vector (by movement) or nothing
+     * @return an optional containing the first object (the head) in the circular vector (by movement) or
+     *  std::nullopt in case the atomic boolean became true
      *
      * @author Michele Crepaldi s269551
      */

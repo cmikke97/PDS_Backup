@@ -30,17 +30,13 @@
  *
  * @author Michele Crepaldi s269551
  */
-client::ProtocolManager::ProtocolManager(Socket &socket, int ver) :
+client::ProtocolManager::ProtocolManager(Socket &socket, Circular_vector<Event> &waitingForResponse, int ver) :
         _s(socket), //set socket
-        _waitingForResponse(Config::getInstance()->getMaxResponseWaiting()),    //create waitingForResponse object
-        _tries(0),  //set current retries
+        _waitingForResponse(waitingForResponse),    //set waitingForResponse object
         _protocolVersion(ver) { //set protocol version
 
     auto config = Config::getInstance();    //config object instance
-
     _path_to_watch = config->getPathToWatch();  //get path to watch
-
-    _maxTries = config->getMaxServerErrorRetries();     //get max server errors retries
     _tempNameSize = config->getTmpFileNameSize();       //get temporary file name size
     _maxDataChunkSize = config->getMaxDataChunkSize();  //get max data chunk size
 
@@ -263,7 +259,7 @@ void client::ProtocolManager::send(Event &event) {
     _composeMessage(event);
 
     //save a copy of the event in the message waiting queue
-    _waitingForResponse.push(event); //TODO check that the copy on main does not move (it should be a copy)
+    _waitingForResponse.push(event);
 }
 
 /**
@@ -326,11 +322,16 @@ void client::ProtocolManager::receive() {
                     throw ProtocolManagerException("Error in the server message",
                                                    ProtocolManagerError::serverMessage);
 
-                //remove message (STOR) event from queue (it was successful)
+                //remove message (PROB) event from queue (it was successful)
                 _waitingForResponse.pop();
 
-                //reset the tries variable (i popped a message)
-                _tries = 0; //TODO evaluate if to keep this
+                //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of
+                //the file present in the filesystem then it means that the file was deleted or modified
+                //--> I don't send it anymore
+                if(!std::filesystem::exists(event.getElement().getAbsolutePath()) ||
+                   Directory_entry(_path_to_watch, event.getElement().getAbsolutePath()).getHash()
+                   != event.getElement().getHash())
+                    break;  //TODO check
 
                 //(file created/modified) -> the store message was sent to server event
                 Event newEvent = Event(event.getElement(), FileSystemStatus::storeSent);
@@ -356,9 +357,6 @@ void client::ProtocolManager::receive() {
 
             //remove message event from queue (it was successful)
             _waitingForResponse.pop();
-
-            //reset the tries variable (i popped a message)
-            _tries = 0; //TODO evaluate if to keep this
 
             int okCode = _serverMessage.code(); //ok code got from serverMessage
 
@@ -419,27 +417,17 @@ void client::ProtocolManager::receive() {
                 case ErrCode::store:
                 case ErrCode::remove:
                 case ErrCode::notADir:
-                    _tries++;   //TODO decide if to keep it
-
-                    //if I exceed the number of re-tries throw an exception and close the program
-                    if (_tries > _maxTries) //TODO decide if to keep it
-                        throw ProtocolManagerException("Error from sent message",
-                                                       ProtocolManagerError::client);
+                case ErrCode::unexpected:
+                    //skip the event message that caused the error and go on
+                    _waitingForResponse.pop();
 
                     Message::print(std::cerr, "WARNING", "Server reported an error in one sent message",
-                                   "Will now retry");
-
-                    //otherwise try to recover from the error
-                    recoverFromError(); //TODO decide if to keep it
+                                   "It will be skipped");
                     break;
 
                 case ErrCode::exception:
                     throw ProtocolManagerException("Internal server error",
                                                    ProtocolManagerError::internal);
-
-                case ErrCode::unexpected:
-                    throw ProtocolManagerException("Server encountered un unexpected message",
-                                                   ProtocolManagerError::client);
 
                 case ErrCode::auth:
                 case ErrCode::retrieve:
@@ -745,7 +733,7 @@ void client::ProtocolManager::_send_RMD(Directory_entry &element){
  * @param event event to transform in message (and send)
  *
  * @throws ProtocolManagerException:
- *  <b>protocol</b> if a protocol error was encountered
+ *  <b>client</b> if a filesystem status is not supported
  *
  * @author Michele Crepaldi s269551
  */
