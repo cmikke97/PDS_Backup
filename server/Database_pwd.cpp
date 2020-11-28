@@ -420,7 +420,7 @@ void server::Database_pwd::removeUser(const std::string &username){
  *
  * @author Michele Crepaldi s269551
  */
-void server::Database_pwd::forAll(std::function<void (const std::string &)> &f) {
+void server::Database_pwd::forAll(const std::function<void (const std::string &)> &f) {
     std::lock_guard<std::mutex> lock(_access_mutex);    //lock guard on _access_mutex to ensure thread safeness
 
     int rc; //sqlite3 methods' return code

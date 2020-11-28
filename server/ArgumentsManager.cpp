@@ -223,7 +223,8 @@ void server::ArgumentsManager::_displayHelp(const std::string &programName){
     std::cout << "\nNAME" << std::endl << "\t";
     std::cout << "PDS_BACKUP server\n" << std::endl;
     std::cout << "SYNOPSIS" << std::endl << "\t";
-    std::cout  << programName << " [--help] [--addU username] [--updateU username] [--removeU username] [--viewU] [--pass password] [--delete username] [--mac macAddress] [--start]\n" << std::endl;
+    std::cout  << programName << " [--help]\n\t\t[--addU username] [--updateU username] [--removeU username] [--viewU]"
+                                 "\n\t\t[--pass password] [--delete username] [--mac macAddress] [--start]\n" << std::endl;
     std::cout << "OPTIONS" << std::endl << "\t";
     std::cout << "--help (abbr -h)" << std::endl << "\t\t";
     std::cout << "Print out a usage message\n" << std::endl << "\t";
@@ -242,7 +243,7 @@ void server::ArgumentsManager::_displayHelp(const std::string &programName){
     std::cout << "Set the [password] to use.\n\t\t"
                  "This option is needed by the options --addU and --updateU.\n" << std::endl << "\t";
     std::cout << "--delete (abbr -d) username" << std::endl << "\t\t";
-    std::cout << "Makes the server delete all or some of the specified [username] backups before (optionally) starting the service.\n\t\t"
+    std::cout << "Makes the server delete all or one of the specified [username] backups before (optionally) starting the service.\n\t\t"
                  "If no other options (no --mac) are specified then it will remove all the user's backups from server.\n" << std::endl << "\t";
     std::cout << "--mac (abbr -m) macAddress" << std::endl << "\t\t";
     std::cout << "Specifies the [macAddress] for the --delete option.\n\t\t"

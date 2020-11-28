@@ -114,7 +114,7 @@ namespace server {
         //database methods
 
         void forAll(const std::string &username, const std::string &mac,
-                    std::function<void(const std::string&, const std::string&, uintmax_t,
+                    const std::function<void(const std::string&, const std::string&, uintmax_t,
                             const std::string&, const std::string&)> &f);
         void insert(const std::string &username, const std::string &mac, const std::string &path,
                     const std::string &type, uintmax_t size, const std::string &lastWriteTime, const std::string &hash);

@@ -180,9 +180,7 @@ void server::Config::_load() {
     std::smatch m;  //regex match
 
     //regex to format the strings got from file (get the key and value, ignoring comments and spaces)
-    std::regex eKeyValue (R"(\s*(\w+)\s*=\s*(.+[/\w])\s*)");
-    //regex to check if the value provided is actually a positive integer number
-    std::regex eUint (R"(^(\d+)$)");
+    std::regex eKeyValue (R"(\s*(\w+)\s*=\s*([^\s]+)\s*)");
 
     //if the file is not there then create (and populate with defaults) it
     if(!std::filesystem::exists(path_)){
@@ -234,7 +232,7 @@ void server::Config::_load() {
 
                                         {"max_data_chunk_size",     std::to_string(MAX_DATA_CHUNK_SIZE),
                                             "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA"
-                                            "messages)\n"
+                                            " messages)\n"
                                             "# the maximum size for a protocol buffer message is 64MB, for a TCP socket"
                                             " it is 1GB,\n"
                                             "# and for a TLS socket it is 16KB.\n"

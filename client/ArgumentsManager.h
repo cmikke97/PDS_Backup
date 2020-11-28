@@ -49,10 +49,10 @@ namespace client {
      */
     class ArgumentsManager {
     public:
-        ArgumentsManager(const ArgumentsManager &) = delete;              //copy constructor deleted
-        ArgumentsManager &operator=(const ArgumentsManager &) = delete;   //copy assignment deleted
-        ArgumentsManager(ArgumentsManager &&) = delete;                   //move constructor deleted
-        ArgumentsManager &operator=(ArgumentsManager &&) = delete;        //move assignment deleted
+        ArgumentsManager(const ArgumentsManager &) = delete;            //copy constructor deleted
+        ArgumentsManager &operator=(const ArgumentsManager &) = delete; //copy assignment deleted
+        ArgumentsManager(ArgumentsManager &&) = delete;                 //move constructor deleted
+        ArgumentsManager &operator=(ArgumentsManager &&) = delete;      //move assignment deleted
         ~ArgumentsManager() = default;   //default destructor
 
         ArgumentsManager(int argc, char** argv);    //constructor with number of args and argument from main
@@ -78,6 +78,8 @@ namespace client {
         bool isIpSet() const;       //is ip option set method
         bool isPortSet() const;     //is port option set method
 
+        bool isPersistSet() const;  //is persist option set method
+
     private:
         std::string _username;      //username optional argument
         std::string _password;      //password optional argument
@@ -99,6 +101,8 @@ namespace client {
         bool _startSet;     //if start option was set
         bool _ipSet;        //if the server ip address option was set
         bool _portSet;      //if the server port option was set
+
+        bool _persistSet;   //if persist option was set
 
         static void _displayHelp(const std::string &programName);  //display help method
     };

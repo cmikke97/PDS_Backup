@@ -27,10 +27,6 @@
 #define SECONDS_BETWEEN_RECONNECTIONS 10    //seconds to wait before client retrying connection after connection lost
 #define MAX_CONNECTION_RETRIES 12           //maximum number of times the system will re-try to connect consecutively
 
-//maximum number of times the system will try re-sending a message (and all messages sent after it to maintain the
-//final outcome) after an internal server error
-#define MAX_SERVER_ERROR_RETRIES 5
-
 #define TIMEOUT 15                          //seconds to wait before client-server connection timeout
 #define SELECT_TIMEOUT 5                    //seconds to wait between one select and the other
 #define MAX_RESPONSE_WAITING 1024           //maximum amount of messages that can be sent without response
@@ -185,9 +181,7 @@ void client::Config::_load() {
     std::smatch m;
 
     //regex to format the strings got from file (get the key and value, ignoring comments and spaces)
-    std::regex eKeyValue (R"(\s*(\w+)\s*=\s*(.+[/\w])\s*)");
-    //regex to check if the value provided is actually a positive integer number
-    std::regex eUint (R"(^(\d+)$)");
+    std::regex eKeyValue (R"(\s*(\w+)\s*=\s*([^\s]+)\s*)");
 
     //if the file is not there then create (and populate with defaults) it
     if(!std::filesystem::exists(path_)){
@@ -209,21 +203,17 @@ void client::Config::_load() {
 
                                         {"millis_filesystem_watcher",       std::to_string(MILLIS_FILESYSTEM_WATCHER),
                                             "# Milliseconds the file system watcher between one folder (to watch) polling"
-                                            "and the other"},
+                                            " and the other"},
 
                                         {"event_queue_size",                std::to_string(EVENT_QUEUE_SIZE),
                                             "# Maximum size for the event queue (in practice how many events can be"
-                                            "detected before sending them to server)"},
+                                            " detected before sending them to server)"},
 
                                         {"seconds_between_reconnections",   std::to_string(SECONDS_BETWEEN_RECONNECTIONS),
                                             "# Seconds the client will wait between one connection attempt and the other"},
 
                                         {"max_connection_retries",          std::to_string(MAX_CONNECTION_RETRIES),
                                             "# Maximum number of allowed connection attempts"},
-
-                                        {"max_server_error_retries",        std::to_string(MAX_SERVER_ERROR_RETRIES),
-                                            "# Maximum number of message retransmissions of the same message after a"
-                                            "message error"},
 
                                         {"timeout_seconds",                 std::to_string(TIMEOUT),
                                             "# Seconds to wait before the client will disconnect"},
@@ -239,7 +229,7 @@ void client::Config::_load() {
 
                                         {"max_data_chunk_size",             std::to_string(MAX_DATA_CHUNK_SIZE),
                                             "# Maximum size (in bytes) of the file transfer chunks ('data' part of DATA"
-                                            "messages)\n"
+                                            " messages)\n"
                                             "# the maximum size for a protocol buffer message is 64MB, for a TCP socket"
                                             " it is 1GB,\n"
                                             "# and for a TLS socket it is 16KB.\n"
@@ -340,8 +330,6 @@ void client::Config::_load() {
                         _seconds_between_reconnections = static_cast<unsigned int>(stoul(value));
                     else if (key == "max_connection_retries")
                         _max_connection_retries = static_cast<unsigned int>(stoul(value));
-                    else if (key == "max_server_error_retries")
-                        _max_server_error_retries = static_cast<unsigned int>(stoul(value));
                     else if (key == "timeout_seconds")
                         _timeout_seconds = static_cast<unsigned int>(stoul(value));
                     else if (key == "select_timeout_seconds")
@@ -477,20 +465,6 @@ unsigned int client::Config::getMaxConnectionRetries() {
         _max_connection_retries = MAX_CONNECTION_RETRIES;   //set to default
 
     return _max_connection_retries;
-}
-
-/**
- * max server error retries getter (if no value was provided in the config file use a default one)
- *
- * @return max server error retries
- *
- * @author Michele Crepaldi s269551
- */
-unsigned int client::Config::getMaxServerErrorRetries() {
-    if(_max_server_error_retries == 0)
-        _max_server_error_retries = MAX_SERVER_ERROR_RETRIES;   //set to default
-
-    return _max_server_error_retries;
 }
 
 /**

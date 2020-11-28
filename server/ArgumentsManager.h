@@ -49,10 +49,10 @@ namespace server {
      */
     class ArgumentsManager {
     public:
-        ArgumentsManager(const ArgumentsManager &) = delete;              //copy constructor deleted
-        ArgumentsManager &operator=(const ArgumentsManager &) = delete;   //copy assignment deleted
-        ArgumentsManager(ArgumentsManager &&) = delete;                   //move constructor deleted
-        ArgumentsManager &operator=(ArgumentsManager &&) = delete;        //move assignment deleted
+        ArgumentsManager(const ArgumentsManager &) = delete;            //copy constructor deleted
+        ArgumentsManager &operator=(const ArgumentsManager &) = delete; //copy assignment deleted
+        ArgumentsManager(ArgumentsManager &&) = delete;                 //move constructor deleted
+        ArgumentsManager &operator=(ArgumentsManager &&) = delete;      //move assignment deleted
         ~ArgumentsManager() = default;   //default destructor
 
         ArgumentsManager(int argc, char** argv);    //constructor with number of args and argument from main

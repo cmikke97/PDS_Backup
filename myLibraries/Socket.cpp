@@ -122,7 +122,7 @@ void TCP_Socket::connect(const std::string &addr, unsigned int port) {
 ssize_t TCP_Socket::read(char *buffer, size_t len, int options) const {
     char *ptr = buffer; //pointer to buffer
     int64_t numRec;     //number of bytes received
-    int64_t rec;        //total amount of bytes received
+    int64_t rec = 0;        //total amount of bytes received
 
     while(len > 0){
         //receive len bytes from the socket and put it into the buffer at the position pointed by ptr
@@ -198,7 +198,7 @@ std::string TCP_Socket::recvString() const {
 ssize_t TCP_Socket::write(const char *buffer, size_t len, int options) const {
     const char *ptr = (const char*)buffer;  //pointer to buffer
     int64_t numSent;     //number of bytes written
-    int64_t sent;        //total amount of bytes written
+    int64_t sent = 0;        //total amount of bytes written
 
     while(len > 0){
         //send len bytes from the buffer at the position pointed by ptr to socket
@@ -352,7 +352,7 @@ std::string TCP_Socket::getIP() const{
     struct sockaddr_in loopback{}; //loopback sockaddr_in
 
     if (sock == -1)
-        throw SocketException("Could not create socket", SocketError::getIP);
+        throw SocketException("Could not create socket", SocketError::getIp);
 
     loopback.sin_family = AF_INET;
     loopback.sin_addr.s_addr = INADDR_LOOPBACK;   //using loopback ip address
@@ -361,14 +361,14 @@ std::string TCP_Socket::getIP() const{
     //connect to loopback
     if (::connect(sock, reinterpret_cast<sockaddr*>(&loopback), sizeof(loopback)) == -1) {
         close(sock);
-        throw SocketException("Could not connect", SocketError::getIP);
+        throw SocketException("Could not connect", SocketError::getIp);
     }
 
     socklen_t addrlen = sizeof(loopback);
     //get sock name
     if (getsockname(sock, reinterpret_cast<sockaddr*>(&loopback), &addrlen) == -1) {
         close(sock);
-        throw SocketException("Could not getsockname", SocketError::getIP);
+        throw SocketException("Could not getsockname", SocketError::getIp);
     }
 
     close(sock);
@@ -376,7 +376,7 @@ std::string TCP_Socket::getIP() const{
     char buf[INET_ADDRSTRLEN];
     //convert the address to human readable form
     if (inet_ntop(AF_INET, &loopback.sin_addr, buf, INET_ADDRSTRLEN) == nullptr)
-        throw SocketException("Could not inet_ntop", SocketError::getIP);
+        throw SocketException("Could not inet_ntop", SocketError::getIp);
 
     return std::string(buf);
 }
@@ -397,22 +397,22 @@ void TCP_Socket::closeConnection() {
         //then close the connection
 
         //send FIN
-        shutdown(_sockfd, SHUT_WR);
+        if(shutdown(_sockfd, SHUT_WR) != -1) {
 
-        //receive all messages until FIN
-        while (true) {
+            //receive all messages until FIN
+            while (true) {
 
-            //number of bytes received
-            int res = recv(_sockfd, buffer, 1024, 0);
+                //number of bytes received
+                int res = recv(_sockfd, buffer, 1024, MSG_DONTWAIT);
 
-            //we got FIN or some connection error
-            if (res <= 0)
-                break;
+                //we got FIN or some connection error
+                if (res <= 0)
+                    break;
+            }
         }
 
         //close socket
         close(_sockfd);
-        _sockfd = 0;
     }
 }
 
@@ -432,22 +432,22 @@ TCP_Socket::~TCP_Socket() {
         //then close the connection
 
         //send FIN
-        shutdown(_sockfd, SHUT_WR);
+        if(shutdown(_sockfd, SHUT_WR) != -1) {
 
-        //receive all messages until FIN
-        while (true) {
+            //receive all messages until FIN
+            while (true) {
 
-            //number of bytes received
-            int res = recv(_sockfd, buffer, 1024, 0);\
+                //number of bytes received
+                int res = recv(_sockfd, buffer, 1024, MSG_DONTWAIT);
 
-            //we got FIN or some connection error
-            if (res <= 0)
-                break;
+                //we got FIN or some connection error
+                if (res <= 0)
+                    break;
+            }
         }
 
         //close socket
         close(_sockfd);
-        _sockfd = 0;
     }
 }
 

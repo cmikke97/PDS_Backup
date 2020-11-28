@@ -27,6 +27,9 @@
  * @author Michele Crepaldi s269551
  */
 enum class FileSystemStatus {
+    //not a status
+    notAStatus,
+
     //element was createad
     created,
 

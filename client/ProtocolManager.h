@@ -126,8 +126,8 @@ namespace client {
         ProtocolManager& operator=(ProtocolManager &&) = delete;        //move assignment deleted
         ~ProtocolManager() = default;   //default destructor
 
-        //constructor with the socket and protocol version
-        ProtocolManager(Socket &s, int ver);
+        //constructor with the socket, waiting messages queue, and protocol version
+        ProtocolManager(Socket &s, Circular_vector<Event> &waitingForResponse, int ver);
 
         //authenticate method with username, password and mac address
         void authenticate(const std::string &username, const std::string &password, const std::string &macAddress);
@@ -153,12 +153,10 @@ namespace client {
 
         std::string _path_to_watch; //path watched by the client (the same as used by FileSystemWatcher)
 
-        Circular_vector<Event> _waitingForResponse; //event messages waiting for a response queue (circular vector)
+        Circular_vector<Event> &_waitingForResponse; //event messages waiting for a response queue (circular vector)
 
         int _protocolVersion;   //client's protocol version
 
-        unsigned int _tries;            //current number of retries //TODO check if it needed
-        unsigned int _maxTries;         //max number of retries upon server error   //TODO check if it is needed
         unsigned int _tempNameSize;     //size of the temporary files name
         unsigned int _maxDataChunkSize; //maximum size of sent data chunk
 
@@ -237,7 +235,7 @@ namespace client {
          *
          * @author Michele Crepaldi s269551
          */
-        ProtocolManagerError getErrorCode() const noexcept {
+        ProtocolManagerError getCode() const noexcept {
             return _code;
         }
 

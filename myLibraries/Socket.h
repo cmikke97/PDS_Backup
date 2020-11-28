@@ -398,7 +398,7 @@ enum class SocketError{
     getMac,
 
     //could not get ip address
-    getIP,
+    getIp,
 
     //socket is closed
     closed

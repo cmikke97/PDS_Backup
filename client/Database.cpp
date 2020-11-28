@@ -158,7 +158,7 @@ void client::Database::_open() {
  * @author Michele Crepaldi s269551
  */
 void client::Database::forAll(
-        std::function<void (const std::string &, const std::string &,
+        const std::function<void (const std::string &, const std::string &,
                 uintmax_t, const std::string &, const std::string &)> &f) {
 
     //lock guard on _access_mutex to ensure thread safeness

@@ -71,7 +71,6 @@ namespace client {
         unsigned int getEventQueueSize();
         unsigned int getSecondsBetweenReconnections();
         unsigned int getMaxConnectionRetries();
-        unsigned int getMaxServerErrorRetries();
         unsigned int getTimeoutSeconds();
         unsigned int getSelectTimeoutSeconds();
         unsigned int getMaxResponseWaiting();
@@ -104,7 +103,6 @@ namespace client {
         unsigned int _event_queue_size{};
         unsigned int _seconds_between_reconnections{};
         unsigned int _max_connection_retries{};
-        unsigned int _max_server_error_retries{};
         unsigned int _timeout_seconds{};
         unsigned int _select_timeout_seconds{};
         unsigned int _max_response_waiting{};
