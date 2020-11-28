@@ -9,6 +9,7 @@
 #include <vector>
 #include <filesystem>
 #include <iostream>
+#include <net/if.h>
 #include <fstream>
 #include <cstdio>
 #include <cstring>
