@@ -64,7 +64,7 @@ void server::ProtocolManager::recoverFromDB() {
                                      const std::string &lastWriteTime, const std::string& hash){
 
         //current Directory_entry element
-        auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+        auto current = Directory_entry(_userPath, path, size, type, lastWriteTime, Hash(hash));
 
         //check if the file exists in the server filesystem (if the server has a copy of it)
         if(!std::filesystem::exists(current.getAbsolutePath())){
@@ -78,7 +78,7 @@ void server::ProtocolManager::recoverFromDB() {
         //if the file exists, check if it corresponds to the one described by the database
 
         //effective Directory_entry element on filesystem
-        auto effective = Directory_entry(_basePath, current.getAbsolutePath());
+        auto effective = Directory_entry(_userPath, current.getAbsolutePath());
 
         //if the effective element found on filesystem is different from the current one
         if(effective.getType() != current.getType() || effective.getSize() != current.getSize() ||
@@ -104,7 +104,7 @@ void server::ProtocolManager::recoverFromDB() {
 
     //for all the elements to update
     for(auto el: toUpdate){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _userPath,
                        "was modified offline!");
 
         //update the element on database
@@ -116,7 +116,7 @@ void server::ProtocolManager::recoverFromDB() {
 
     //for all the elements to delete
     for(auto el: toDelete){
-        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _basePath,
+        Message::print(std::cerr, "WARNING", el.getRelativePath() + " in " + _userPath,
                        "was removed offline!");
 
         //delete the element from database
@@ -232,7 +232,7 @@ void server::ProtocolManager::authenticate() {
 
     std::stringstream tmp;
     tmp << _basePath << "/" << _username << "_" << std::regex_replace(_mac, std::regex(":"), "-");
-    _basePath = tmp.str();
+    _userPath = tmp.str();
 
     Message::print(std::cout, "EVENT", _address, "authenticated as " + _username + "@" + _mac);
 }
@@ -573,7 +573,7 @@ void server::ProtocolManager::_storeFile(){
 
 
     //expected Directory entry element (got from the client message)
-    Directory_entry expected{_basePath, path, size, "file", lastWriteTime, h};
+    Directory_entry expected{_userPath, path, size, "file", lastWriteTime, h};
 
     Message::print(std::cout, "STOR", _address + " (" + _username + "@" + _mac + ")",
                    expected.getRelativePath());
@@ -719,15 +719,15 @@ void server::ProtocolManager::_storeFile(){
 
         //only if the parent path is different from server base path get parent Directory entry (otherwise we
         //have problems getting relative path
-        if(parentPath.string() != _basePath)
-            parent = {_basePath, parentPath.string()};
+        if(parentPath.string() != _userPath)
+            parent = {_userPath, parentPath.string()};
 
         //If we are here then the file was successfully transferred and its copy on the server is as expected
         //it can be moved to the final destination
         std::filesystem::rename(_temporaryPath + tmpFileName, expected.getAbsolutePath());
 
         //if the parent directory is not the server base path
-        if(parentPath.string() != _basePath)
+        if(parentPath.string() != _userPath)
             //reset the parent directory lastWriteTime
             parent.set_time_to_file(parent.getLastWriteTime());
 
@@ -853,8 +853,8 @@ void server::ProtocolManager::_removeFile(){
 
     //only if the parent path is different from server base path get parent Directory entry (otherwise we
     //have problems getting relative path
-    if(parentPath.string() != _basePath)
-        parent = {_basePath, parentPath.string()};
+    if(parentPath.string() != _userPath)
+        parent = {_userPath, parentPath.string()};
 
     //remove the file
     if(!std::filesystem::remove(el->second.getAbsolutePath()))
@@ -862,7 +862,7 @@ void server::ProtocolManager::_removeFile(){
         throw ProtocolManagerException("Could not remove a file", ProtocolManagerError::internal);
 
     //if the parent directory is not the server base path
-    if(parentPath.string() != _basePath)
+    if(parentPath.string() != _userPath)
         //reset the parent directory lastWriteTime
         parent.set_time_to_file(parent.getLastWriteTime());
 
@@ -926,7 +926,7 @@ void server::ProtocolManager::_makeDir(){
     //get the dir parent path
 
     //dir parent path
-    auto parentPath = std::filesystem::path(_basePath + path).parent_path();
+    auto parentPath = std::filesystem::path(_userPath + path).parent_path();
 
     //check if the parent folder already exists
     bool parentExists = std::filesystem::exists(parentPath.string());
@@ -935,19 +935,19 @@ void server::ProtocolManager::_makeDir(){
     Directory_entry parent;
 
     //if the parent directory exists and the parent path is different from server base path
-    if(parentExists && parentPath.string() != _basePath)
+    if(parentExists && parentPath.string() != _userPath)
         //save the lastWriteTime of the destination folder (parent directory) before creating the directory,
         //any lastWriteTime modification to that directory will be requested explicitly by the client,
         //so we want to keep the same time before and after the directory create
-        parent = Directory_entry{_basePath, parentPath.string()};
+        parent = Directory_entry{_userPath, parentPath.string()};
 
     //if the directory does not already exist
-    if(!std::filesystem::exists(_basePath + path))
+    if(!std::filesystem::exists(_userPath + path))
         //create all the directories (that do not already exist) up to the path
-        std::filesystem::create_directories(_basePath + path);
+        std::filesystem::create_directories(_userPath + path);
 
     //in case the it existed, if it is not a directory
-    if(!std::filesystem::is_directory(_basePath + path)){
+    if(!std::filesystem::is_directory(_userPath + path)){
 
         //send error message with cause to client
         _send_ERR(ErrCode::notADir);
@@ -957,13 +957,13 @@ void server::ProtocolManager::_makeDir(){
     }
 
     //Directory entry which represents the newly created folder (or the already present one)
-    Directory_entry newDir{_basePath, std::filesystem::directory_entry(_basePath + path)};
+    Directory_entry newDir{_userPath, std::filesystem::directory_entry(_userPath + path)};
 
     //change last write time for the directory
     newDir.set_time_to_file(lastWriteTime);
 
     //if the parent directory already existed before (and it is not the base path)
-    if(parentExists && parentPath.string() != _basePath)
+    if(parentExists && parentPath.string() != _userPath)
         //reset the parent directory lastWriteTime
         parent.set_time_to_file(parent.getLastWriteTime());
 
@@ -1060,7 +1060,7 @@ void server::ProtocolManager::_removeDir(){
     //get the dir parent path
 
     //dir parent path
-    auto parentPath = std::filesystem::path(_basePath + path).parent_path();
+    auto parentPath = std::filesystem::path(_userPath + path).parent_path();
 
     //save the lastWriteTime of the destination folder (parent directory) before removing the directory,
     //any lastWriteTime modification to that directory will be requested explicitly by the client,
@@ -1071,8 +1071,8 @@ void server::ProtocolManager::_removeDir(){
 
     //only if the parent path is different from server base path get parent Directory entry (otherwise we
     //have problems getting relative path)
-    if(parentPath.string() != _basePath)
-        parent = {_basePath, parentPath.string()};
+    if(parentPath.string() != _userPath)
+        parent = {_userPath, parentPath.string()};
 
     //recursive directory iterator for the directory to remove
     std::filesystem::recursive_directory_iterator iter{dirToRemove.getAbsolutePath()};
@@ -1082,7 +1082,7 @@ void server::ProtocolManager::_removeDir(){
 
     //save the elements in a vector before removing them in order to be sure to remove them all
     for(auto i: iter)
-        elementsToRemove.emplace_back(_basePath, i);
+        elementsToRemove.emplace_back(_userPath, i);
 
     //remove the directory (and all its subdirectories and files) from filesystem
     if(std::filesystem::remove_all(dirToRemove.getAbsolutePath()) == 0)
@@ -1104,7 +1104,7 @@ void server::ProtocolManager::_removeDir(){
     _elements.erase(dirToRemove.getRelativePath());
 
     //if the parent directory is not the base path
-    if(parentPath.string() != _basePath)
+    if(parentPath.string() != _userPath)
         //reset the parent directory lastWriteTime
         parent.set_time_to_file(parent.getLastWriteTime());
 
@@ -1192,8 +1192,8 @@ void server::ProtocolManager::_retrieveUserData(){
     _clientMessage.Clear();
 
 
-    //map with all the elements to send
-    std::map<std::string, Directory_entry> toSend{};
+    //vector with all the elements to send
+    std::vector<std::pair<std::string, Directory_entry>> toSend{};
 
     //if retrieve all boolean is true, the user requested all its files (independently from the machine mac address)
     if(retrAll){
@@ -1218,15 +1218,16 @@ void server::ProtocolManager::_retrieveUserData(){
             std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
                     const std::string &)> f;
 
-            f = [this, &toSend, &relativeRoot](const std::string &path, const std::string &type, uintmax_t size,
+            f = [this, &toSend, &relativeRoot, &m](const std::string &path, const std::string &type, uintmax_t size,
                     const std::string &lastWriteTime, const std::string& hash){
 
                 //current element
-                auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+                auto current = Directory_entry(_basePath + relativeRoot, path, size, type,
+                                               lastWriteTime, Hash(hash));
 
                 //pre-append the relative root (username_mac) to the element relative path
                 //and insert the pair into the toSend map
-                toSend.emplace(relativeRoot + current.getRelativePath(), std::move(current));
+                toSend.emplace_back(m, std::move(current));
             };
 
             //perform the function f on all the user elements (with mac m)
@@ -1264,15 +1265,15 @@ void server::ProtocolManager::_retrieveUserData(){
         std::function<void(const std::string &, const std::string &, uintmax_t, const std::string &,
                            const std::string &)> f;
 
-        f = [this, &toSend, &relativeRoot](const std::string &path, const std::string &type, uintmax_t size,
+        f = [this, &toSend, &relativeRoot, &macAddr](const std::string &path, const std::string &type, uintmax_t size,
                                            const std::string &lastWriteTime, const std::string& hash){
 
             //current element
-            auto current = Directory_entry(_basePath, path, size, type, lastWriteTime, Hash(hash));
+            auto current = Directory_entry(_basePath + relativeRoot, path, size, type, lastWriteTime, Hash(hash));
 
             //pre-append the relative root (username_mac) to the element relative path
             //and insert the pair into the toSend map
-            toSend.emplace(relativeRoot + current.getRelativePath(), std::move(current));
+            toSend.emplace_back(macAddr, std::move(current));
         };
 
         //perform the function f on all the user-macAddress elements
@@ -1283,22 +1284,42 @@ void server::ProtocolManager::_retrieveUserData(){
 
     //for all the pairs in the toSend map
     for(auto pair: toSend){
+        std::string currentMac = pair.first;
+        Directory_entry current = std::move(pair.second);
+
+        //if the file to transfer does not exist anymore in the filesystem
+        if(!std::filesystem::exists(current.getAbsolutePath())) {
+
+            //remove it from the db and just go to the next element (return)
+            _db->remove(_username, currentMac, current.getRelativePath());
+
+            //print a warning and skip it
+            Message::print(std::cerr, "WARNING",_address + " (" + _username + "@" + _mac + ")",
+                           current.getRelativePath() + " was removed offline. It will not be sent");
+            continue;
+        }
+
         //if it is a directory
-        if(pair.second.is_directory()){
-            Message::print(std::cout, "RETR-MKD", _address + " (" + _username + "@" + _mac + ")", pair.first);
+        if(current.is_directory()){
+            //compose the relative root directory name from username and mac; this will be the folder in which the
+            //files and directories associated to this username-mac pair will be saved on client
+
+            std::stringstream tmp;
+            tmp << "/" << _username << "_" << std::regex_replace(currentMac, std::regex(":"), "-");
+
+            //relative root directory name (from username-mac pair)
+            std::string relativeRoot = tmp.str();
+
+            Message::print(std::cout, "RETR-MKD", _address + " (" + _username + "@" + _mac + ")",
+                           relativeRoot + current.getRelativePath());
 
             //send MKD message to client
-            _send_MKD(pair.first, pair.second);
+            _send_MKD(relativeRoot + current.getRelativePath(), current);
         }
         //if it is a file
-        else if(pair.second.is_regular_file()) {
-            Message::print(std::cout, "RETR-STOR", _address + " (" + _username + "@" + _mac + ")", pair.first);
-
-            //send STOR message to the client
-            _send_STOR(pair.first, pair.second);
-
+        else if(current.is_regular_file()) {
             //send the file to the client
-            _sendFile(pair.second, macAddr);
+            _sendFile(current, currentMac);
         }
         //else the element is not supported so just skip it
     }
@@ -1317,20 +1338,23 @@ void server::ProtocolManager::_retrieveUserData(){
  * @throws ProtocolManagerException:
  *  <b>internal</b> if the file could not be opened
  */
-void server::ProtocolManager::_sendFile(Directory_entry &element, std::string &macAddr) {
+void server::ProtocolManager::_sendFile(Directory_entry &element,
+                                        std::string &macAddr) {
+
     std::ifstream file;             //input file
     char buff[_maxDataChunkSize];   //buffer used to read from file and send to socket
 
-    //if the file to transfer does not exist anymore in the filesystem
-    if(!std::filesystem::exists(element.getAbsolutePath())) {
+    //compose the relative root directory name from username and mac; this will be the folder in which the
+    //files and directories associated to this username-mac pair will be saved on client
 
-        //remove it from the db and just go to the next element (return)
-        _db->remove(_username, macAddr, element.getRelativePath());
-        return;
-    }
+    std::stringstream tmp;
+    tmp << "/" << _username << "_" << std::regex_replace(macAddr, std::regex(":"), "-");
+
+    //relative root directory name (from username-mac pair)
+    std::string relativeRoot = tmp.str();
 
     //directory entry representing the effective file present on filesystem (with same name)
-    Directory_entry effective{_basePath, element.getAbsolutePath()};
+    Directory_entry effective{_basePath + relativeRoot, element.getAbsolutePath()};
 
     //if the file hash got from db is different from the one of the file present in the filesystem
     if(element.getHash() != effective.getHash()){
@@ -1345,6 +1369,12 @@ void server::ProtocolManager::_sendFile(Directory_entry &element, std::string &m
 
         return;
     }
+
+    Message::print(std::cout, "RETR-STOR", _address + " (" + _username + "@" + _mac + ")",
+                   relativeRoot + element.getRelativePath());
+
+    //send STOR message to the client
+    _send_STOR(relativeRoot + element.getRelativePath(), element);
 
     //open input file
     file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);
