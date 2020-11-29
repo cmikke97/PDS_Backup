@@ -331,7 +331,7 @@ void client::ProtocolManager::receive() {
                 if(!std::filesystem::exists(event.getElement().getAbsolutePath()) ||
                    Directory_entry(_path_to_watch, event.getElement().getAbsolutePath()).getHash()
                    != event.getElement().getHash())
-                    break;  //TODO check
+                    break;
 
                 //(file created/modified) -> the store message was sent to server event
                 Event newEvent = Event(event.getElement(), FileSystemStatus::storeSent);
@@ -809,21 +809,7 @@ void client::ProtocolManager::_sendFile(Directory_entry &element) {
     std::ifstream file;             //file to send
     char buff[_maxDataChunkSize];   //buffer used to read from file and send to socket
 
-    //if the file to transfer is not present anymore in the filesystem or its hash is different from the one of the
-    //file present in the filesystem then it means that the file was deleted or modified
-    //--> I don't send it anymore
-
-    //check if the element still exists on the filesystem
-    if(!std::filesystem::exists(element.getAbsolutePath())){
-        throw ProtocolManagerException("File not present anymore",
-                                       ProtocolManagerError::client);
-    }
-
-    Directory_entry effective{_path_to_watch, element.getAbsolutePath()};   //effective file on filesystem
-
-    //check effective hash against element to send hash
-    if(effective.getHash() != element.getHash())
-        throw ProtocolManagerException("File not present anymore", ProtocolManagerError::client);
+    //the file should exist and be the same as expected since I checked these things before calling _sendFile
 
     //open input file
     file.open(element.getAbsolutePath(), std::ios::in | std::ios::binary);

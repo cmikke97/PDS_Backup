@@ -22,7 +22,7 @@
 #define LISTEN_QUEUE 8              //Size of the accept listen queue
 #define N_THREADS 4                 //Number of single server threads (apart from the accepting thread)
 #define SOCKET_QUEUE_SIZE 10        //Maximum socket queue size
-#define SELECT_TIMEOUT_SECONDS 5    //Seconds the client will wait between 2 selects on the socket
+#define SELECT_TIMEOUT_SECONDS 5    //Seconds the server will wait between 2 selects on the socket
 #define TIMEOUT_SECONDS 30          //Seconds the server will wait before disconnecting client
 #define TEMP_FILE_NAME_SIZE 8       //Size of the name of temporary files
 
@@ -222,7 +222,7 @@ void server::Config::_load() {
                                             "# Maximum socket queue size"},
 
                                         {"select_timeout_seconds",  std::to_string(SELECT_TIMEOUT_SECONDS),
-                                            "# Seconds the client will wait between 2 subsequent selects on the socket"},
+                                            "# Seconds the server will wait between 2 subsequent selects on the socket"},
 
                                         {"timeout_seconds",         std::to_string(TIMEOUT_SECONDS),
                                             "# Seconds the server will wait before disconnecting client"},
