@@ -313,7 +313,9 @@ void server::ProtocolManager::receive(){
             //so keep connection and skip the faulty message
             case server::ProtocolManagerError::unexpected:
             case server::ProtocolManagerError::client:
-                //keep connection, skip this message
+                //keep connection, skip this message.
+                Message::print(std::cerr, "WARNING", "ProtocolManager error from the received message",
+                               "will now skip faulty message");
                 return;
 
                 //these next cases will be handled from main
@@ -1190,11 +1192,6 @@ void server::ProtocolManager::_retrieveUserData(){
     _clientMessage.Clear();
 
 
-    //validate mac address got from clientMessage
-    if(!Validator::validateMacAddress(macAddr))
-        throw ProtocolManagerException("Mac address validation failed", ProtocolManagerError::client);
-
-
     //map with all the elements to send
     std::map<std::string, Directory_entry> toSend{};
 
@@ -1246,6 +1243,10 @@ void server::ProtocolManager::_retrieveUserData(){
 
             throw ProtocolManagerException("Error in client message", ProtocolManagerError::client);
         }
+
+        //validate mac address got from clientMessage
+        if(!Validator::validateMacAddress(macAddr))
+            throw ProtocolManagerException("Mac address validation failed", ProtocolManagerError::client);
 
         Message::print(std::cout, "RETR", _address + " (" + _username + "@" + _mac + ")", "mac = "
                         + macAddr);
