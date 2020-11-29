@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <thread>
 #include <functional>
+#include <fstream>
 
 
 /*
@@ -68,6 +69,20 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
             //if it is not a file nor a directory don't do anything and go on
             if(!file.is_directory() && !file.is_regular_file())
                 continue;
+
+            if(file.is_regular_file()) {
+                //if it is a file, then I try to open it and only if I succeed then I go on with this file
+                //this is to be sure that the file is no being held by another program when I will process it
+
+                //temporary input file stream
+                std::ifstream temp_file;
+                temp_file.open(file.path(), std::ifstream::in | std::ifstream::binary);   //try opening the file
+                if (!temp_file.is_open())   //if it cannot be opened
+                    //skip it for now
+                    continue;
+
+                temp_file.close();
+            }
 
             auto current = Directory_entry(_path_to_watch, file);   //current Directory_entry element
 
