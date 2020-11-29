@@ -119,6 +119,8 @@ int main(int argc, char **argv) {
         if(!inputArgs.isStartSet())   //if the start option was not set just close the program
             return 0;
 
+        Message::print(std::cout, "INFO", "Starting service..",
+                       "Watching " + config->getPathToWatch() + " for changes");
 
         //FileSystemWatcher instance that will check the current folder for changes every X milliseconds
         FileSystemWatcher fw{config->getPathToWatch(), std::chrono::milliseconds(config->getMillisFilesystemWatcher())};
