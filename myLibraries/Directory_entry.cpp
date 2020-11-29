@@ -271,7 +271,7 @@ Hash& Directory_entry::getHash() {
  * @author Michele Crepaldi s269551
  */
 std::string Directory_entry::get_time_from_file(){
-    setenv("TZ", "UTC", 1); //set "TZ" (Time zone) environment variable to "UTC"
+    setenv("TZ", "UTC-1", 1); //set "TZ" (Time zone) environment variable to "UTC"
 
     struct stat buf{};
     if(stat(_absolutePath.data(), &buf) != 0)    //get file info
@@ -297,7 +297,7 @@ std::string Directory_entry::get_time_from_file(){
  * @author Michele Crepaldi s269551
  */
 void Directory_entry::set_time_to_file(const std::string &time){
-    setenv("TZ", "UTC", 1); //set "TZ" (Time zone) environment variable to "UTC"
+    setenv("TZ", "UTC-1", 1); //set "TZ" (Time zone) environment variable to "UTC"
 
     struct stat buf{};
     if(stat(_absolutePath.data(), &buf) != 0)    //get file info
