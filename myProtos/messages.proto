@@ -2,17 +2,15 @@ syntax = "proto3";
 
 package messages;
 
-//TODO check
-
 //client messages
 message ClientMessage{
   int32 version = 1;          //version of the protocol
   Type type = 2;              //type of message
 
-  string path = 4;            //for PROB, STOR, MKD
+  string path = 4;            //for PROB, STOR, DELE, MKD, RMD
   uint64 fileSize = 5;        //for STOR
   string lastWriteTime = 6;   //for PROB, STOR, MKD
-  bytes hash = 7;             //for PROB, STOR, DELE, MKD, RMD
+  bytes hash = 7;             //for PROB, STOR, DELE
   bytes data = 8;             //for DATA
   string username = 9;        //for AUTH
   string password = 10;       //for AUTH
@@ -28,29 +26,29 @@ message ClientMessage{
     MKD = 4;    //has version, type, path, lastWriteTime
     RMD = 5;    //has version, type, path
     DATA = 6;   //has version, type, data, last
-    AUTH = 7;   //has version, type, username, mac, password
+    AUTH = 7;   //has version, type, username, macAddress, password
     RETR = 8;   //has version, type, mac, all
   }
 }
 
 //server messages
 message ServerMessage{
-  int32 version = 1;          //version of the protocol
-  Type type = 2;              //type of message
+  int32 version = 1;        //version of the protocol
+  Type type = 2;            //type of message
 
-  string path = 4;        //for SEND, MKD, STOR
-  bytes hash = 5;         //for SEND, STOR
-  uint64 fileSize = 6;        //for SEND, STOR
-  string lastWriteTime = 7;    //for SEND, MKD, STOR
-  int32 code = 8;         //for OK, ERR
-  int32 newVersion = 9;   //for VER
-  bytes data = 10;        //for DATA
-  bool last = 11;         //for DATA
+  string path = 4;          //for SEND, MKD, STOR
+  bytes hash = 5;           //for SEND, STOR
+  uint64 fileSize = 6;      //for STOR
+  string lastWriteTime = 7; //for MKD, STOR
+  int32 code = 8;           //for OK, ERR
+  int32 newVersion = 9;     //for VER
+  bytes data = 10;          //for DATA
+  bool last = 11;           //for DATA
 
   enum Type{
     NOOP = 0;   //has version, type
     OK = 1;     //has version, type, code
-    SEND = 2;   //has version, type, path, fileSize, lastWriteTime, hash
+    SEND = 2;   //has version, type, path, hash
     ERR = 3;    //has version, type, code
     VER = 4;    //has version, type, newVersion
     MKD = 5;    //has version, type, path, lastWriteTime
