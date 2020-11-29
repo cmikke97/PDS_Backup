@@ -312,6 +312,8 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                  TS_Circular_vector<Event> &eventQueue, const std::string &server_ip,
                  int server_port, const std::string &username, const std::string &password, bool persist) {
 
+    int connectionCounter = 0;
+
     try {
         auto config = Config::getInstance();    //config instance
 
@@ -348,6 +350,10 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                 client_socket.connect(server_ip, server_port);
 
                 tries = 0; //reset consecutive connection retries
+                connectionCounter++; //update the connection counter
+
+                Message::print(std::cout, "INFO", "Connection #"
+                                + std::to_string(connectionCounter) + " established");
 
                 //authenticate user
                 pm.authenticate(username, password, client_socket.getMAC());
@@ -444,9 +450,10 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                     case SocketError::write:
                     case SocketError::closed:
 
-                        if(tries == 0)  //if this is the first retry
+                        //if this is the first retry (and it is not the first connection I make)
+                        if(tries == 0 && connectionCounter != 0)
                             Message::print(std::cout, "INFO", "Connection was closed by the server",
-                                           "will reconnect if needed"); //TODO reconsider
+                                           "will reconnect if needed");
 
                         //if I cannot send any messages (the waiting queue is full)
                         //or there are not new events to send
