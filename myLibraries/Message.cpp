@@ -6,6 +6,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <stdlib.h>
 #include "Message.h"
 
 
@@ -33,6 +34,7 @@ std::mutex Message::_access;
 Message::Message(std::string  head, std::string  body, std::string  tail) :
         _head(std::move(head)), _body(std::move(body)), _tail(std::move(tail)), _perc(0) {
 
+    setenv("TZ", "UTC-1", 1); //set "TZ" (Time zone) environment variable to "UTC"
     auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());    //current time
     std::tm *gmt = std::localtime(&t);  //current time as std::tm type
     std::stringstream message;
@@ -105,6 +107,7 @@ std::ostream& operator<< (std::ostream &out, Message &m){
 void Message::print(std::ostream &out, const std::string &head, const std::string &body, const std::string &tail) {
     std::lock_guard l(_access); //lock guard to ensure thread safeness
 
+    setenv("TZ", "UTC-1", 1); //set "TZ" (Time zone) environment variable to "UTC"
     auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()); //current time
     std::tm *gmt = std::localtime(&time);   //current time as std::tm type
     std::stringstream message;
