@@ -355,9 +355,6 @@ void client::ProtocolManager::receive() {
         case messages::ServerMessage_Type_OK: {
             //last command was successful
 
-            //remove message event from queue (it was successful)
-            _waitingForResponse.pop();
-
             int okCode = _serverMessage.code(); //ok code got from serverMessage
 
             //it is more efficient to clear the serverMessage protobuf than creating a new one
@@ -399,6 +396,9 @@ void client::ProtocolManager::receive() {
             }   //otherwise
             else if (event.getType() == FileSystemStatus::deleted)
                 _db->remove(event.getElement().getRelativePath()); //delete element from db
+
+            //remove message event from queue (it was successful)
+            _waitingForResponse.pop();
 
             break;
         }
