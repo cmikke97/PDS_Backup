@@ -137,7 +137,8 @@ namespace server {
         std::string _username;      //username of the connected user
         std::string _mac;           //mac address of the connected client's machine
         std::string _address;       //address of the connected client's machine
-        std::string _basePath;      //base server path (where to put backed-up data)
+        std::string _basePath;      //base server path
+        std::string _userPath;      //user base server path (where to put backed-up data for the current user)
         std::string _temporaryPath; //temporary server path where to put temporary files
 
         int _protocolVersion;       //server's protocol version
@@ -182,7 +183,8 @@ namespace server {
 
         //special action performing methods for the special case of client retrieving data from server
         void _retrieveUserData();   //user data retrieve method
-        void _sendFile(Directory_entry &element, std::string &macAddr); //send file to client method
+        //send file to client method
+        void _sendFile(Directory_entry &element, std::string &macAddr);
     };
 
     /*
