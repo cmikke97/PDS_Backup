@@ -43,7 +43,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
     while(!stop.load()) {
         //check if a file/directory was deleted
 
-        for(auto it = _paths.begin(); it != _paths.end(); it++){
+        for(auto it = _paths.begin(); it != _paths.end(); ){
             if(!std::filesystem::exists(it->first)) {   //if the element does not exist any more perform the action
 
                 //the element was deleted
@@ -52,10 +52,10 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
                 //otherwise this element will be removed later (when its deletion will be re-detected)
                 if(action(it->second, FileSystemStatus::deleted)) {
                     //std::map::erase returns an iterator to the element that follows the last element removed
-                    //so we need to decrement it (for loop will increment it)
                     it = _paths.erase(it);
-                    it--;
                 }
+                else
+                    it++;
             }
         }
 
