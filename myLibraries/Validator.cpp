@@ -208,7 +208,7 @@ bool Validator::validateLastWriteTime(std::string &lastWriteTime){
     std::smatch m;  //regex match
 
     //regular expression to represent a valid time name
-    std::regex e(R"(^^(?:\w+), \d{2} (?:\w+) \d{4} \d{2}:\d{2} UTC$)");
+    std::regex e(R"(^(?:\w+), \d{2} (?:\w+) \d{4} \d{2}:\d{2} \w*$)");
 
     if (!std::regex_match(lastWriteTime, m, e)) //check if it actually is a valid time (only syntactically)
         return false;
