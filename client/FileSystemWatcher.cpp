@@ -57,6 +57,8 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
                 else
                     it++;
             }
+            else
+                it++;
         }
 
         //Check if a file/directory was created or modified
