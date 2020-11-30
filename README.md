@@ -385,8 +385,108 @@ and to the sending of error messages back to the client.
 
 ### configuration file parameters
 #### client side
+    ###########################################################################
+    #        -Host specific variables: no default values are provided-        #
+    ###########################################################################
+    
+    # Path of the folder to back up on server
+    path_to_watch = C:\Users\michele\Desktop\PDS_backup\client_path_to_watch
+    
+    
+    ###########################################################################
+    #                             Other variables                             #
+    #        -  in case of empty fields default values will be used  -        #
+    ###########################################################################
+    
+    # Client Database path
+    database_path = ../clientFiles/clientDB.sqlite
+    
+    # CA to use for server certificate verification
+    ca_file_path = ../../TLScerts/cacert.pem
+    
+    # Milliseconds the file system watcher between one folder (to watch) polling and the other
+    millis_filesystem_watcher = 5000
+    
+    # Maximum size for the event queue (in practice how many events can be detected before sending them to server)
+    event_queue_size = 20
+    
+    # Seconds the client will wait between one connection attempt and the other
+    seconds_between_reconnections = 10
+    
+    # Maximum number of allowed connection attempts
+    max_connection_retries = 6
+    
+    # Seconds to wait before the client will disconnect
+    timeout_seconds = 15
+    
+    # Seconds the client will wait between 2 subsequent selects on the socket
+    select_timeout_seconds = 5
+    
+    # Maximum number of messages waiting for a server response allowed
+    max_response_waiting = 1024
+    
+    # Temporary files name size
+    tmp_file_name_size = 8
+    
+    # Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages)
+    # the maximum size for a protocol buffer message is 64MB, for a TCP socket it is 1GB,
+    # and for a TLS socket it is 16KB.
+    # So, keeping in mind that there are also other fields in the message,
+    # KEEP IT BELOW (or equal) 15KB.
+    max_data_chunk_size = 15360
 
 #### server side
+    # Server base folder path (where user files will be saved)
+    server_base_path = C:\Users\michele\Desktop\PDS_backup\server_base_path
+    
+    # Temporary folder path for temporary files
+    temp_path = C:\Users\michele\Desktop\PDS_backup\server_base_path\temp
+    
+    
+    ###########################################################################
+    #                             Other variables                             #
+    #        -  in case of empty fields default values will be used  -        #
+    ###########################################################################
+    
+    # Password Database path
+    password_database_path = ../serverFiles/passwordDB.sqlite
+    
+    # Server Database path
+    server_database_path = ../serverFiles/serverDB.sqlite
+    
+    # Server Certificate path
+    certificate_path = ../../TLScerts/server_cert.pem
+    
+    # Server Private Key path
+    private_key_path = ../../TLScerts/server_pkey.pem
+    
+    # CA to use for server certificate verification
+    ca_file_path = ../../TLScerts/cacert.pem
+    
+    # Size of the accept listen queue
+    listen_queue = 8
+    
+    # Number of single server threads (apart from the accepting thread)
+    n_threads = 4
+    
+    # Maximum socket queue size
+    socket_queue_size = 10
+    
+    # Seconds the server will wait between 2 subsequent selects on the socket
+    select_timeout_seconds = 5
+    
+    # Seconds the server will wait before disconnecting client
+    timeout_seconds = 60
+    
+    # Temporary files name size
+    tmp_file_name_size = 8
+    
+    # Maximum size (in bytes) of the file transfer chunks ('data' part of DATA messages)
+    # the maximum size for a protocol buffer message is 64MB, for a TCP socket it is 1GB,
+    # and for a TLS socket it is 16KB.
+    # So, keeping in mind that there are also other fields in the message,
+    # KEEP IT BELOW (or equal) 15KB.
+    max_data_chunk_size = 15360
 
 ### implemented classes (and brief description)
 #### client side
