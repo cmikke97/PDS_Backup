@@ -67,43 +67,64 @@ Communication between the client and the server can be based on the Boost ASIO l
 (https://www.boost.org/doc/libs/1_73_0/doc/html/boost_asio.html) or any other
 suitable one.
 
-# Appunti
-
-### da capire
-* ..
+# Notes
 
 ### assumptions made
-* the same user may want to connect to the service from different machines so I have to manage this case.
+* The same user may want to connect to the service from different machines so I have to manage this case.
 The way I managed it is by adding to the user also the information about the MAC address of the machine used
 by the user in this moment; so in authentication I send username, MAC and password; the password is unique
 for the same user, but the same user may use the service from different machines (MACs) in different times
-(or also a the same time). The server will have a separate folder for each (username,mac) pair.
-* The server folders are not touched by anyone, so they are not modified neither while the service is running
-nor when the service is sopped; this implies I know my database (and my queue in main memory) are actually
-always synced with the filesystem (I may overcome this assumption periodically checking the consistency).
+(or also at the same time). The server will have a separate folder for each (username,mac) pair.
+* The folders on server should not be touched directly by anyone, so they should not be modified neither while
+the service is running nor when the service is sopped; this implies I know my database (and my queue in main memory)
+is actually always synced with the filesystem.
+Anyway, upon connection of a user, if a change in/deletion of a user's file is detected, the corresponding
+database entry will be modified/removed and a warning message will be shown; then the normal operation will proceed.
 * The system keeps track of all changes to the selected folder, even when the service is not running on the
 client side (I manage this through a database on the client; at startup I check the differences between the
 actual content of the folder and this database and I make all corresponding changes on the server side);
 the main consequence of this assumption is that if a user (on the same machine), between different runs of
 the service, changes the selected folder, then the copy of the previous folder on the server will be completely
-removed, and only the new folder will appear on the server side.
-* The backup procedure is always client to server, no files (nor directories) will ever transit from server to client;
-so the most updated version of the folder in the client will always be sent to the server. I may overcome this
-by adding some commands (that may be activated by command line commands) to retrieve information about files and
-directoris from the server to the client.
-* The client side of the protocol (and maybe also the server side) need to be asynchronous. I manage this by
+removed, and only the content of the new folder will appear on the server side.
+* During the service operation, the backup procedure is always client to server, no files (nor directories) will
+ever transit from server to client; so the most updated version of the folder in the client will always be sent
+to the server. The user may retrieve all its backed-up files (or only its backed-up files corresponding to a
+specific mac address, or to the current mac address) before starting the service; so there is a specific option to
+the program that will permit the retrieval of such files from server. Only in this case files may transit from server
+to client. This operation will be attempted only once at the start of the program, so if errors occur (for example
+connection errors) the program will be shut down. The user may also want to start the normal service operation after
+the retrieval of files was completed.
+* The client side of the protocol need to be asynchronous, while the server side is synchronous. I manage this by
 selecting on the read and write sockets and sending a number of messages without waiting for the server responses;
 after a number of messages sent without response then I stop (I cannot have more than that number of messages sent
 without a response); so I have a sliding window of messages; upon the reception of a confirmation for a message
 I know, since the messages are always in order, that the first message of the window has been confirmed so I move
 the sliding window and proceed to send other messages until the window is full again; upon the reception of an error
-message instead I know that the first message in the window has failed so, based on the error, I may need to
-re-send it (and re-send also all the next messages in the window to preserve the correctness of actions).
+message instead I know that the first message in the window has failed so that message will be skipped.
+The sliding window is there in order to make it possible to re-send all already sent (but without a server
+response) messages upon connection re-establishment after a connection error, so to not miss any event.
+* Both client and server have a number of possible optional parameters that can be used in order to change
+their behaviour. A full list of options will be presented later and can be viewed also using option -h running
+the respective programs.
+* Both client and server make use of a configuration file in order to further change the behaviour of the programs.
+Those files are automatically generated if not previously present, and must be modified by the user in order to make
+the programs work; most of the variables that can be set have a predefined default value that will be used in case
+the user did not specify them, but there are a number of REQUESTED variables that the user has to set (the programs
+will actually shut down if those variables are not set or contain errors).
+* Both client and server make use of one or more databases to store the persistent information that they need for
+the correct operation; those databases will be generated automatically if not already present.
+* The communication between client and server needs to be secured, so TLS protocol will be used. (Anyway, even the
+simple and unsecure TCP connection may be set to be used, but only hard-coding the relative option since I actually
+want to use it only for debugging purposes and I don't want users to be able to use it)
+* The encoding of the messages is performed using the Google Protocol Buffers, so raw bytes will be sent to make the
+communication as efficient as possible.
+* The files and directories on server side (the backed-up ones) must have the same last write time of the original
+files on client side.
 
 ### file system changes to monitor
 type of change | action to execute (on the client)
 ------------ | -------------
-creation of a file | create the directory entry calculating also the file hash; then ask to the server if it has already got a copy of that file (probe); then in case it is needed send the creation command (stor) for that file (file + path + size + lastWriteTime + hash); then send all the file blocks and then receive the server response
+creation of a file | <p>create the directory entry calculating also the file hash; then ask to the server if it has already got a copy of that file (probe); then in case it is needed send the creation command (stor) for that file (file + path + size + lastWriteTime + hash); then send all the file blocks and then receive the server response</p>
 deletion of a file | send to the server the command of file remove (DELE) and then receive response
 creation of a directory | send to the server the command to create the directory (MKD) with the necessary information (path, lastWriteTime); then get the server response
 deletion of a directory | sent to the server the directory deletion command (RMD) which is recursive (it will also remove any file or sub-directory); then get the server response
@@ -123,25 +144,28 @@ deletion of a directory | receive the directory deletion command (RMD) and remov
 type | meaning | content | description | effects
 --- | --- | --- | --- | ---
 NOOP | No operation | version, type | fake message (needed to properly use protocol buffers, the first message type needs to be a NOOP | no effects
-PROB | file probe | version, type, path (relative), hash | message used to probe the existance of a file on the server side | the server will check if it already has this file and respond appropriately
-STOR | file store | version, type, path (relative) , fileSize, lastWriteTime, hash | message used to inform the server of the client intention to send the file blocks of the file described in this message | the server will prepare the file and accept all the file data blocks from the client
-DELE | file delete | version, type, path, hash | message used to delete a file from the server side | the server will remove the file corresponding to the file described in this message
+PROB | file probe | version, type, path (relative), lastWriteTime, hash | message used to probe the existence of a file on the server side | the server will check if it already has this file and respond appropriately
+STOR | file store | version, type, path (relative), fileSize, lastWriteTime, hash | message used to inform the server of the client intention to send the file blocks of the file described in this message | the server will prepare the file and accept all the file data blocks from the client
+DELE | file delete | version, type, path (relative), hash | message used to delete a file from the server side | the server will remove the file corresponding to the file described in this message
 MKD | make directory | version, type, path (relative), lastWriteTime | message used to create a folder on the server side and/or to change its lastWriteTime (some directories will already be present, so only their lastWriteTime will be modified) | the server will create the directory, or if already present it will only change the lastWriteTime of the directory described by this message
 RMD | remove directory | version, type, path (relative) | message used to delete a folder (recursively) on the server side | the server will delete the directory described by this message (recursively) 
 DATA | file data block | version, type, data (the actual data), last (if this is the last block) | message used to send a single file data block from client to server | the server will append this data to the file corresponding to the last STOR message received
-AUTH | authentication | version, type, username, mac, password | message used to authenticate the client to the service | the server will use the provided information to authenticate the user to the service and select the corresponding folder
-QUIT | quit protocol | version, type | message used to end the message exchange protocol | the server will close the connection
+AUTH | authentication | version, type, username, mac, password | message used to authenticate the client to the service | the server will use the provided information to authenticate the user to the service
+RETR | retrieve user's files | version, type, mac, all (if to retrieve all the user's files or only the ones corresponding to mac) | message used to ask the server for the transfer (server -> client) of all the user's files (and directories) | the server will send all the user's files and directories to the client; if all is set, all user's files will be sent, otherwise only the user's files corresponding to the provided mac
 
 * #### server messages
 type | meaning | content | description | effects
 --- | --- | --- | --- | ---
 NOOP | No operation | version, type | fake message (needed to properly use protocol buffers, the first message type needs to be a NOOP | no effects
-OK | ok (prev command finished) | version, type, code | message used to inform the client of the successful application of the previous command (the code may be used to inform of some particular conditions like a directory deletion command of a not existant folder) | the client will proceed with the next commands (sliding window moved) 
-SEND | send file | version, type, path, hash | message used by the server in case if, after a previous PROB message, the server does not have the file described in its filesystem to make the client send the file | the client will send the STOR message followed by a number of DATA messages (blocks of the file) 
-ERR | error | version, type, code | message used to signal an error happened in the server side to the client | the client, based on the error code, will re-send the message, end or do something else. 
-VER | version change | version, type, newVersion | message used to inform the client that the previous authentication message was of a version not supported by the server (it may be used also after any other message) | the client will retry the authentication with a different version if possible (not implemented)
+OK | ok (prev command success) | version, type, code | message used to inform the client of the successful application of the previous command (the code may be used to inform of some particular conditions like a directory deletion command of a not existant folder) | the client will proceed with the next commands (sliding window moved) 
+SEND | send file | version, type, path, hash | message used by the server, responding to a PROB message, to inform the client that the server does not have the file described (in PROB) in its filesystem | the client will send the STOR message followed by a number of DATA messages (blocks of the file) 
+ERR | error | version, type, code | message used to signal an error happened in the server side to the client | the client, based on the error code, skip the last message sent (sliding window) or (in case of a fatal error) return. 
+VER | version change | version, type, newVersion | message used to inform the client that the previous received message was of a version not supported by the server | the client will (for now, in this version of the program) return.
+MKD | make directory | version, type, path, lastWriteTime | message used to create a folder on the client side and/or to change its lastWriteTime | the client will create the directory, or if already present it will only change the lastWriteTime of the directory described by this message
+STOR | file store | version, type, path, fileSize, lastWriteTime, hash | message used to inform the client of the server intention to send the file blocks of the file described in this message | the client will prepare the file and accept all the file data blocks from the server
+DATA | file data block | version, type, data, last | message used to send a single file data block from server to client | the client will append this data to the file corresponding to the last STOR message received
 
-* #### struttura messaggio per tipo
+* #### messagge structure per type
     * client messages
     
         NOOP | int32 | enum
@@ -176,9 +200,9 @@ VER | version change | version, type, newVersion | message used to inform the cl
         --- | --- | --- | --- | --- | ---
         | | version | type | username | mac | password
         
-        QUIT | int32 | enum
-        --- | --- | ---
-        | | version | type
+        RETR | int32 | enum | string | bool
+        --- | --- | --- | --- | ---
+        | | version | type | mac | all
     
     * server messages
     
@@ -196,11 +220,23 @@ VER | version change | version, type, newVersion | message used to inform the cl
         
         ERR | int32 | enum | int32
         --- | --- | --- | ---
-        | | version | type | error code
+        | | version | type | code
         
         VER | int32 | enum | int32 
         --- | --- | --- | ---
-        | | version | type | new version to use
+        | | version | type | new version
+        
+        MKD | int32 | enum | string | string
+        --- | --- | --- | --- | ---
+        | | version | type | path | last write time
+        
+        STOR | int32 | enum | string | uint64 | string | bytes
+        --- | --- | --- | --- | --- | --- | ---
+        | | version | type | path | file size | last write time | hash
+        
+        DATA | int32 | enum | bytes | bool
+        --- | --- | --- | --- | ---
+        | | version | type | data | last
 
 * #### message exchange (async)
   *(notice: clicking on the image you can modify the scheme provided you then copy and paste the markdown)
@@ -212,58 +248,174 @@ VER | version change | version, type, newVersion | message used to inform the cl
   [![](https://mermaid.ink/img/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgZm9sZGVyIGNyZWF0aW9uIG1lc3NhZ2VcbiAgICBDLT4-UzogTUtEKHZlcnNpb24sIHR5cGUsIHBhdGgsIGxhc3RXcml0ZVRpbWUpXG4gICAgYWx0IGlmIHRoZSBkaXJlY3RvcnkgaGFzIGJlZW4gY3JlYXRlZC91cGRhdGVkXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoY3JlYXRlZClcbiAgICBlbHNlIGlmIHRoZXJlIHdhcyBhbiBlcnJvclxuICAgICAgICBTLT4-QzogRVJSKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChlcnJvcilcbiAgICBlbmQiLCJtZXJtYWlkIjp7InRoZW1lIjoiZGVmYXVsdCIsInRoZW1lVmFyaWFibGVzIjp7ImJhY2tncm91bmQiOiJ3aGl0ZSIsInByaW1hcnlDb2xvciI6IiNFQ0VDRkYiLCJzZWNvbmRhcnlDb2xvciI6IiNmZmZmZGUiLCJ0ZXJ0aWFyeUNvbG9yIjoiaHNsKDgwLCAxMDAlLCA5Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5Qm9yZGVyQ29sb3IiOiJoc2woMjQwLCA2MCUsIDg2LjI3NDUwOTgwMzklKSIsInNlY29uZGFyeUJvcmRlckNvbG9yIjoiaHNsKDYwLCA2MCUsIDgzLjUyOTQxMTc2NDclKSIsInRlcnRpYXJ5Qm9yZGVyQ29sb3IiOiJoc2woODAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwicHJpbWFyeVRleHRDb2xvciI6IiMxMzEzMDAiLCJzZWNvbmRhcnlUZXh0Q29sb3IiOiIjMDAwMDIxIiwidGVydGlhcnlUZXh0Q29sb3IiOiJyZ2IoOS41MDAwMDAwMDAxLCA5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSkiLCJsaW5lQ29sb3IiOiIjMzMzMzMzIiwidGV4dENvbG9yIjoiIzMzMyIsIm1haW5Ca2ciOiIjRUNFQ0ZGIiwic2Vjb25kQmtnIjoiI2ZmZmZkZSIsImJvcmRlcjEiOiIjOTM3MERCIiwiYm9yZGVyMiI6IiNhYWFhMzMiLCJhcnJvd2hlYWRDb2xvciI6IiMzMzMzMzMiLCJmb250RmFtaWx5IjoiXCJ0cmVidWNoZXQgbXNcIiwgdmVyZGFuYSwgYXJpYWwiLCJmb250U2l6ZSI6IjE2cHgiLCJsYWJlbEJhY2tncm91bmQiOiIjZThlOGU4Iiwibm9kZUJrZyI6IiNFQ0VDRkYiLCJub2RlQm9yZGVyIjoiIzkzNzBEQiIsImNsdXN0ZXJCa2ciOiIjZmZmZmRlIiwiY2x1c3RlckJvcmRlciI6IiNhYWFhMzMiLCJkZWZhdWx0TGlua0NvbG9yIjoiIzMzMzMzMyIsInRpdGxlQ29sb3IiOiIjMzMzIiwiZWRnZUxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJhY3RvckJvcmRlciI6ImhzbCgyNTkuNjI2MTY4MjI0MywgNTkuNzc2NTM2MzEyOCUsIDg3LjkwMTk2MDc4NDMlKSIsImFjdG9yQmtnIjoiI0VDRUNGRiIsImFjdG9yVGV4dENvbG9yIjoiYmxhY2siLCJhY3RvckxpbmVDb2xvciI6ImdyZXkiLCJzaWduYWxDb2xvciI6IiMzMzMiLCJzaWduYWxUZXh0Q29sb3IiOiIjMzMzIiwibGFiZWxCb3hCa2dDb2xvciI6IiNFQ0VDRkYiLCJsYWJlbEJveEJvcmRlckNvbG9yIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwibGFiZWxUZXh0Q29sb3IiOiJibGFjayIsImxvb3BUZXh0Q29sb3IiOiJibGFjayIsIm5vdGVCb3JkZXJDb2xvciI6IiNhYWFhMzMiLCJub3RlQmtnQ29sb3IiOiIjZmZmNWFkIiwibm90ZVRleHRDb2xvciI6ImJsYWNrIiwiYWN0aXZhdGlvbkJvcmRlckNvbG9yIjoiIzY2NiIsImFjdGl2YXRpb25Ca2dDb2xvciI6IiNmNGY0ZjQiLCJzZXF1ZW5jZU51bWJlckNvbG9yIjoid2hpdGUiLCJzZWN0aW9uQmtnQ29sb3IiOiJyZ2JhKDEwMiwgMTAyLCAyNTUsIDAuNDkpIiwiYWx0U2VjdGlvbkJrZ0NvbG9yIjoid2hpdGUiLCJzZWN0aW9uQmtnQ29sb3IyIjoiI2ZmZjQwMCIsInRhc2tCb3JkZXJDb2xvciI6IiM1MzRmYmMiLCJ0YXNrQmtnQ29sb3IiOiIjOGE5MGRkIiwidGFza1RleHRMaWdodENvbG9yIjoid2hpdGUiLCJ0YXNrVGV4dENvbG9yIjoid2hpdGUiLCJ0YXNrVGV4dERhcmtDb2xvciI6ImJsYWNrIiwidGFza1RleHRPdXRzaWRlQ29sb3IiOiJibGFjayIsInRhc2tUZXh0Q2xpY2thYmxlQ29sb3IiOiIjMDAzMTYzIiwiYWN0aXZlVGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsImFjdGl2ZVRhc2tCa2dDb2xvciI6IiNiZmM3ZmYiLCJncmlkQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JrZ0NvbG9yIjoibGlnaHRncmV5IiwiZG9uZVRhc2tCb3JkZXJDb2xvciI6ImdyZXkiLCJjcml0Qm9yZGVyQ29sb3IiOiIjZmY4ODg4IiwiY3JpdEJrZ0NvbG9yIjoicmVkIiwidG9kYXlMaW5lQ29sb3IiOiJyZWQiLCJsYWJlbENvbG9yIjoiYmxhY2siLCJlcnJvckJrZ0NvbG9yIjoiIzU1MjIyMiIsImVycm9yVGV4dENvbG9yIjoiIzU1MjIyMiIsImNsYXNzVGV4dCI6IiMxMzEzMDAiLCJmaWxsVHlwZTAiOiIjRUNFQ0ZGIiwiZmlsbFR5cGUxIjoiI2ZmZmZkZSIsImZpbGxUeXBlMiI6ImhzbCgzMDQsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlMyI6ImhzbCgxMjQsIDEwMCUsIDkzLjUyOTQxMTc2NDclKSIsImZpbGxUeXBlNCI6ImhzbCgxNzYsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlNSI6ImhzbCgtNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU2IjoiaHNsKDgsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlNyI6ImhzbCgxODgsIDEwMCUsIDkzLjUyOTQxMTc2NDclKSJ9fSwidXBkYXRlRWRpdG9yIjpmYWxzZX0)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgZm9sZGVyIGNyZWF0aW9uIG1lc3NhZ2VcbiAgICBDLT4-UzogTUtEKHZlcnNpb24sIHR5cGUsIHBhdGgsIGxhc3RXcml0ZVRpbWUpXG4gICAgYWx0IGlmIHRoZSBkaXJlY3RvcnkgaGFzIGJlZW4gY3JlYXRlZC91cGRhdGVkXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoY3JlYXRlZClcbiAgICBlbHNlIGlmIHRoZXJlIHdhcyBhbiBlcnJvclxuICAgICAgICBTLT4-QzogRVJSKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChlcnJvcilcbiAgICBlbmQiLCJtZXJtYWlkIjp7InRoZW1lIjoiZGVmYXVsdCIsInRoZW1lVmFyaWFibGVzIjp7ImJhY2tncm91bmQiOiJ3aGl0ZSIsInByaW1hcnlDb2xvciI6IiNFQ0VDRkYiLCJzZWNvbmRhcnlDb2xvciI6IiNmZmZmZGUiLCJ0ZXJ0aWFyeUNvbG9yIjoiaHNsKDgwLCAxMDAlLCA5Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5Qm9yZGVyQ29sb3IiOiJoc2woMjQwLCA2MCUsIDg2LjI3NDUwOTgwMzklKSIsInNlY29uZGFyeUJvcmRlckNvbG9yIjoiaHNsKDYwLCA2MCUsIDgzLjUyOTQxMTc2NDclKSIsInRlcnRpYXJ5Qm9yZGVyQ29sb3IiOiJoc2woODAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwicHJpbWFyeVRleHRDb2xvciI6IiMxMzEzMDAiLCJzZWNvbmRhcnlUZXh0Q29sb3IiOiIjMDAwMDIxIiwidGVydGlhcnlUZXh0Q29sb3IiOiJyZ2IoOS41MDAwMDAwMDAxLCA5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSkiLCJsaW5lQ29sb3IiOiIjMzMzMzMzIiwidGV4dENvbG9yIjoiIzMzMyIsIm1haW5Ca2ciOiIjRUNFQ0ZGIiwic2Vjb25kQmtnIjoiI2ZmZmZkZSIsImJvcmRlcjEiOiIjOTM3MERCIiwiYm9yZGVyMiI6IiNhYWFhMzMiLCJhcnJvd2hlYWRDb2xvciI6IiMzMzMzMzMiLCJmb250RmFtaWx5IjoiXCJ0cmVidWNoZXQgbXNcIiwgdmVyZGFuYSwgYXJpYWwiLCJmb250U2l6ZSI6IjE2cHgiLCJsYWJlbEJhY2tncm91bmQiOiIjZThlOGU4Iiwibm9kZUJrZyI6IiNFQ0VDRkYiLCJub2RlQm9yZGVyIjoiIzkzNzBEQiIsImNsdXN0ZXJCa2ciOiIjZmZmZmRlIiwiY2x1c3RlckJvcmRlciI6IiNhYWFhMzMiLCJkZWZhdWx0TGlua0NvbG9yIjoiIzMzMzMzMyIsInRpdGxlQ29sb3IiOiIjMzMzIiwiZWRnZUxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJhY3RvckJvcmRlciI6ImhzbCgyNTkuNjI2MTY4MjI0MywgNTkuNzc2NTM2MzEyOCUsIDg3LjkwMTk2MDc4NDMlKSIsImFjdG9yQmtnIjoiI0VDRUNGRiIsImFjdG9yVGV4dENvbG9yIjoiYmxhY2siLCJhY3RvckxpbmVDb2xvciI6ImdyZXkiLCJzaWduYWxDb2xvciI6IiMzMzMiLCJzaWduYWxUZXh0Q29sb3IiOiIjMzMzIiwibGFiZWxCb3hCa2dDb2xvciI6IiNFQ0VDRkYiLCJsYWJlbEJveEJvcmRlckNvbG9yIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwibGFiZWxUZXh0Q29sb3IiOiJibGFjayIsImxvb3BUZXh0Q29sb3IiOiJibGFjayIsIm5vdGVCb3JkZXJDb2xvciI6IiNhYWFhMzMiLCJub3RlQmtnQ29sb3IiOiIjZmZmNWFkIiwibm90ZVRleHRDb2xvciI6ImJsYWNrIiwiYWN0aXZhdGlvbkJvcmRlckNvbG9yIjoiIzY2NiIsImFjdGl2YXRpb25Ca2dDb2xvciI6IiNmNGY0ZjQiLCJzZXF1ZW5jZU51bWJlckNvbG9yIjoid2hpdGUiLCJzZWN0aW9uQmtnQ29sb3IiOiJyZ2JhKDEwMiwgMTAyLCAyNTUsIDAuNDkpIiwiYWx0U2VjdGlvbkJrZ0NvbG9yIjoid2hpdGUiLCJzZWN0aW9uQmtnQ29sb3IyIjoiI2ZmZjQwMCIsInRhc2tCb3JkZXJDb2xvciI6IiM1MzRmYmMiLCJ0YXNrQmtnQ29sb3IiOiIjOGE5MGRkIiwidGFza1RleHRMaWdodENvbG9yIjoid2hpdGUiLCJ0YXNrVGV4dENvbG9yIjoid2hpdGUiLCJ0YXNrVGV4dERhcmtDb2xvciI6ImJsYWNrIiwidGFza1RleHRPdXRzaWRlQ29sb3IiOiJibGFjayIsInRhc2tUZXh0Q2xpY2thYmxlQ29sb3IiOiIjMDAzMTYzIiwiYWN0aXZlVGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsImFjdGl2ZVRhc2tCa2dDb2xvciI6IiNiZmM3ZmYiLCJncmlkQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JrZ0NvbG9yIjoibGlnaHRncmV5IiwiZG9uZVRhc2tCb3JkZXJDb2xvciI6ImdyZXkiLCJjcml0Qm9yZGVyQ29sb3IiOiIjZmY4ODg4IiwiY3JpdEJrZ0NvbG9yIjoicmVkIiwidG9kYXlMaW5lQ29sb3IiOiJyZWQiLCJsYWJlbENvbG9yIjoiYmxhY2siLCJlcnJvckJrZ0NvbG9yIjoiIzU1MjIyMiIsImVycm9yVGV4dENvbG9yIjoiIzU1MjIyMiIsImNsYXNzVGV4dCI6IiMxMzEzMDAiLCJmaWxsVHlwZTAiOiIjRUNFQ0ZGIiwiZmlsbFR5cGUxIjoiI2ZmZmZkZSIsImZpbGxUeXBlMiI6ImhzbCgzMDQsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlMyI6ImhzbCgxMjQsIDEwMCUsIDkzLjUyOTQxMTc2NDclKSIsImZpbGxUeXBlNCI6ImhzbCgxNzYsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlNSI6ImhzbCgtNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU2IjoiaHNsKDgsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsImZpbGxUeXBlNyI6ImhzbCgxODgsIDEwMCUsIDkzLjUyOTQxMTc2NDclKSJ9fSwidXBkYXRlRWRpdG9yIjpmYWxzZX0)
   * ##### dir delete
   [![](https://mermaid.ink/img/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgZm9sZGVyIGRlbGV0aW9uIG1lc3NhZ2VcbiAgICBDLT4-UzogUk1EKHZlcnNpb24sIHR5cGUsIHBhdGgpXG4gICAgYWx0IGlmIHRoZSBkaXJlY3RvcnkgaGFzIGJlZW4gZGVsZXRlZCBvciBpdCB3YXMgbm90IGFscmVhZHkgdGhlcmVcbiAgICAgICAgUy0-PkM6IE9LKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChyZW1vdmVkKVxuICAgIGVsc2UgaWYgdGhlcmUgd2FzIGFuIGVycm9yXG4gICAgICAgIFMtPj5DOiBFUlIodmVyc2lvbiwgdHlwZSwgY29kZSlcbiAgICAgICAgTm90ZSBvdmVyIEMsUzogRW5kIG9mIG1lc3NhZ2UgKGVycm9yKVxuICAgIGVuZCIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgZm9sZGVyIGRlbGV0aW9uIG1lc3NhZ2VcbiAgICBDLT4-UzogUk1EKHZlcnNpb24sIHR5cGUsIHBhdGgpXG4gICAgYWx0IGlmIHRoZSBkaXJlY3RvcnkgaGFzIGJlZW4gZGVsZXRlZCBvciBpdCB3YXMgbm90IGFscmVhZHkgdGhlcmVcbiAgICAgICAgUy0-PkM6IE9LKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChyZW1vdmVkKVxuICAgIGVsc2UgaWYgdGhlcmUgd2FzIGFuIGVycm9yXG4gICAgICAgIFMtPj5DOiBFUlIodmVyc2lvbiwgdHlwZSwgY29kZSlcbiAgICAgICAgTm90ZSBvdmVyIEMsUzogRW5kIG9mIG1lc3NhZ2UgKGVycm9yKVxuICAgIGVuZCIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)
+  * ##### user's file retrieve
+  [![](https://mermaid.ink/img/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogU2VuZCB0byBzZXJ2ZXIgdGhlIFJFVFIgbWVzc2FnZVxuICAgIEMtPj5TOiBSRVRSKHZlcnNpb24sIHR5cGUsIG1hYywgYWxsKVxuICAgIGFsdCBUaGUgc2VydmVyIHNlbmRzIGFsbCBmaWxlcyB0byB1c2VyXG4gICAgICAgIGxvb3AgZm9yIGVhY2ggdXNlcidzIGZpbGUvZGlyZWN0b3J5IHNlbGVjdGVkXG4gICAgICAgICAgICBTLT4-QzogU1RPUih2ZXJzaW9uLCB0eXBlLCBwYXRoLCBmaWxlU2l6ZSwgbGFzdFdyaXRlVGltZSwgaGFzaClcbiAgICAgICAgICAgIGxvb3AgdW50aWwgbGFzdD09dHJ1ZSAoZG8gZm9yIGV2ZXJ5IGZpbGUgYmxvY2spXG4gICAgICAgICAgICBOb3RlIHJpZ2h0IG9mIEM6IHNlbmQgdGhlIGZpbGUgYmxvY2tcbiAgICAgICAgICAgIFMtPj5DOiBEQVRBKHZlcnNpb24sIHR5cGUsIGRhdGEsIGxhc3QpXG4gICAgICAgICAgICBlbmRcbiAgICAgICAgZW5kXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoc2VudClcbiAgICBlbHNlIHRoZXJlIHdhcyBhbiBlcnJvclxuICAgICAgICBTLT4-QzogRVJSKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChlcnJvcilcbiAgICBlbmRcbiAgICBcbiAgICAgICAgICAgICIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogU2VuZCB0byBzZXJ2ZXIgdGhlIFJFVFIgbWVzc2FnZVxuICAgIEMtPj5TOiBSRVRSKHZlcnNpb24sIHR5cGUsIG1hYywgYWxsKVxuICAgIGFsdCBUaGUgc2VydmVyIHNlbmRzIGFsbCBmaWxlcyB0byB1c2VyXG4gICAgICAgIGxvb3AgZm9yIGVhY2ggdXNlcidzIGZpbGUvZGlyZWN0b3J5IHNlbGVjdGVkXG4gICAgICAgICAgICBTLT4-QzogU1RPUih2ZXJzaW9uLCB0eXBlLCBwYXRoLCBmaWxlU2l6ZSwgbGFzdFdyaXRlVGltZSwgaGFzaClcbiAgICAgICAgICAgIGxvb3AgdW50aWwgbGFzdD09dHJ1ZSAoZG8gZm9yIGV2ZXJ5IGZpbGUgYmxvY2spXG4gICAgICAgICAgICBOb3RlIHJpZ2h0IG9mIEM6IHNlbmQgdGhlIGZpbGUgYmxvY2tcbiAgICAgICAgICAgIFMtPj5DOiBEQVRBKHZlcnNpb24sIHR5cGUsIGRhdGEsIGxhc3QpXG4gICAgICAgICAgICBlbmRcbiAgICAgICAgZW5kXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoc2VudClcbiAgICBlbHNlIHRoZXJlIHdhcyBhbiBlcnJvclxuICAgICAgICBTLT4-QzogRVJSKHZlcnNpb24sIHR5cGUsIGNvZGUpXG4gICAgICAgIE5vdGUgb3ZlciBDLFM6IEVuZCBvZiBtZXNzYWdlIChlcnJvcilcbiAgICBlbmRcbiAgICBcbiAgICAgICAgICAgICIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)
   * ##### user authentication
   [![](https://mermaid.ink/img/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgYXV0aCBtZXNzYWdlXG4gICAgQy0-PlM6IEFVVEgodmVyc2lvbiwgdHlwZSwgdXNlcm5hbWUsIG1hYywgcGFzc3dvcmQpXG4gICAgYWx0IGlmIHRoZSBhdXRoZW50aWNhdGlvbiBpcyBzdWNjZXNzZnVsXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoYXV0aGVudGljYXRlZClcbiAgICBlbHNlIGlmIHRoZXJlIHdhcyBhbiBlcnJvciAoYm90aCBwcm90b2NvbCBhbmQgYXV0aClcbiAgICAgICAgUy0-PkM6IEVSUih2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoZXJyb3IpXG4gICAgZWxzZSBpZiB0aGUgc2VydmVyIHJlcXVpcmVzIGEgdmVyc2lvbiBjaGFuZ2VcbiAgICAgICAgUy0-PkM6IFZFUih2ZXJzaW9uLCB0eXBlLCBuZXdWZXJzaW9uKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoY2hhbmdlIHZlcnNpb24pXG4gICAgZW5kXG5cbiAgICBcbiAgICAgICAgICAgICIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic2VxdWVuY2VEaWFncmFtXG4gICAgcGFydGljaXBhbnQgQyBhcyBDbGllbnRcbiAgICBwYXJ0aWNpcGFudCBTIGFzIFNlcnZlclxuICAgIE5vdGUgcmlnaHQgb2YgQzogc2VuZCB0aGUgYXV0aCBtZXNzYWdlXG4gICAgQy0-PlM6IEFVVEgodmVyc2lvbiwgdHlwZSwgdXNlcm5hbWUsIG1hYywgcGFzc3dvcmQpXG4gICAgYWx0IGlmIHRoZSBhdXRoZW50aWNhdGlvbiBpcyBzdWNjZXNzZnVsXG4gICAgICAgIFMtPj5DOiBPSyh2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoYXV0aGVudGljYXRlZClcbiAgICBlbHNlIGlmIHRoZXJlIHdhcyBhbiBlcnJvciAoYm90aCBwcm90b2NvbCBhbmQgYXV0aClcbiAgICAgICAgUy0-PkM6IEVSUih2ZXJzaW9uLCB0eXBlLCBjb2RlKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoZXJyb3IpXG4gICAgZWxzZSBpZiB0aGUgc2VydmVyIHJlcXVpcmVzIGEgdmVyc2lvbiBjaGFuZ2VcbiAgICAgICAgUy0-PkM6IFZFUih2ZXJzaW9uLCB0eXBlLCBuZXdWZXJzaW9uKVxuICAgICAgICBOb3RlIG92ZXIgQyxTOiBFbmQgb2YgbWVzc2FnZSAoY2hhbmdlIHZlcnNpb24pXG4gICAgZW5kXG5cbiAgICBcbiAgICAgICAgICAgICIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0IiwidGhlbWVWYXJpYWJsZXMiOnsiYmFja2dyb3VuZCI6IndoaXRlIiwicHJpbWFyeUNvbG9yIjoiI0VDRUNGRiIsInNlY29uZGFyeUNvbG9yIjoiI2ZmZmZkZSIsInRlcnRpYXJ5Q29sb3IiOiJoc2woODAsIDEwMCUsIDk2LjI3NDUwOTgwMzklKSIsInByaW1hcnlCb3JkZXJDb2xvciI6ImhzbCgyNDAsIDYwJSwgODYuMjc0NTA5ODAzOSUpIiwic2Vjb25kYXJ5Qm9yZGVyQ29sb3IiOiJoc2woNjAsIDYwJSwgODMuNTI5NDExNzY0NyUpIiwidGVydGlhcnlCb3JkZXJDb2xvciI6ImhzbCg4MCwgNjAlLCA4Ni4yNzQ1MDk4MDM5JSkiLCJwcmltYXJ5VGV4dENvbG9yIjoiIzEzMTMwMCIsInNlY29uZGFyeVRleHRDb2xvciI6IiMwMDAwMjEiLCJ0ZXJ0aWFyeVRleHRDb2xvciI6InJnYig5LjUwMDAwMDAwMDEsIDkuNTAwMDAwMDAwMSwgOS41MDAwMDAwMDAxKSIsImxpbmVDb2xvciI6IiMzMzMzMzMiLCJ0ZXh0Q29sb3IiOiIjMzMzIiwibWFpbkJrZyI6IiNFQ0VDRkYiLCJzZWNvbmRCa2ciOiIjZmZmZmRlIiwiYm9yZGVyMSI6IiM5MzcwREIiLCJib3JkZXIyIjoiI2FhYWEzMyIsImFycm93aGVhZENvbG9yIjoiIzMzMzMzMyIsImZvbnRGYW1pbHkiOiJcInRyZWJ1Y2hldCBtc1wiLCB2ZXJkYW5hLCBhcmlhbCIsImZvbnRTaXplIjoiMTZweCIsImxhYmVsQmFja2dyb3VuZCI6IiNlOGU4ZTgiLCJub2RlQmtnIjoiI0VDRUNGRiIsIm5vZGVCb3JkZXIiOiIjOTM3MERCIiwiY2x1c3RlckJrZyI6IiNmZmZmZGUiLCJjbHVzdGVyQm9yZGVyIjoiI2FhYWEzMyIsImRlZmF1bHRMaW5rQ29sb3IiOiIjMzMzMzMzIiwidGl0bGVDb2xvciI6IiMzMzMiLCJlZGdlTGFiZWxCYWNrZ3JvdW5kIjoiI2U4ZThlOCIsImFjdG9yQm9yZGVyIjoiaHNsKDI1OS42MjYxNjgyMjQzLCA1OS43NzY1MzYzMTI4JSwgODcuOTAxOTYwNzg0MyUpIiwiYWN0b3JCa2ciOiIjRUNFQ0ZGIiwiYWN0b3JUZXh0Q29sb3IiOiJibGFjayIsImFjdG9yTGluZUNvbG9yIjoiZ3JleSIsInNpZ25hbENvbG9yIjoiIzMzMyIsInNpZ25hbFRleHRDb2xvciI6IiMzMzMiLCJsYWJlbEJveEJrZ0NvbG9yIjoiI0VDRUNGRiIsImxhYmVsQm94Qm9yZGVyQ29sb3IiOiJoc2woMjU5LjYyNjE2ODIyNDMsIDU5Ljc3NjUzNjMxMjglLCA4Ny45MDE5NjA3ODQzJSkiLCJsYWJlbFRleHRDb2xvciI6ImJsYWNrIiwibG9vcFRleHRDb2xvciI6ImJsYWNrIiwibm90ZUJvcmRlckNvbG9yIjoiI2FhYWEzMyIsIm5vdGVCa2dDb2xvciI6IiNmZmY1YWQiLCJub3RlVGV4dENvbG9yIjoiYmxhY2siLCJhY3RpdmF0aW9uQm9yZGVyQ29sb3IiOiIjNjY2IiwiYWN0aXZhdGlvbkJrZ0NvbG9yIjoiI2Y0ZjRmNCIsInNlcXVlbmNlTnVtYmVyQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvciI6InJnYmEoMTAyLCAxMDIsIDI1NSwgMC40OSkiLCJhbHRTZWN0aW9uQmtnQ29sb3IiOiJ3aGl0ZSIsInNlY3Rpb25Ca2dDb2xvcjIiOiIjZmZmNDAwIiwidGFza0JvcmRlckNvbG9yIjoiIzUzNGZiYyIsInRhc2tCa2dDb2xvciI6IiM4YTkwZGQiLCJ0YXNrVGV4dExpZ2h0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0Q29sb3IiOiJ3aGl0ZSIsInRhc2tUZXh0RGFya0NvbG9yIjoiYmxhY2siLCJ0YXNrVGV4dE91dHNpZGVDb2xvciI6ImJsYWNrIiwidGFza1RleHRDbGlja2FibGVDb2xvciI6IiMwMDMxNjMiLCJhY3RpdmVUYXNrQm9yZGVyQ29sb3IiOiIjNTM0ZmJjIiwiYWN0aXZlVGFza0JrZ0NvbG9yIjoiI2JmYzdmZiIsImdyaWRDb2xvciI6ImxpZ2h0Z3JleSIsImRvbmVUYXNrQmtnQ29sb3IiOiJsaWdodGdyZXkiLCJkb25lVGFza0JvcmRlckNvbG9yIjoiZ3JleSIsImNyaXRCb3JkZXJDb2xvciI6IiNmZjg4ODgiLCJjcml0QmtnQ29sb3IiOiJyZWQiLCJ0b2RheUxpbmVDb2xvciI6InJlZCIsImxhYmVsQ29sb3IiOiJibGFjayIsImVycm9yQmtnQ29sb3IiOiIjNTUyMjIyIiwiZXJyb3JUZXh0Q29sb3IiOiIjNTUyMjIyIiwiY2xhc3NUZXh0IjoiIzEzMTMwMCIsImZpbGxUeXBlMCI6IiNFQ0VDRkYiLCJmaWxsVHlwZTEiOiIjZmZmZmRlIiwiZmlsbFR5cGUyIjoiaHNsKDMwNCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGUzIjoiaHNsKDEyNCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIiwiZmlsbFR5cGU0IjoiaHNsKDE3NiwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU1IjoiaHNsKC00LCAxMDAlLCA5My41Mjk0MTE3NjQ3JSkiLCJmaWxsVHlwZTYiOiJoc2woOCwgMTAwJSwgOTYuMjc0NTA5ODAzOSUpIiwiZmlsbFR5cGU3IjoiaHNsKDE4OCwgMTAwJSwgOTMuNTI5NDExNzY0NyUpIn19LCJ1cGRhdGVFZGl0b3IiOmZhbHNlfQ)
 
 ### client structure
 * The client has an event queue which is a thread safe circular vector of events; events are the representation of a change
-to a directory entry (element of the filesystem) (so it will bind a directory entry to a kind of event (creation, deletion)).
+to a directory entry (element of the filesystem) (so it will bind a directory entry to a kind of event (creation, modification, deletion)).
 This event queue will be filled by the filesystem watcher and it will be emptied by the actual communication thread (talking with the server)
 * The client has 1 main thread in polling (every x seconds) on the directory to watch (file system watcher), which at every change detected
 will add an event (indication of that change) to the event queue; changes will be detected comparing the actual situation of the
-folder to be watched with the paths_ map which is an in main memory representation of the folder.
+folder to be watched with the _paths map which is an in main memory representation of the folder.
 * The client has a database to which he saves the current state of the folder to watch and it is used at startup to fill the content of the
-paths_ map (in main memory representation of the folder to watch) so that changes while the program is stopped will be detected.
+_paths map (in main memory representation of the folder to watch) so that changes while the program is stopped will be detected.
 * The client gets its configuration (all variables needed for the execution of the client) from a configuration file, so there 
 is a config class which does just that.
 * Finally the client has a communication thread talking with the server; this thread will send messages corresponding to the changes it
 can get from the event queue; it will select on the read and write sockets (so to make this protocol asynchronous) and will use
 a protocol manager to actually send, receive, interpret messages; the protocol manager has a sliding window of messages which
-can be sent without the server confirmation; in case of errors the protocol manager will try to recover from it re-sending all
-waiting messages; in case of further errors the program will stop; in case there are no communications for a certain amount of time
+can be sent without the server confirmation; in case of errors the protocol manager will skip the faulty message; in case of
+connection errors the protocol manager will instead try to re-send all waiting messages; in case there are no communications for a certain amount of time
 the client will disconnect from the server; in case of socket errors (in communication) the client will re-try for a limited
-number of times (for now.. it would be better to include in the configuration an option to make it go indefinitely).
+number of times or unlimitedly (if the corresponding option is set).
 
 ### server structure
-* The server has 1 main thread which accepts connections from clients and dispach them to the (fixed) thread pool
+* The server has 1 main thread which accepts connections from clients and dispatch them to the (fixed) thread pool
 * The server has a configuration file (and so a configuration object) from which to get the configuration for its run (all the variables needed).
 * The server has 2 databases: one database of directory entries similar to the one used by the client but that contains also the information about
 the username and mac related to each single directory entry so as to read/modify/delete only entries related to the user,mac connected; and one
 database of passwords which contains (username,salt,hash) tuples in order to be able to authenticate a user.
-* The server has a fixed size thread pool of singleServer threads which will get a socket each from a queue of sockets and communicate
+* The server has a fixed sized thread pool of singleServer threads which will get a socket each from a queue of sockets and communicate
 with a single client (the one connected on that socket); this thread will first authenticate the client connected and then will select
 on the read socket so that to receive the client commands; then it will use a protocol manager to manage each single message from
 the client and to apply its commands; in case of socket errors or in case of lack of messages for a certain amount of time
 the single thread will take another socket and continue; errors in messages will lead to nothing changed on the server side
 and to the sending of error messages back to the client.
 
-### implemented
-* socket TCP/TLS connection implemented
-* database class implemented both for the server and for the client
-* password database implemented
-* config class implemented for the client
-* protocol manager class for the client
-* hash class for both the client and the server
-* file system watcher (client)
-* main for the client
+### main option arguments
+#### client side
+    NAME
+        PDS_BACKUP client
+    
+    SYNOPSIS
+        programName [--help]
+            [--retrieve destFolder] [--mac macAddress] [--all] [--start]
+            [--ip server_ipaddress] [--port server_port] [--user username] [--pass password]
+    
+    OPTIONS
+        --help (abbr -h)
+            Print out a usage message
+    
+        --retrieve (abbr -r)
+            Requests the server (after authentication) to send to the client the copy of the folders and files of
+            the specified user. The data will be put in the specified [destDir]. If no other commands are specified
+            (no --mac, no --all) then only the files and directories for the current mac address will be retrieved.
+            This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass] [--dir]
+    
+        --dir (abbr -m) destDir
+            Sets the [destDir] of the user's data to retrieve.
+            Needed by --retrieve.
+    
+        --mac (abbr -m) macAddress
+            Sets the [macAddress] of the user's data to retrieve.
+            To be used with --retrieve.
+    
+        --all (abbr -a)
+            Specifies to retrieve all user's data,
+             To be used with --retrieve.
+    
+        --start (abbr -s)
+            Start the server (if not present the server will stop after having created/loaded the Config file).
+             This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass]
+    
+        --ip (abbr -i) server_ipaddress
+            Sets the [ip] address of the server to contact.
+             Needed by --start and --retrieve.
+    
+        --port (abbr -p) server_port
+            Sets the [port] of the server to contact.
+             Needed by --start and --retrieve.
+    
+        --user (abbr -u) username
+            Sets the [username] to use to authenticate to the server.
+            Needed by --start and --retrieve.
+    
+        --pass (abbr -w) password
+            Sets the [password] to use to authenticate to the server.
+            Needed by --start and --retrieve.
+    
+        --persist (abbr -t)
+            If connection is lost, keep trying indefinitely.
 
-### to implement/continue
-* config class for the server
-* protocol manager class for the server
-* main for the server
+#### server side
+    NAME
+        PDS_BACKUP server
+    
+    SYNOPSIS
+        programName [--help]
+            [--addU username] [--updateU username] [--removeU username] [--viewU]
+            [--pass password] [--delete username] [--mac macAddress] [--start]
+    
+    OPTIONS
+        --help (abbr -h)
+            Print out a usage message
+    
+        --addU (abbr -a) username
+            Add the user with [username] to the server, the option --pass (-p) is needed to set the user password.
+            This option is mutually exclusive with --updateU and --removeU.
+    
+        --updateU (abbr -u) username
+            Update the user with [username] to the server, the option --pass (-p) is needed to set the new user password.
+            This option is mutually exclusive with --addU and --removeU.
+    
+        --removeU (abbr -r) username
+            Remove the user with [username] from the server.
+            This option is mutually exclusive with --addU and --removeU.
+    
+        --viewU (abbr -v)
+            Print all the username of all registered users.
+    
+        --pass (abbr -p) password
+            Set the [password] to use.
+            This option is needed by the options --addU and --updateU.
+    
+        --delete (abbr -d) username
+            Makes the server delete all or one of the specified [username] backups before (optionally) starting the service.
+            If no other options (no --mac) are specified then it will remove all the user's backups from server.
+    
+        --mac (abbr -m) macAddress
+            Specifies the [macAddress] for the --delete option.
+            If this option is set the --delete option will only delete the user's backup related to this [macAddress].
+    
+        --start (abbr -s)
+            Start the server
 
-### not implemented (may want to implement them but not actually needed)
-* implement new user creation on the password database
+### configuration file parameters
+#### client side
+
+#### server side
+
+### implemented classes (and brief description)
+#### client side
+* <b>main</b>
+* <b>ArgumentsManager</b> class; used to manage the user option arguments to client main
+* <b>Config</b> class; used to load and manage the configuration file parameters for the server
+* <b>Database</b> class; used to manage the client database
+* <b>Event</b> class; used to represent a filesystem event
+* <b>FileSystemWatcher</b> class; used to watch a folder for changes and update the list of events
+* <b>ProtocolManager</b> class; used to manage the communication with server (protocol)
+* <b>Thread_guard</b> class; used to manage the correct closing of the client program
+
+#### server side
+* <b>main</b>
+* <b>ArgumentsManger</b> class; used to manage the user option arguments to server main
+* <b>Config</b> class; used to load and manage the configuration file parameters for the server
+* <b>Database</b> class; used to manage the server database
+* <b>Database_pwd</b> class; used to manage the server password database
+* <b>ProtocolManager</b> class; used to manage the communication with client (protocol)
+* <b>Thread_guard</b> class; used to manage the correct closing of the server program
+
+#### library
+* <b>Circular_vector</b> class; implements both a thread safe and a simple circular vector
+* <b>Directory_entry</b> class; used to represent a directory element (and to calculate its hash and read/modify its lastWriteTime)
+* <b>Hash</b> class; used to calculate hashes of strings or generic data
+* <b>Message</b> class; used to show (in a thread safe way) messages in a predefined format
+* <b>RandomNumberGenerator</b> class; used to generate random numbers and strings (for salt and random names)
+* <b>Socket</b> class; implements both TCP and TLS connections
+* <b>Validator</b> class; used to validate user input or server/client messages
 
 # configuration notes
 ## on linux (ubuntu):
