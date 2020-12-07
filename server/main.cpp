@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
             default:
                 //print error and exit
 
-                Message::print(std::cerr, "ERROR", "Input Exception", e.what());
+                Message::print(std::cerr, "ERROR", "ArgumentsManager Exception", e.what());
                 return 1;
         }
     }
