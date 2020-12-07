@@ -254,7 +254,7 @@ void ArgumentsManager::_displayHelp(const std::string &programName){
                  "the specified user. The data will be put in the specified [destDir]. If no other commands are specified\n\t\t"
                  "(no --mac, no --all) then only the files and directories for the current mac address will be retrieved.\n\t\t"
                  "This command requires the presence of the following other commands: [--ip] [--port] [--user] [--pass] [--dir]\n" << std::endl << "\t";
-    std::cout << "--dir (abbr -m) destDir" << std::endl << "\t\t";
+    std::cout << "--dir (abbr -d) destDir" << std::endl << "\t\t";
     std::cout << "Sets the [destDir] of the user's data to retrieve.\n\t\t"
                  "Needed by --retrieve.\n" << std::endl << "\t";
     std::cout << "--mac (abbr -m) macAddress" << std::endl << "\t\t";
