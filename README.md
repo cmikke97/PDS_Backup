@@ -362,7 +362,7 @@ and to the sending of error messages back to the client.
             This option is mutually exclusive with --addU and --removeU.
     
         --removeU (abbr -r) username
-            Remove the user with [username] from the server.
+            Remove the user with [username] (and all its backed up data) from the server.
             This option is mutually exclusive with --addU and --removeU.
     
         --viewU (abbr -v)
