@@ -244,15 +244,21 @@ void client::ProtocolManager::recoverFromError() {
  *
  * @param event event to create the message from
  *
+ * @return true if event was inserted in the waiting for response queue and it was sent (or if it was of an unsupported
+ * type); false otherwise
+ *
  * @author Michele Crepaldi s269551
  */
-void client::ProtocolManager::send(Event &event) {
+bool client::ProtocolManager::send(Event &event) {
+
+    if(_waitingForResponse.full())
+        return false;
 
     //if the element is not a file nor a directory then return (it is not of a supported type)
     if (!event.getElement().is_regular_file() && !event.getElement().is_directory()) {
         Message::print(std::cerr, "WARNING", "Change to an unsupported type",
                        event.getElement().getRelativePath());
-        return;
+        return true;
     }
 
     //compose the message based on the event (and send it)
@@ -260,6 +266,8 @@ void client::ProtocolManager::send(Event &event) {
 
     //save a copy of the event in the message waiting queue
     _waitingForResponse.push(event);
+
+    return true;
 }
 
 /**

@@ -426,10 +426,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                                 //send a message related to the next event in the event queue without removing it
                                 //from the queue; doing so in case of connection error I will not lose the event
                                 //and I will retry with the same one
-                                pm.send(eventQueue.front());
-
-                                //pop the last sent event from the queue
-                                eventQueue.pop();
+                                if(pm.send(eventQueue.front())) //if the event was sent (or was of an unsupported type)
+                                    //pop the last sent event from the queue
+                                    eventQueue.pop();
                             }
 
                             //if I have something to read
