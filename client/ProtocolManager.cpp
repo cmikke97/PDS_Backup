@@ -1010,11 +1010,13 @@ void client::ProtocolManager::_storeFile(const std::string &destFolder, const st
                 else
                     msg.update(100);
 
-                std::cout << msg << std::endl;
+                std::cout << msg;
 
                 //it is more efficient to clear the clientMessage protobuf than creating a new one
                 _serverMessage.Clear();
             }
+
+            std::cout << std::endl;
         }
         //in case of socket exceptions while transferring the file I need to delete the temporary file
         catch (SocketException &e) {
