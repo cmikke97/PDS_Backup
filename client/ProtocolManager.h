@@ -137,7 +137,7 @@ namespace client {
         int nWaiting() const;       //number of event messages waiting for responses getter method
 
         void recoverFromError();    //recover from error method
-        void send(Event &event);    //send event message to server method
+        bool send(Event &event);    //send event message to server method
         void receive();             //receive response message from server method
 
         //retrieve the files from server method (with mac, all boolean and destination folder)
