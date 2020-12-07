@@ -235,7 +235,7 @@ void server::ArgumentsManager::_displayHelp(const std::string &programName){
     std::cout << "Update the user with [username] to the server, the option --pass (-p) is needed to set the new user password.\n\t\t"
                  "This option is mutually exclusive with --addU and --removeU.\n" << std::endl << "\t";
     std::cout << "--removeU (abbr -r) username" << std::endl << "\t\t";
-    std::cout << "Remove the user with [username] from the server.\n\t\t"
+    std::cout << "Remove the user with [username] (and all its backed up data) from the server.\n\t\t"
                  "This option is mutually exclusive with --addU and --removeU.\n" << std::endl << "\t";
     std::cout << "--viewU (abbr -v)" << std::endl << "\t\t";
     std::cout << "Print all the username of all registered users.\n" << std::endl << "\t";
