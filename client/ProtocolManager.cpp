@@ -212,10 +212,6 @@ void client::ProtocolManager::recoverFromError() {
     int end = _waitingForResponse.end();        //waiting messages queue end index
     int capacity = _waitingForResponse.capacity();      //waiting messages queue size
 
-    //if there are no elements return
-    if(capacity == 0)
-        return;
-
     //iterate over all messages in the waiting queue
     for(int i = start; i != end; i = (i+1)%capacity){
         Event event = _waitingForResponse[i];    //current element from the queue
