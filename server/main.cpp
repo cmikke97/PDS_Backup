@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
             //remove all backup elements related to the user from server database
             db->removeAll(inputArgs.getUsername());
 
-            for(auto mac: macAddrs){    //for each mac address of that user
+            for(const auto& mac: macAddrs){    //for each mac address of that user
                 //compute the backup folder name
 
                 std::stringstream backupFolderName;
@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
                 db->removeAll(inputArgs.getDelUsername());
 
                 //for each mac address
-                for(auto mac: macAddrs){
+                for(const auto& mac: macAddrs){
                     //compute the backup folder name
 
                     std::stringstream backupFolderName;
@@ -195,6 +195,7 @@ int main(int argc, char** argv) {
             std::vector<std::thread> threads;   //vector containing all server threads
 
             //create NThreads threads and start them
+            threads.reserve(config->getNThreads());
             for (int i = 0; i < config->getNThreads(); i++)
                 threads.emplace_back(single_server, std::ref(sockets), std::ref(server_threads_stop),
                                      std::ref(main_stop));
@@ -409,7 +410,7 @@ void single_server(TS_Circular_vector<std::pair<std::string, Socket>> &sockets, 
             //if authentication is successful
 
             fd_set read_fds;        //fd read set for select
-            int timeWaited = 0;     //total time waited without receiving messages from client
+            unsigned int timeWaited = 0;     //total time waited without receiving messages from client
             bool loop = true;       //loop condition
 
             //loop until we are told to stop or loop condition becomes false

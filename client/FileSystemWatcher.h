@@ -63,7 +63,7 @@ public:
     void start(const std::function<bool (Directory_entry&, FileSystemStatus)> &action, std::atomic<bool> &stop);
 
     //recover from db method (with database and action function)
-    void recoverFromDB(client::Database *db, const std::function<void (Directory_entry&, FileSystemStatus)> &action);
+    void recoverFromDB(client::Database *db, const std::function<bool (Directory_entry&, FileSystemStatus)> &action);
 
 private:
 

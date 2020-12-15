@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
             client_socket.connect(inputArgs.getServerIp(), stoi(inputArgs.getSeverPort()));
 
             //queue of messages sent and waiting for a server response
-            Circular_vector<Event> waitingForResponse{config->getMaxResponseWaiting()};
+            Circular_vector<Event> waitingForResponse{1};
             ProtocolManager pm(client_socket, waitingForResponse, VERSION); //protocol manager instance
 
             //authenticate the client to the server (using username, password and mac address)
@@ -144,9 +144,9 @@ int main(int argc, char **argv) {
         Thread_guard tg_communication(communication_thread, communicate_stop);
 
         //make the filesystem watcher retrieve previously saved data from db
-        fw.recoverFromDB(db.get(), [&eventQueue](Directory_entry &element, FileSystemStatus status) {
+        fw.recoverFromDB(db.get(), [&eventQueue, &fileWatcher_stop](Directory_entry &element, FileSystemStatus status) -> bool {
             //push event into event queue (to check the server has copies of all files we have in the db)
-            eventQueue.push(std::move(Event(element, status)));
+            return eventQueue.push(std::move(Event(element, status)), fileWatcher_stop);    //TODO check if it words as intended
         });
 
         //start monitoring the path to watch for changes and (in case of changes) run the provided function
@@ -337,12 +337,15 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
 
             try {
 
-                //wait until there is at least one event in the event queue (blocking wait).
-                //It returns true if an event can be popped from the queue, false if thread_stop is true,
-                //otherwise it stays blocked
-                if (!eventQueue.waitForCondition(communicate_stop))
-                    //if false it means that we returned because thread_stop became true, so close the program
-                    return;
+                //if the waiting messages queue is empty just passively wait on new events
+                if(!pm.isWaiting()) {    //TODO check if it works as expected
+                    //wait until there is at least one event in the event queue (blocking wait).
+                    //It returns true if an event can be popped from the queue, false if thread_stop is true,
+                    //otherwise it stays blocked
+                    if (!eventQueue.waitForCondition(communicate_stop))
+                        //if false it means that we returned because thread_stop became true, so close the program
+                        return;
+                }
 
                 Message::print(std::cout, "INFO", "Changes detected", "Connecting to server..");
 
@@ -454,9 +457,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                             Message::print(std::cout, "INFO", "Connection was closed by the server",
                                            "will reconnect if needed");
 
-                        //if I cannot send any messages (the waiting queue is full)
-                        //or there are not new events to send
-                        if(!pm.canSend() || !eventQueue.canGet())
+                        //if there are not messages waiting for a serer response
+                        //and there are not new events to send
+                        if(!pm.isWaiting() && !eventQueue.canGet())  //TODO check if it works as intended
                             //just break out
                             break;
 
@@ -519,6 +522,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                         //terminate filesystem watcher and exit
                         fileWatcher_stop.store(true);
 
+                        //notify file watcher thread
+                        eventQueue.notifyAll();
+
                         return;
                 }
             }
@@ -540,6 +546,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
 
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
+
+                //notify file watcher thread
+                eventQueue.notifyAll();
 
                 return;
         }
@@ -564,6 +573,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
 
+                //notify file watcher thread
+                eventQueue.notifyAll();
+
                 return;
         }
     }
@@ -584,6 +596,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
 
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
+
+                //notify file watcher thread
+                eventQueue.notifyAll();
 
                 return;
         }
@@ -608,6 +623,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
 
+                //notify file watcher thread
+                eventQueue.notifyAll();
+
                 return;
         }
     }
@@ -626,6 +644,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
 
+                //notify file watcher thread
+                eventQueue.notifyAll();
+
                 return;
         }
     }
@@ -642,6 +663,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
                 //terminate filesystem watcher and exit
                 fileWatcher_stop.store(true);
 
+                //notify file watcher thread
+                eventQueue.notifyAll();
+
                 return;
         }
     }
@@ -653,6 +677,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
         //terminate filesystem watcher and exit
         fileWatcher_stop.store(true);
 
+        //notify file watcher thread
+        eventQueue.notifyAll();
+
         return;
     }
     catch (...) {
@@ -662,6 +689,9 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
 
         //terminate filesystem watcher and close program
         fileWatcher_stop.store(true);
+
+        //notify file watcher thread
+        eventQueue.notifyAll();
 
         return;
     }

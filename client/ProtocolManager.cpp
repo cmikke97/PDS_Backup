@@ -210,10 +210,14 @@ int client::ProtocolManager::nWaiting() const{
 void client::ProtocolManager::recoverFromError() {
     int start = _waitingForResponse.start();    //waiting messages queue start index
     int end = _waitingForResponse.end();        //waiting messages queue end index
-    int size = _waitingForResponse.size();      //waiting messages queue size
+    int capacity = _waitingForResponse.capacity();      //waiting messages queue size
+
+    //if there are no elements return
+    if(capacity == 0)
+        return;
 
     //iterate over all messages in the waiting queue
-    for(int i = start; i != end; i = (i+1)%size){
+    for(int i = start; i != end; i = (i+1)%capacity){
         Event event = _waitingForResponse[i];    //current element from the queue
 
         //if the event is of type storeSent
