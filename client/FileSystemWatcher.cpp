@@ -131,7 +131,7 @@ void FileSystemWatcher::start(const std::function<bool (Directory_entry&, FileSy
  * @author Michele Crepaldi s269551
  */
 void FileSystemWatcher::recoverFromDB(client::Database *db,
-                                      const std::function<void (Directory_entry&, FileSystemStatus)> &action) {
+                                      const std::function<bool (Directory_entry&, FileSystemStatus)> &action) {
 
     //function to apply on each row of the database to retrieve the information
     std::function<void (const std::string &, const std::string &, uintmax_t,
@@ -155,5 +155,6 @@ void FileSystemWatcher::recoverFromDB(client::Database *db,
     for(auto i: _paths)
         //check if the element exists in the filesystem
         if(std::filesystem::exists(i.first))    //if yes then perform the action
-            action(i.second, FileSystemStatus::modified);
+            if(!action(i.second, FileSystemStatus::modified))   //if stop became true return
+                return;
 }

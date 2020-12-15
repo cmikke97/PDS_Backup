@@ -163,6 +163,17 @@ public:
         return (_capacity + _end - _start) % _capacity;
     }
 
+    /**
+     * method used to know the total capacity of the circular vector
+     *
+     * @return capacity of the circular vector
+     *
+     * @author Michele Crepaldi s269551
+     */
+    [[nodiscard]] int capacity() const{
+        return _capacity;
+    }
+
 private:
     std::vector<T> _v;   //circular vector
     int _start; //head of the circular vector
@@ -219,6 +230,33 @@ public:
         _v[_end] = std::move(t);    //move the object into the circular vector
         _end = (_end + 1) % _size;  //update _end
         _cvPop.notify_all();        //notify _cvPop
+    }
+
+    /**
+     * method used to push an object in the circular vector;
+     *  if the circular vector is full it blocks the thread in passive waiting
+     *  <p>
+     *  It blocks the thread until the element can be pushed or stop atomic boolean becomes true
+     *
+     * @param t object to push in the circular vector
+     * @return true if the element was pushed, false if stop is true
+     *
+     * @author Michele Crepaldi s269551
+     */
+    bool push(T t, std::atomic<bool> &stop){
+        std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
+
+        //wait on _cvPush condition variable until there is an empty space in the circular vector
+        _cvPush.wait(l, [this, &stop](){return (_end + 1) % _size != _start || stop.load();});
+
+        if(stop.load())
+            return false;
+
+        _v[_end] = std::move(t);    //move the object into the circular vector
+        _end = (_end + 1) % _size;  //update _end
+        _cvPop.notify_all();        //notify _cvPop
+
+        return true;
     }
 
     /**
