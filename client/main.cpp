@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         //make the filesystem watcher retrieve previously saved data from db
         fw.recoverFromDB(db.get(), [&eventQueue, &fileWatcher_stop](Directory_entry &element, FileSystemStatus status) -> bool {
             //push event into event queue (to check the server has copies of all files we have in the db)
-            return eventQueue.push(std::move(Event(element, status)), fileWatcher_stop);    //TODO check if it words as intended
+            return eventQueue.push(std::move(Event(element, status)), fileWatcher_stop);
         });
 
         //start monitoring the path to watch for changes and (in case of changes) run the provided function
@@ -338,7 +338,7 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
             try {
 
                 //if the waiting messages queue is empty just passively wait on new events
-                if(!pm.isWaiting()) {    //TODO check if it works as expected
+                if(!pm.isWaiting()) {
                     //wait until there is at least one event in the event queue (blocking wait).
                     //It returns true if an event can be popped from the queue, false if thread_stop is true,
                     //otherwise it stays blocked
@@ -459,7 +459,7 @@ void communicate(std::atomic<bool> &communicate_stop, std::atomic<bool> &fileWat
 
                         //if there are not messages waiting for a serer response
                         //and there are not new events to send
-                        if(!pm.isWaiting() && !eventQueue.canGet())  //TODO check if it works as intended
+                        if(!pm.isWaiting() && !eventQueue.canGet())
                             //just break out
                             break;
 
