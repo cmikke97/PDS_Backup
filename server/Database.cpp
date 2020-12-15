@@ -510,7 +510,7 @@ std::vector<std::string> server::Database::getAllMacAddresses(const std::string 
     sqlite3_stmt* stmt; //statement handle
 
     //"SELECT" SQL statement
-    std::string sql = "SELECT mac FROM savedFiles WHERE username=?;";
+    std::string sql = "SELECT DISTINCT mac FROM savedFiles WHERE username=?;";
 
     //prepare SQL statement
     rc = sqlite3_prepare_v2(_db.get(), sql.c_str(), -1, &stmt, nullptr);

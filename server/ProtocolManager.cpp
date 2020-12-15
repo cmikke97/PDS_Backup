@@ -1203,7 +1203,7 @@ void server::ProtocolManager::_retrieveUserData(){
         auto macs = _db->getAllMacAddresses(_username);   //all the user's mac addresses
 
         //for all the mac addresses
-        for(std::string m: macs){
+        for(const auto& m: macs){
 
             //compose the relative root directory name from username and mac; this will be the folder in which the
             //files and directories associated to this username-mac pair will be saved on client
