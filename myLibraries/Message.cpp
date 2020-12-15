@@ -6,7 +6,7 @@
 
 #include <sstream>
 #include <iomanip>
-#include <stdlib.h>
+#include <stdlib.h> //used by setenv
 #include "Message.h"
 
 

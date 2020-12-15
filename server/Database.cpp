@@ -275,7 +275,7 @@ void server::Database::insert(const std::string &username, const std::string &ma
     sqlite3_stmt* stmt; //statement handle
 
     //"INSERT" SQL statement
-    std::string sql = "INSERT INTO savedFiles (username, mac, path, type, size, lastWriteTime, hash) VALUES (?,?,?,?,?,?,?);";
+    std::string sql = "INSERT OR REPLACE INTO savedFiles (username, mac, path, type, size, lastWriteTime, hash) VALUES (?,?,?,?,?,?,?);";
 
     //prepare SQL statement
     rc = sqlite3_prepare_v2(_db.get(), sql.c_str(), -1, &stmt, nullptr);

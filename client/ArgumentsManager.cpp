@@ -56,7 +56,6 @@ ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initialize all
         throw ArgumentsManagerException("Options expected. Use -h (or --help) for help.",
                                         ArgumentsManagerError::numberOfArguments);
 
-    int c;  //current argument value
     while (true) {
         int option_index = 0;   //current option index
 
@@ -76,7 +75,7 @@ ArgumentsManager::ArgumentsManager(int argc, char **argv) : //pre-initialize all
         };
 
         //define short (+long) options and get next option from the arguments from main
-        c = getopt_long(argc, argv, "rd:m:asi:p:u:w:th", long_options, &option_index);
+        int c = getopt_long(argc, argv, "rd:m:asi:p:u:w:th", long_options, &option_index);
 
         //if no more options were found then exit loop
         if (c == -1)

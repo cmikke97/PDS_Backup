@@ -209,7 +209,7 @@ public:
      *
      * @author Michele Crepaldi s269551
      */
-    explicit TS_Circular_vector(unsigned int size): _start(0), _end(0), _size(size + 1){
+    explicit TS_Circular_vector(unsigned int size): _start(0), _end(0), _capacity(size + 1){
         _v.resize(size + 1);
     }
 
@@ -225,10 +225,10 @@ public:
         std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
 
         //wait on _cvPush condition variable until there is an empty space in the circular vector
-        _cvPush.wait(l, [this](){return (_end + 1) % _size != _start;});
+        _cvPush.wait(l, [this](){return (_end + 1) % _capacity != _start;});
 
         _v[_end] = std::move(t);    //move the object into the circular vector
-        _end = (_end + 1) % _size;  //update _end
+        _end = (_end + 1) % _capacity;  //update _end
         _cvPop.notify_all();        //notify _cvPop
     }
 
@@ -247,13 +247,13 @@ public:
         std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
 
         //wait on _cvPush condition variable until there is an empty space in the circular vector
-        _cvPush.wait(l, [this, &stop](){return (_end + 1) % _size != _start || stop.load();});
+        _cvPush.wait(l, [this, &stop](){return (_end + 1) % _capacity != _start || stop.load();});
 
         if(stop.load())
             return false;
 
         _v[_end] = std::move(t);    //move the object into the circular vector
-        _end = (_end + 1) % _size;  //update _end
+        _end = (_end + 1) % _capacity;  //update _end
         _cvPop.notify_all();        //notify _cvPop
 
         return true;
@@ -273,13 +273,13 @@ public:
         std::unique_lock l(_m); //unique lock to ensure thread safeness and to be used with the condition variable
 
         //wait on _cvPush condition variable for 0 milliseconds (so test if the circular vector is not full)
-        if(!_cvPush.wait_for(l, std::chrono::milliseconds(0), [this](){return (_end + 1) % _size != _start;}))
+        if(!_cvPush.wait_for(l, std::chrono::milliseconds(0), [this](){return (_end + 1) % _capacity != _start;}))
             return false; //if it is full return false (no object can be pushed now)
 
         //otherwise push object and return true
 
         _v[_end] = std::move(t);    //move the object into the circular vector
-        _end = (_end + 1) % _size;  //update _end
+        _end = (_end + 1) % _capacity;  //update _end
         _cvPop.notify_all();        //notify _cvPop
         return true;
     }
@@ -337,7 +337,7 @@ public:
 
         T tmp = std::move(_v[_start]);  //current element
 
-        _start = (_start + 1) % _size;  //update _start (effectively popping one element)
+        _start = (_start + 1) % _capacity;  //update _start (effectively popping one element)
 
         _cvPush.notify_all();   //notify _cvPush
     }
@@ -356,7 +356,7 @@ public:
         _cvPop.wait(l, [this](){return _start != _end;});
 
         T tmp = std::move(_v[_start]);  //current element
-        _start = (_start + 1) % _size;  //update _start (effectively popping one element)
+        _start = (_start + 1) % _capacity;  //update _start (effectively popping one element)
 
         _cvPush.notify_all();   //notify _cvPush
         return std::move(tmp);  //return element by movement
@@ -385,7 +385,7 @@ public:
         }
 
         T tmp = std::move(_v[_start]);  //current element
-        _start = (_start + 1) % _size;  //update _start (effectively popping one element)
+        _start = (_start + 1) % _capacity;  //update _start (effectively popping one element)
 
         _cvPush.notify_all();   //notify _cvPush
         return std::move(tmp);  //return element by movement
@@ -420,7 +420,7 @@ private:
     std::vector<T> _v;   //circular vector
     int _start; //head of the circular vector
     int _end; //tail of the circular vector
-    unsigned int _size; //size of the circular vector
+    unsigned int _capacity; //size of the circular vector
 };
 
 
