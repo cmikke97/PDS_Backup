@@ -720,7 +720,7 @@ void server::ProtocolManager::_storeFile(){
         //only if the parent path is different from server base path get parent Directory entry (otherwise we
         //have problems getting relative path
         if(parentPath.string() != _userPath)
-            parent = {_userPath, parentPath.string()};
+            parent = Directory_entry{_userPath, parentPath.string()};
 
         //If we are here then the file was successfully transferred and its copy on the server is as expected
         //it can be moved to the final destination
@@ -854,7 +854,7 @@ void server::ProtocolManager::_removeFile(){
     //only if the parent path is different from server base path get parent Directory entry (otherwise we
     //have problems getting relative path
     if(parentPath.string() != _userPath)
-        parent = {_userPath, parentPath.string()};
+        parent = Directory_entry{_userPath, parentPath.string()};
 
     //remove the file
     if(!std::filesystem::remove(el->second.getAbsolutePath()))
@@ -1072,7 +1072,7 @@ void server::ProtocolManager::_removeDir(){
     //only if the parent path is different from server base path get parent Directory entry (otherwise we
     //have problems getting relative path)
     if(parentPath.string() != _userPath)
-        parent = {_userPath, parentPath.string()};
+        parent = Directory_entry{_userPath, parentPath.string()};
 
     //recursive directory iterator for the directory to remove
     std::filesystem::recursive_directory_iterator iter{dirToRemove.getAbsolutePath()};

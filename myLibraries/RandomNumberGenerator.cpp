@@ -103,7 +103,7 @@ std::string RandomNumberGenerator::string_to_hex(const std::string& input)
         output.push_back(hex_digits[c >> 4]);   //get the upper hex digit
         output.push_back(hex_digits[c & 15]);   //get the lower hex digit
     }
-    return output;
+    return std::move(output);
 }
 
 /**
@@ -170,5 +170,5 @@ std::string RandomNumberGenerator::hex_to_string(const std::string& input)
         int lo = hex_value(*it++);  //get byte representation from hex
         output.push_back(hi << 4 | lo); //recompose original byte
     }
-    return output;
+    return std::move(output);
 }

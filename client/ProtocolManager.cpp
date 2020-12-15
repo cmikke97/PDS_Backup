@@ -225,7 +225,7 @@ void client::ProtocolManager::recoverFromError() {
             //--> I don't send it anymore
             if(!std::filesystem::exists(ap) ||
                     Directory_entry(_path_to_watch, ap).getHash() != event.getElement().getHash())
-                break;
+                continue;
         }
 
         //compose message based on event
@@ -1020,6 +1020,9 @@ void client::ProtocolManager::_storeFile(const std::string &destFolder, const st
         }
         //in case of socket exceptions while transferring the file I need to delete the temporary file
         catch (SocketException &e) {
+
+            std::cout << std::endl;
+
             //close the temporary file
             temporaryFile.close();
 
@@ -1078,7 +1081,7 @@ void client::ProtocolManager::_storeFile(const std::string &destFolder, const st
         //only if the parent path is different from client destFolder get parent Directory entry (otherwise we
         //have problems getting relative path
         if(parentPath.string() != destFolder)
-            parent = {destFolder, parentPath.string()};
+            parent = Directory_entry{destFolder, parentPath.string()};
 
         //If we are here then the file was successfully transferred and its copy on the server is as expected
         //it can be moved to the final destination
