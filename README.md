@@ -384,6 +384,8 @@ and to the sending of error messages back to the client.
             Start the server
 
 ### configuration file parameters
+The TLS paths below are examples. Supply your own CA certificate, server certificate, and private key in a local `TLScerts` directory; that directory is ignored by Git.
+
 #### client side
     ###########################################################################
     #        -Host specific variables: no default values are provided-        #
